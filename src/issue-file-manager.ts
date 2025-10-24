@@ -1,0 +1,198 @@
+import { App, TFile } from "obsidian";
+import { GitHubTrackerSettings, RepositoryTracking } from "./types";
+import { escapeBody } from "./util/escapeUtils";
+import { NoticeManager } from "./notice-manager";
+import { GitHubClient } from "./github-client";
+import {
+	createIssueTemplateData,
+	processFilenameTemplate
+} from "./util/templateUtils";
+import { getEffectiveRepoSettings } from "./util/settingsUtils";
+import { extractPersistBlocks, mergePersistBlocks, shouldUpdateContent } from "./util/persistUtils";
+import { FileHelpers } from "./util/file-helpers";
+import { FolderPathManager } from "./folder-path-manager";
+import { CleanupManager } from "./cleanup-manager";
+import { ContentGenerator } from "./content-generator";
+
+export class IssueFileManager {
+	private fileHelpers: FileHelpers;
+	private folderPathManager: FolderPathManager;
+	private cleanupManager: CleanupManager;
+	private contentGenerator: ContentGenerator;
+
+	constructor(
+		private app: App,
+		private settings: GitHubTrackerSettings,
+		private noticeManager: NoticeManager,
+		private gitHubClient: GitHubClient,
+	) {
+		this.fileHelpers = new FileHelpers(app, noticeManager);
+		this.folderPathManager = new FolderPathManager();
+		this.cleanupManager = new CleanupManager(app, settings, noticeManager);
+		this.contentGenerator = new ContentGenerator(this.fileHelpers);
+	}
+
+	/**
+	 * Create issue files for a repository
+	 */
+	public async createIssueFiles(
+		repo: RepositoryTracking,
+		openIssues: any[],
+		allIssuesIncludingRecentlyClosed: any[],
+		_currentIssueNumbers: Set<string>,
+	): Promise<void> {
+		// Apply global defaults to repository settings
+		const effectiveRepo = getEffectiveRepoSettings(repo, this.settings.globalDefaults);
+
+		const [owner, repoName] = effectiveRepo.repository.split("/");
+		if (!owner || !repoName) return;
+		const repoCleaned = repoName.replace(/\//g, "-");
+		const ownerCleaned = owner.replace(/\//g, "-");
+		await this.cleanupManager.cleanupDeletedIssues(
+			effectiveRepo,
+			ownerCleaned,
+			repoCleaned,
+			allIssuesIncludingRecentlyClosed,
+		);
+
+		// Create or update issue files for open issues
+		for (const issue of openIssues) {
+			await this.createOrUpdateIssueFile(
+				effectiveRepo,
+				ownerCleaned,
+				repoCleaned,
+				issue,
+			);
+		}
+	}
+
+	private async createOrUpdateIssueFile(
+		repo: RepositoryTracking,
+		ownerCleaned: string,
+		repoCleaned: string,
+		issue: any,
+	): Promise<void> {
+		// Generate filename using template
+		const templateData = createIssueTemplateData(issue, repo.repository);
+		const baseFileName = processFilenameTemplate(
+			repo.issueNoteTemplate || "Issue - {number}",
+			templateData,
+			this.settings.dateFormat
+		);
+		const fileName = `${baseFileName}.md`;
+		const issueFolderPath = this.folderPathManager.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
+
+		// Ensure folder structure exists
+		if (repo.useCustomIssueFolder && repo.customIssueFolder && repo.customIssueFolder.trim()) {
+			// For custom folders, just ensure the custom path exists
+			await this.fileHelpers.ensureFolderExists(repo.customIssueFolder.trim());
+		} else {
+			// For default structure, ensure nested path exists
+			await this.fileHelpers.ensureFolderExists(repo.issueFolder);
+			await this.fileHelpers.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}`);
+			await this.fileHelpers.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`);
+		}
+
+		const file = this.app.vault.getAbstractFileByPath(`${issueFolderPath}/${fileName}`);
+
+		const [owner, repoName] = repo.repository.split("/");
+
+		// Only fetch comments if they should be included
+		let comments: any[] = [];
+		if (repo.includeIssueComments) {
+			comments = await this.gitHubClient.fetchIssueComments(
+				owner,
+				repoName,
+				issue.number,
+			);
+		} else {
+			this.noticeManager.debug(
+				`Skipping comments for issue ${issue.number}: repository setting disabled`,
+			);
+		}
+
+		let content = await this.contentGenerator.createIssueContent(issue, repo, comments, this.settings);
+
+		if (file) {
+			if (file instanceof TFile) {
+				// Use current repository updateMode setting (not the old value from file properties)
+				const updateMode = repo.issueUpdateMode;
+
+				if (updateMode === "update") {
+					// Read existing content first
+					const existingContent = await this.app.vault.read(file);
+
+					// Check if content needs updating based on updated_at field
+					if (!shouldUpdateContent(existingContent, issue.updated_at)) {
+						this.noticeManager.debug(
+							`Skipped update for issue ${issue.number}: no changes detected (updated_at match)`
+						);
+						return;
+					}
+
+					// Extract persist blocks from existing content
+					const persistBlocks = extractPersistBlocks(existingContent);
+
+					// Create the complete new content with updated frontmatter
+					let updatedContent = await this.contentGenerator.createIssueContent(
+						issue,
+						repo,
+						comments,
+						this.settings,
+					);
+
+					// Merge persist blocks back into new content
+					if (persistBlocks.size > 0) {
+						updatedContent = mergePersistBlocks(updatedContent, existingContent, persistBlocks);
+						this.noticeManager.debug(
+							`Restored ${persistBlocks.size} persist block(s) for issue ${issue.number}`
+						);
+					}
+
+					await this.app.vault.modify(file, updatedContent);
+					this.noticeManager.debug(`Updated issue ${issue.number}`);
+				} else if (updateMode === "append") {
+					content = `---\n### New status: "${
+						issue.state
+					}"\n\n# ${escapeBody(
+						issue.title,
+						this.settings.escapeMode,
+					)}\n${
+						issue.body
+							? escapeBody(issue.body, this.settings.escapeMode)
+							: "No description found"
+					}\n`;
+
+					if (comments.length > 0) {
+						content += this.fileHelpers.formatComments(
+							comments,
+							this.settings.escapeMode,
+							this.settings.dateFormat,
+						);
+					}
+					const currentFileContent = await this.app.vault.read(file);
+					const newContent = currentFileContent + "\n\n" + content;
+					await this.app.vault.modify(file, newContent);
+					this.noticeManager.debug(
+						`Appended content to issue ${issue.number}`,
+					);
+				} else {
+					this.noticeManager.debug(
+						`Skipped update for issue ${issue.number} (mode: ${updateMode})`,
+					);
+				}
+			}
+		} else {
+			await this.app.vault.create(`${issueFolderPath}/${fileName}`, content);
+			this.noticeManager.debug(`Created issue file for ${issue.number}`);
+		}
+	}
+
+	public async cleanupEmptyIssueFolder(
+		repo: RepositoryTracking,
+		issueFolder: string,
+		ownerCleaned: string,
+	): Promise<void> {
+		return this.cleanupManager.cleanupEmptyIssueFolder(repo, issueFolder, ownerCleaned);
+	}
+}

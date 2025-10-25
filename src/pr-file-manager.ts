@@ -8,7 +8,8 @@ import {
 	processFilenameTemplate
 } from "./util/templateUtils";
 import { getEffectiveRepoSettings } from "./util/settingsUtils";
-import { extractPersistBlocks, mergePersistBlocks, shouldUpdateContent } from "./util/persistUtils";
+import { extractPersistBlocks, mergePersistBlocks } from "./util/persistUtils";
+import { shouldUpdateContent, hasStatusChanged } from "./util/contentUtils";
 import { FileHelpers } from "./util/file-helpers";
 import { FolderPathManager } from "./folder-path-manager";
 import { CleanupManager } from "./cleanup-manager";
@@ -57,6 +58,7 @@ export class PullRequestFileManager {
 			allPullRequestsIncludingRecentlyClosed,
 		);
 
+		// Create or update pull request files (openPullRequests contains filtered PRs from main.ts)
 		for (const pr of openPullRequests) {
 			await this.createOrUpdatePullRequestFile(
 				effectiveRepo,
@@ -119,12 +121,17 @@ export class PullRequestFileManager {
 				// Use current repository updateMode setting (not the old value from file properties)
 				const updateMode = repo.pullRequestUpdateMode;
 
-				if (updateMode === "update") {
-					// Read existing content first
-					const existingContent = await this.app.vault.read(file);
+				// Read existing content to check for changes
+				const existingContent = await this.app.vault.read(file);
 
+				// Check if status has changed (e.g., open -> closed)
+				const statusHasChanged = hasStatusChanged(existingContent, pr.state);
+
+				// If status changed, always update regardless of updateMode
+				// Otherwise, respect the updateMode setting
+				if (statusHasChanged || updateMode === "update") {
 					// Check if content needs updating based on updated_at field
-					if (!shouldUpdateContent(existingContent, pr.updated_at)) {
+					if (!statusHasChanged && !shouldUpdateContent(existingContent, pr.updated_at)) {
 						this.noticeManager.debug(
 							`Skipped update for PR ${pr.number}: no changes detected (updated_at match)`
 						);
@@ -151,7 +158,11 @@ export class PullRequestFileManager {
 					}
 
 					await this.app.vault.modify(file, updatedContent);
-					this.noticeManager.debug(`Updated PR ${pr.number}`);
+					if (statusHasChanged) {
+						this.noticeManager.debug(`Updated PR ${pr.number} (status changed to ${pr.state})`);
+					} else {
+						this.noticeManager.debug(`Updated PR ${pr.number}`);
+					}
 				} else if (updateMode === "append") {
 					content = `---\n### New status: "${
 						pr.state

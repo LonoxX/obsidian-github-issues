@@ -33,6 +33,8 @@ export interface RepositoryTracking {
 	prAssigneeFilters: string[];
 	includeIssueComments: boolean;
 	includePullRequestComments: boolean;
+	includeClosedIssues: boolean;
+	includeClosedPullRequests: boolean;
 }
 
 export interface GlobalDefaults {
@@ -48,6 +50,8 @@ export interface GlobalDefaults {
 	pullRequestNoteTemplate: string;
 	pullRequestContentTemplate: string;
 	includePullRequestComments: boolean;
+	includeClosedIssues: boolean;
+	includeClosedPullRequests: boolean;
 }
 
 export interface GitHubTrackerSettings {
@@ -77,6 +81,8 @@ export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
 	pullRequestNoteTemplate: "PR - {number}",
 	pullRequestContentTemplate: "",
 	includePullRequestComments: true,
+	includeClosedIssues: false,
+	includeClosedPullRequests: false,
 };
 
 export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
@@ -129,4 +135,6 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	prAssigneeFilters: [],
 	includeIssueComments: true,
 	includePullRequestComments: true,
+	includeClosedIssues: false,
+	includeClosedPullRequests: false,
 };

@@ -210,30 +210,3 @@ function insertPersistBlocksIntelligently(
 
 	return newLines.join('\n');
 }
-
-/**
- * Check if content has changed based on updated_at field
- * @param existingContent The existing file content
- * @param githubUpdatedAt The updated_at timestamp from GitHub API
- * @returns true if content should be updated
- */
-export function shouldUpdateContent(
-	existingContent: string,
-	githubUpdatedAt: string
-): boolean {
-	// Extract updated field from frontmatter
-	const updatedMatch = existingContent.match(/^updated:\s*["']?([^"'\n]+)["']?$/m);
-
-	if (!updatedMatch) {
-		// No updated field found, should update
-		return true;
-	}
-
-	const existingUpdated = updatedMatch[1];
-	const githubUpdated = new Date(githubUpdatedAt).toISOString();
-	const existingUpdatedDate = new Date(existingUpdated);
-	const githubUpdatedDate = new Date(githubUpdated);
-
-	// Compare dates - update if GitHub version is newer
-	return githubUpdatedDate > existingUpdatedDate;
-}

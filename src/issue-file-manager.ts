@@ -8,7 +8,8 @@ import {
 	processFilenameTemplate
 } from "./util/templateUtils";
 import { getEffectiveRepoSettings } from "./util/settingsUtils";
-import { extractPersistBlocks, mergePersistBlocks, shouldUpdateContent } from "./util/persistUtils";
+import { extractPersistBlocks, mergePersistBlocks } from "./util/persistUtils";
+import { shouldUpdateContent, hasStatusChanged } from "./util/contentUtils";
 import { FileHelpers } from "./util/file-helpers";
 import { FolderPathManager } from "./folder-path-manager";
 import { CleanupManager } from "./cleanup-manager";
@@ -55,7 +56,7 @@ export class IssueFileManager {
 			allIssuesIncludingRecentlyClosed,
 		);
 
-		// Create or update issue files for open issues
+		// Create or update issue files (openIssues contains filtered issues from main.ts)
 		for (const issue of openIssues) {
 			await this.createOrUpdateIssueFile(
 				effectiveRepo,
@@ -118,12 +119,17 @@ export class IssueFileManager {
 				// Use current repository updateMode setting (not the old value from file properties)
 				const updateMode = repo.issueUpdateMode;
 
-				if (updateMode === "update") {
-					// Read existing content first
-					const existingContent = await this.app.vault.read(file);
+				// Read existing content to check for changes
+				const existingContent = await this.app.vault.read(file);
 
+				// Check if status has changed (e.g., open -> closed)
+				const statusHasChanged = hasStatusChanged(existingContent, issue.state);
+
+				// If status changed, always update regardless of updateMode
+				// Otherwise, respect the updateMode setting
+				if (statusHasChanged || updateMode === "update") {
 					// Check if content needs updating based on updated_at field
-					if (!shouldUpdateContent(existingContent, issue.updated_at)) {
+					if (!statusHasChanged && !shouldUpdateContent(existingContent, issue.updated_at)) {
 						this.noticeManager.debug(
 							`Skipped update for issue ${issue.number}: no changes detected (updated_at match)`
 						);
@@ -150,7 +156,11 @@ export class IssueFileManager {
 					}
 
 					await this.app.vault.modify(file, updatedContent);
-					this.noticeManager.debug(`Updated issue ${issue.number}`);
+					if (statusHasChanged) {
+						this.noticeManager.debug(`Updated issue ${issue.number} (status changed to ${issue.state})`);
+					} else {
+						this.noticeManager.debug(`Updated issue ${issue.number}`);
+					}
 				} else if (updateMode === "append") {
 					content = `---\n### New status: "${
 						issue.state

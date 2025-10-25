@@ -1359,6 +1359,38 @@ button:disabled {
 	background-color: var(--background-primary);
 	border-radius: 4px;
 	border: 1px solid var(--background-modifier-border);
+	user-select: text;
+	cursor: text;
+}
+
+.github-issues-template-variables h4 {
+	user-select: text;
+	cursor: text;
+}
+
+.github-issues-template-variables p {
+	user-select: text;
+	cursor: text;
+}
+
+.github-issues-template-variables ul {
+	user-select: text;
+	cursor: text;
+}
+
+.github-issues-template-variables li {
+	user-select: text;
+	cursor: text;
+}
+
+.github-issues-template-variables code {
+	user-select: text;
+	cursor: text;
+}
+
+.github-issues-template-variables pre {
+	user-select: text;
+	cursor: text;
 }
 
 .github-issues-template-table {
@@ -1393,6 +1425,8 @@ button:disabled {
 	font-family: var(--font-monospace);
 	color: var(--text-accent);
 	font-weight: 500;
+	user-select: text;
+	cursor: text;
 }
 
 .github-issues-template-example {

@@ -169,19 +169,23 @@ export class RepositoryRenderer {
 		// Assignee filtering settings
 		this.renderAssigneeFilter(issuesSettingsContainer, repo, 'issue');
 
+		// Store reference to allow issue deletion toggle for updating
+		let allowDeleteIssueToggle: any;
 		new Setting(issuesSettingsContainer)
 			.setName("Default: Allow issue deletion")
 			.setDesc(
 				"If enabled, issue files will be set to be deleted from your vault when the issue is closed or no longer matches your filter criteria",
 			)
-			.addToggle((toggle) =>
-				toggle
+			.addToggle((toggle) => {
+				allowDeleteIssueToggle = toggle;
+				return toggle
 					.setValue(repo.allowDeleteIssue)
+					.setDisabled(repo.includeClosedIssues)
 					.onChange(async (value) => {
-						repo.allowDeleteIssue = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+							repo.allowDeleteIssue = value;
+							await this.plugin.saveSettings();
+						});
+			});
 
 		new Setting(issuesSettingsContainer)
 			.setName("Issue note template")
@@ -261,6 +265,32 @@ export class RepositoryRenderer {
 					.setValue(repo.includeIssueComments)
 					.onChange(async (value) => {
 						repo.includeIssueComments = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(issuesSettingsContainer)
+			.setName("Include closed issues")
+			.setDesc(
+				"If enabled, closed issues will also be created and updated (not just deleted after the cleanup period).",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.includeClosedIssues)
+					.onChange(async (value) => {
+						repo.includeClosedIssues = value;
+						// If including closed issues, disable deletion to prevent conflicts
+						if (value) {
+							repo.allowDeleteIssue = false;
+							// Update the allow deletion toggle directly
+							if (allowDeleteIssueToggle) {
+								allowDeleteIssueToggle.setValue(false);
+							}
+						}
+						// Update the disabled state of the allow deletion toggle
+						if (allowDeleteIssueToggle) {
+							allowDeleteIssueToggle.setDisabled(value);
+						}
 						await this.plugin.saveSettings();
 					}),
 			);
@@ -486,16 +516,60 @@ export class RepositoryRenderer {
 					});
 			});
 
+		// Store reference to allow PR deletion toggle for updating
+		let allowDeletePRToggle: any;
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Default: Allow pull request deletion")
 			.setDesc(
-				"If enabled, pull request files will be set to be deleted from your vault when the pull request is closed or no longer matches your filter criteria",
+				"If enabled, pull request files will be set to be deleted from your vault when the pull request is closed or no longer matches your filter criteria. Automatically disabled when 'Include closed pull requests' is enabled.",
+			)
+			.addToggle((toggle) => {
+				allowDeletePRToggle = toggle;
+				return toggle
+					.setValue(repo.allowDeletePullRequest)
+					.setDisabled(repo.includeClosedPullRequests)
+					.onChange(async (value) => {
+							repo.allowDeletePullRequest = value;
+							await this.plugin.saveSettings();
+						});
+			});
+
+		new Setting(pullRequestsSettingsContainer)
+			.setName("Include pull request comments")
+			.setDesc(
+				"If enabled, comments from pull requests will be included in the generated files",
 			)
 			.addToggle((toggle) =>
 				toggle
-					.setValue(repo.allowDeletePullRequest)
+					.setValue(repo.includePullRequestComments)
 					.onChange(async (value) => {
-						repo.allowDeletePullRequest = value;
+						repo.includePullRequestComments = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(pullRequestsSettingsContainer)
+			.setName("Include closed pull requests")
+			.setDesc(
+				"If enabled, closed pull requests will also be created and updated (not just deleted after the cleanup period). This is useful for building a knowledge base.",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.includeClosedPullRequests)
+					.onChange(async (value) => {
+						repo.includeClosedPullRequests = value;
+						// If including closed PRs, disable deletion to prevent conflicts
+						if (value) {
+							repo.allowDeletePullRequest = false;
+							// Update the allow deletion toggle directly
+							if (allowDeletePRToggle) {
+								allowDeletePRToggle.setValue(false);
+							}
+						}
+						// Update the disabled state of the allow deletion toggle
+						if (allowDeletePRToggle) {
+							allowDeletePRToggle.setDisabled(value);
+						}
 						await this.plugin.saveSettings();
 					}),
 			);

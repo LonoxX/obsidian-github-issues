@@ -94,9 +94,14 @@ export default class GitHubTrackerPlugin extends Plugin {
 					(issue: { state: string }) => issue.state === "open",
 				);
 
+				// Decide which issues to filter based on settings
+				const issuesToFilter = repo.includeClosedIssues
+					? allIssuesIncludingRecentlyClosed
+					: openIssues;
+
 				const filteredIssues = this.fileManager.filterIssues(
 					repo,
-					openIssues,
+					issuesToFilter,
 				);
 
 				this.noticeManager.debug(
@@ -134,9 +139,14 @@ export default class GitHubTrackerPlugin extends Plugin {
 						(pr: { state: string }) => pr.state === "open",
 					);
 
+				// Decide which pull requests to filter based on settings
+				const pullRequestsToFilter = repo.includeClosedPullRequests
+					? allPullRequestsIncludingRecentlyClosed
+					: openPullRequests;
+
 				const filteredPRs = this.fileManager.filterPullRequests(
 					repo,
-					openPullRequests,
+					pullRequestsToFilter,
 				);
 
 				this.noticeManager.debug(
@@ -352,9 +362,14 @@ export default class GitHubTrackerPlugin extends Plugin {
 						(issue: { state: string }) => issue.state === "open",
 					);
 
+					// Decide which issues to filter based on settings
+					const issuesToFilter = repo.includeClosedIssues
+						? allIssuesIncludingRecentlyClosed
+						: openIssues;
+
 					const filteredIssues = this.fileManager.filterIssues(
 						repo,
-						openIssues,
+						issuesToFilter,
 					);
 
 					this.noticeManager.debug(
@@ -425,9 +440,14 @@ export default class GitHubTrackerPlugin extends Plugin {
 							(pr: { state: string }) => pr.state === "open",
 						);
 
+					// Decide which pull requests to filter based on settings
+					const pullRequestsToFilter = repo.includeClosedPullRequests
+						? allPullRequestsIncludingRecentlyClosed
+						: openPullRequests;
+
 					const filteredPRs = this.fileManager.filterPullRequests(
 						repo,
-						openPullRequests,
+						pullRequestsToFilter,
 					);
 
 					this.noticeManager.debug(

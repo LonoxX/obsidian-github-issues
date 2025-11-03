@@ -12,117 +12,35 @@ import {
 } from "obsidian";
 import { RepositoryTracking, DEFAULT_REPOSITORY_TRACKING } from "./types";
 import GitHubTrackerPlugin from "./main";
-import { getTemplateHelp } from "./util/templateUtils";
-
-class FolderSuggest extends AbstractInputSuggest<TFolder> {
-	private inputElement: HTMLInputElement;
-
-	constructor(
-		app: App,
-		inputEl: HTMLInputElement,
-	) {
-		super(app, inputEl);
-		this.inputElement = inputEl;
-	}
-
-	getSuggestions(inputStr: string): TFolder[] {
-		const abstractFiles = this.app.vault.getAllLoadedFiles();
-		const folders: TFolder[] = [];
-		const lowerCaseInputStr = inputStr.toLowerCase();
-
-		abstractFiles.forEach((folder: TAbstractFile) => {
-			if (
-				folder instanceof TFolder &&
-				folder.path.toLowerCase().contains(lowerCaseInputStr)
-			) {
-				folders.push(folder);
-			}
-		});
-
-		return folders;
-	}
-
-	renderSuggestion(folder: TFolder, el: HTMLElement): void {
-		el.setText(folder.path);
-	}
-
-	selectSuggestion(folder: TFolder): void {
-		try {
-			if (this.inputElement) {
-				this.inputElement.value = folder.path;
-				// Trigger input event to notify onChange handlers
-				const event = new Event('input', { bubbles: true });
-				this.inputElement.dispatchEvent(event);
-				this.close();
-			} else {
-				console.error('FolderSuggest: Input element is not available');
-			}
-		} catch (error) {
-			console.error('FolderSuggest: Error setting folder value:', error);
-		}
-	}
-}
-
-class FileSuggest extends AbstractInputSuggest<TAbstractFile> {
-	private inputElement: HTMLInputElement;
-
-	constructor(
-		app: App,
-		inputEl: HTMLInputElement,
-	) {
-		super(app, inputEl);
-		this.inputElement = inputEl;
-	}
-
-	getSuggestions(inputStr: string): TAbstractFile[] {
-		const abstractFiles = this.app.vault.getAllLoadedFiles();
-		const files: TAbstractFile[] = [];
-		const lowerCaseInputStr = inputStr.toLowerCase();
-
-		abstractFiles.forEach((file: TAbstractFile) => {
-			if (
-				file.path.endsWith('.md') &&
-				file.path.toLowerCase().contains(lowerCaseInputStr)
-			) {
-				files.push(file);
-			}
-		});
-
-		return files;
-	}
-
-	renderSuggestion(file: TAbstractFile, el: HTMLElement): void {
-		el.setText(file.path);
-	}
-
-	selectSuggestion(file: TAbstractFile): void {
-		try {
-			if (this.inputElement) {
-				this.inputElement.value = file.path;
-				// Trigger input event to notify onChange handlers
-				const event = new Event('input', { bubbles: true });
-				this.inputElement.dispatchEvent(event);
-				this.close();
-			} else {
-				console.error('FileSuggest: Input element is not available');
-			}
-		} catch (error) {
-			console.error('FileSuggest: Error setting file value:', error);
-		}
-	}
-}
+import { FolderSuggest } from "./settings/folder-suggest";
+import { FileSuggest } from "./settings/file-suggest";
+import { RepositoryRenderer } from "./settings/repository-renderer";
+import { UIHelpers } from "./settings/ui-helpers";
+import { RepositoryListManager } from "./settings/repository-list-manager";
+import { ModalManager } from "./settings/modal-manager";
 
 export class GitHubTrackerSettingTab extends PluginSettingTab {
 	private selectedRepositories: Set<string> = new Set();
+	private repositoryRenderer: RepositoryRenderer;
+	private repositoryListManager: RepositoryListManager;
+	private modalManager: ModalManager;
 
 	constructor(
 		app: App,
 		private plugin: GitHubTrackerPlugin,
 	) {
 		super(app, plugin);
-	}
 
-	async display(): Promise<void> {
+	// Initialize managers
+	this.modalManager = new ModalManager(this.app, this.plugin);
+	this.repositoryRenderer = new RepositoryRenderer(
+		this.app,
+		this.plugin,
+		(repoName, repo, filterType, textArea) => this.modalManager.fetchAndShowRepositoryLabels(repoName, repo, filterType, textArea),
+		(repoName, repo, filterType, textArea) => this.modalManager.fetchAndShowRepositoryCollaborators(repoName, repo, filterType, textArea)
+	);
+	this.repositoryListManager = new RepositoryListManager(this.app, this.plugin);
+}	async display(): Promise<void> {
 		const { containerEl } = this;
 
 		containerEl.empty();
@@ -336,10 +254,10 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		new Setting(advancedContainer).setName("Advanced Settings").setHeading();
 
 		// Template variables help
-		this.addTemplateVariablesHelp(advancedContainer, 'issue');
+		UIHelpers.addTemplateVariablesHelp(advancedContainer, 'issue');
 
 		// Persist blocks help
-		this.addPersistBlocksHelp(advancedContainer);
+		UIHelpers.addPersistBlocksHelp(advancedContainer);
 
 		new Setting(advancedContainer)
 			.setName("Date format")
@@ -706,19 +624,18 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		});
 		addButton.addClass("github-issues-add-button");
 
-		addButton.onclick = async () => {
-			const repo = repoInput.value.trim();
+	addButton.onclick = async () => {
+		const repo = repoInput.value.trim();
 
-			if (!repo) {
-				new Notice("Please enter both owner and repository name");
-				return;
-			}
+		if (!repo) {
+			new Notice("Please enter both owner and repository name");
+			return;
+		}
 
-			await this.addRepository(repo);
-			repoInput.value = "";
-		};
-
-		const trackedSearchContainer = trackedReposContent.createDiv(
+		await this.repositoryListManager.addRepository(repo);
+		this.display();
+		repoInput.value = "";
+	};		const trackedSearchContainer = trackedReposContent.createDiv(
 			"github-issues-search-container",
 		);
 		trackedSearchContainer.addClass("github-issues-tracked-search");
@@ -889,7 +806,14 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			loadButtonContainer.addClass("github-issues-hidden");
 		};
 
-		this.renderRepositoriesList(trackedReposContent);
+		this.repositoryListManager.renderRepositoriesList(
+			trackedReposContent,
+			() => this.display(),
+			(containerEl, repo) => this.repositoryRenderer.renderIssueSettings(containerEl, repo),
+			(containerEl, repo) => this.repositoryRenderer.renderPullRequestSettings(containerEl, repo),
+			(repo) => this.modalManager.showDeleteRepositoryModal(repo, () => this.display()),
+			(repos) => this.modalManager.showBulkDeleteRepositoriesModal(repos, () => this.display())
+		);
 
 		trackedReposTab.onclick = () => {
 			trackedReposTab.addClass("mod-cta");
@@ -971,21 +895,20 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		cancelButton.setText("Cancel");
 		cancelButton.onclick = () => modal.close();
 
-		const addButton = buttonContainer.createEl("button");
-		addButton.setText("Add");
-		addButton.onclick = async () => {
-			const repo = repoInput.value.trim();
+	const addButton = buttonContainer.createEl("button");
+	addButton.setText("Add");
+	addButton.onclick = async () => {
+		const repo = repoInput.value.trim();
 
-			if (!repo) {
-				new Notice("Please enter both owner and repository name");
-				return;
-			}
+		if (!repo) {
+			new Notice("Please enter both owner and repository name");
+			return;
+		}
 
-			await this.addRepository(repo);
-			modal.close();
-		};
-
-		modal.open();
+		await this.repositoryListManager.addRepository(repo);
+		this.display();
+		modal.close();
+	};		modal.open();
 	}
 
 	private async renderGitHubRepositories(
@@ -1131,16 +1054,27 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						"data-full-name",
 						repoName.toLowerCase(),
 					);
-					const repoInfoContainer = repoItem.createDiv(
-						"github-issues-repo-info",
-					);
+				const repoInfoContainer = repoItem.createDiv(
+					"github-issues-repo-info",
+				);
 
-					const repoIcon = repoInfoContainer.createDiv(
-						"github-issues-repo-icon",
-					);
-					setIcon(repoIcon, "github");
+				// Always create checkbox for consistent alignment
+				const checkboxContainer = repoInfoContainer.createDiv(
+					"github-issues-repo-checkbox",
+				);
+				const checkbox = checkboxContainer.createEl("input");
+				checkbox.type = "checkbox";
+				checkbox.addClass("github-issues-checkbox");
 
-					const repoText = repoInfoContainer.createEl("span");
+				if (isTracked) {
+					checkbox.style.visibility = "hidden";
+				}
+
+				const repoIcon = repoInfoContainer.createDiv(
+					"github-issues-repo-icon",
+				);
+				setIcon(repoIcon, "github");
+				const repoText = repoInfoContainer.createEl("span");
 					repoText.setText(repo.name);
 					repoText.addClass("github-issues-repo-name");
 
@@ -1160,14 +1094,14 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						});
 						addButton.addClass("github-issues-add-button");
 						addButton.onclick = async () => {
-							await this.addRepository(repoName);
+							await this.repositoryListManager.addRepository(repoName);
+						this.display();
 							new Notice(`Added repository: ${repoName}`);
 							addButton.remove();
 
 							const trackedContainer = actionContainer.createDiv(
 								"github-issues-tracked-container",
 							);
-							setIcon(trackedContainer, "check");
 							const trackedText =
 								trackedContainer.createEl("span");
 							trackedText.setText("Tracked");
@@ -1186,7 +1120,6 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						const trackedContainer = actionContainer.createDiv(
 							"github-issues-tracked-container",
 						);
-						setIcon(trackedContainer, "check");
 						const trackedText = trackedContainer.createEl("span");
 						trackedText.setText("Tracked");
 						trackedText.addClass("github-issues-info-text");
@@ -1277,1162 +1210,6 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				text: `Error loading repositories: ${(error as Error).message}`,
 			});
 		}
-	}
-
-	private async addRepository(repoName: string): Promise<void> {
-		if (
-			this.plugin.settings.repositories.some(
-				(r) => r.repository === repoName,
-			)
-		) {
-			new Notice("This repository is already being tracked");
-			return;
-		}
-
-		const newRepo = {
-			...DEFAULT_REPOSITORY_TRACKING,
-			repository: repoName,
-		};
-		this.plugin.settings.repositories.push(newRepo);
-		await this.plugin.saveSettings();
-		this.display();
-		new Notice(`Added repository: ${repoName}`);
-	}
-
-	private async addMultipleRepositories(repoNames: string[]): Promise<void> {
-		const newRepos: string[] = [];
-		const existingRepos: string[] = [];
-		for (const repoName of repoNames) {
-			if (
-				this.plugin.settings.repositories.some(
-					(r) => r.repository === repoName,
-				)
-			) {
-				existingRepos.push(repoName);
-			} else {
-				newRepos.push(repoName);
-			}
-		}
-
-		for (const repoName of newRepos) {
-			const newRepo = {
-				...DEFAULT_REPOSITORY_TRACKING,
-				repository: repoName,
-			};
-			this.plugin.settings.repositories.push(newRepo);
-		}
-
-		if (newRepos.length > 0) {
-			await this.plugin.saveSettings();
-			this.display();
-		}
-
-		if (newRepos.length > 0 && existingRepos.length > 0) {
-			new Notice(
-				`Added ${newRepos.length} repositories. ${existingRepos.length} were already tracked.`,
-			);
-		} else if (newRepos.length > 0) {
-			new Notice(`Added ${newRepos.length} repositories successfully.`);
-		} else if (existingRepos.length > 0) {
-			new Notice(`All selected repositories are already being tracked.`);
-		}
-
-		this.selectedRepositories.clear();
-	}
-
-	private renderRepositoriesList(container: HTMLElement): void {
-		const reposContainer = container.createDiv(
-			"github-issues-repos-container",
-		);
-
-		const reposByOwner: Record<
-			string,
-			{
-				repos: RepositoryTracking[];
-				fullNames: string[];
-				isUser: boolean;
-			}
-		> = {};
-
-		for (const repo of this.plugin.settings.repositories) {
-			const [owner, repoName] = repo.repository.split("/");
-			if (!owner || !repoName) continue;
-
-			if (!reposByOwner[owner]) {
-				const isCurrentUser =
-					this.plugin.currentUser &&
-					this.plugin.currentUser.toLowerCase() ===
-						owner.toLowerCase();
-				reposByOwner[owner] = {
-					repos: [],
-					fullNames: [],
-					isUser: !!isCurrentUser,
-				};
-			}
-			reposByOwner[owner].repos.push(repo);
-			reposByOwner[owner].fullNames.push(repo.repository);
-		}
-
-		const sortedOwners = Object.keys(reposByOwner).sort((a, b) => {
-			if (reposByOwner[a].isUser && !reposByOwner[b].isUser) return -1;
-			if (!reposByOwner[a].isUser && reposByOwner[b].isUser) return 1;
-			return a.localeCompare(b);
-		});
-
-		const reposListContainer = reposContainer.createDiv(
-			"github-issues-tracked-repos-list",
-		);
-		const noResultsMessage = reposContainer.createDiv(
-			"github-issues-no-results",
-		);
-		const noResultsIcon = noResultsMessage.createDiv(
-			"github-issues-no-results-icon",
-		);
-		setIcon(noResultsIcon, "minus-circle");
-		const noResultsText = noResultsMessage.createDiv(
-			"github-issues-no-results-text",
-		);
-		noResultsText.setText("No matching repositories found");
-		noResultsMessage.addClass("github-issues-hidden");
-
-		for (const owner of sortedOwners) {
-			const ownerContainer = reposListContainer.createDiv(
-				"github-issues-repo-owner-group",
-			);
-			ownerContainer.setAttribute("data-owner", owner.toLowerCase());
-
-			const ownerHeader = ownerContainer.createDiv(
-				"github-issues-repo-owner-header",
-			);
-			const ownerType = reposByOwner[owner].isUser
-				? "User"
-				: "Organization";
-
-			// Chevron icon for collapse/expand
-			const chevronIcon = ownerHeader.createEl("span", {
-				cls: "github-issues-repo-owner-chevron",
-			});
-			setIcon(chevronIcon, "chevron-right");
-
-			const ownerIcon = ownerHeader.createEl("span", {
-				cls: "github-issues-repo-owner-icon",
-			});
-			setIcon(ownerIcon, ownerType === "User" ? "user" : "building");
-			ownerHeader.createEl("span", {
-				cls: "github-issues-repo-owner-name",
-				text: owner,
-			});
-			ownerHeader.createEl("span", {
-				cls: "github-issues-repo-count",
-				text: reposByOwner[owner].repos.length.toString(),
-			});
-
-			const reposContainer = ownerContainer.createDiv(
-				"github-issues-owner-repos",
-			);
-
-			// Make owner header collapsible
-			ownerHeader.addEventListener("click", (e) => {
-				e.stopPropagation();
-				const isExpanded = ownerContainer.classList.contains("github-issues-owner-expanded");
-				if (isExpanded) {
-					ownerContainer.classList.remove("github-issues-owner-expanded");
-					setIcon(chevronIcon, "chevron-right");
-				} else {
-					ownerContainer.classList.add("github-issues-owner-expanded");
-					setIcon(chevronIcon, "chevron-down");
-				}
-			});
-
-			const sortedRepos = reposByOwner[owner].repos.sort((a, b) => {
-				const aName = a.repository.split("/")[1] || "";
-				const bName = b.repository.split("/")[1] || "";
-				return aName.localeCompare(bName);
-			});
-
-			for (const repo of sortedRepos) {
-				const repoName = repo.repository.split("/")[1] || "";
-
-				const repoItem = reposContainer.createDiv(
-					"github-issues-item github-issues-repo-settings",
-				);
-				repoItem.setAttribute("data-repo-name", repoName.toLowerCase());
-				repoItem.setAttribute("data-owner-name", owner.toLowerCase());
-				repoItem.setAttribute(
-					"data-full-name",
-					repo.repository.toLowerCase(),
-				);
-				const headerContainer = repoItem.createDiv(
-					"github-issues-repo-header-container",
-				);
-
-				const repoInfoContainer = headerContainer.createDiv(
-					"github-issues-repo-info",
-				);
-
-				const repoIcon = repoInfoContainer.createDiv(
-					"github-issues-repo-icon",
-				);
-				setIcon(repoIcon, "github");
-
-				const repoText = repoInfoContainer.createEl("span");
-				repoText.setText(repoName);
-				repoText.addClass("github-issues-repo-name");
-
-				const actionContainer = headerContainer.createDiv(
-					"github-issues-repo-action",
-				);
-
-				const syncButton = actionContainer.createEl("button", {
-					text: "Sync",
-				});
-				syncButton.addClass("github-issues-sync-button");
-				syncButton.onclick = async (e) => {
-					e.stopPropagation();
-
-					// Disable button and show loading state
-					syncButton.disabled = true;
-					const originalText = syncButton.textContent || "Sync";
-					syncButton.textContent = "Syncing...";
-
-					try {
-						await this.plugin.syncSingleRepository(repo.repository);
-					} finally {
-						// Re-enable button and restore original state
-						syncButton.disabled = false;
-						syncButton.textContent = originalText;
-					}
-				};
-
-				const configButton = actionContainer.createEl("button", {
-					text: "Configure",
-				});
-				configButton.addClass("github-issues-config-button");
-
-				const deleteButton = actionContainer.createEl("button");
-				deleteButton.createEl("span", {
-					cls: "github-issues-button-icon",
-					text: "×",
-				});
-				deleteButton.createEl("span", {
-					cls: "github-issues-button-text",
-					text: "Remove",
-				});
-				deleteButton.addClass("github-issues-remove-button");
-				deleteButton.onclick = async () => {
-					await this.showDeleteRepositoryModal(repo);
-				};
-
-				const detailsContainer = repoItem.createDiv(
-					"github-issues-repo-details",
-				);
-
-				// Populate detailsContainer immediately
-				const description = detailsContainer.createEl("p", {
-					text: "Configure tracking settings for this repository",
-				});
-				description.addClass("github-issues-repo-description");
-
-				// Add "Ignore global defaults" toggle at the top
-				new Setting(detailsContainer)
-					.setName("Ignore global defaults")
-					.setDesc("Use repository-specific settings instead of global defaults")
-					.addToggle((toggle) =>
-						toggle.setValue(repo.ignoreGlobalSettings).onChange(async (value) => {
-							repo.ignoreGlobalSettings = value;
-							await this.plugin.saveSettings();
-						}),
-					);
-
-				const issuesContainer = detailsContainer.createDiv(
-					"github-issues-settings-section",
-				);
-				const pullRequestsContainer = detailsContainer.createDiv(
-					"github-issues-settings-section",
-				);
-
-				this.renderIssueSettings(issuesContainer, repo);
-				this.renderPullRequestSettings(pullRequestsContainer, repo);
-
-				const toggleDetails = () => {
-					repoItem.classList.toggle("github-issues-expanded");
-				};
-
-				configButton.onclick = toggleDetails;
-
-				headerContainer.onclick = (e) => {
-					if (
-						!(e.target as Element).closest(
-							".github-issues-remove-button",
-						) &&
-						!(e.target as Element).closest(
-							".github-issues-sync-button",
-						) &&
-						!(e.target as Element).closest(
-							".github-issues-config-button",
-						)
-					) {
-						toggleDetails();
-					}
-				};
-			}
-		}
-
-		const noTrackedRepos = reposContainer.createEl("p", {
-			text: "No repositories tracked. Please add a repository to get started.",
-		});
-		noTrackedRepos.addClass("github-issues-no-repos");
-		noTrackedRepos.classList.toggle(
-			"github-issues-hidden",
-			this.plugin.settings.repositories.length > 0,
-		);
-	}
-
-	private async showDeleteRepositoryModal(
-		repo: RepositoryTracking,
-	): Promise<void> {
-		const modal = new Modal(this.app);
-		modal.containerEl.addClass("github-issues-modal");
-		modal.titleEl.setText("Delete repository");
-
-		const contentContainer = modal.contentEl.createDiv(
-			"github-issues-delete-modal-content",
-		);
-
-		const warningContainer = contentContainer.createDiv(
-			"github-issues-warning-icon-container",
-		);
-		setIcon(warningContainer, "alert-triangle");
-		warningContainer.addClass("github-issues-warning-icon");
-
-		const messageContainer = contentContainer.createDiv(
-			"github-issues-delete-message",
-		);
-
-		const warningText = messageContainer.createEl("p", {
-			text: "Are you sure you want to delete ",
-		});
-		warningText.addClass("github-issues-delete-warning-text");
-
-		const repoNameSpan = warningText.createEl("span");
-		repoNameSpan.setText(repo.repository);
-		repoNameSpan.addClass("github-issues-delete-repo-name");
-
-		warningText.appendText("?");
-
-		const descriptionText = messageContainer.createEl("p", {
-			text: "This will remove all tracking settings for this repository.",
-		});
-		descriptionText.addClass("github-issues-delete-description");
-
-		const buttonContainer = contentContainer.createDiv();
-		buttonContainer.addClass("github-issues-button-container");
-
-		const cancelButton = buttonContainer.createEl("button");
-		cancelButton.setText("Cancel");
-		cancelButton.onclick = () => modal.close();
-		const confirmDeleteButton = buttonContainer.createEl("button");
-		const deleteIcon = confirmDeleteButton.createEl("span", {
-			cls: "github-issues-button-icon",
-		});
-		setIcon(deleteIcon, "trash-2");
-		confirmDeleteButton.createEl("span", {
-			cls: "github-issues-button-text",
-			text: "Delete repository",
-		});
-		confirmDeleteButton.addClass("mod-warning");
-		confirmDeleteButton.onclick = async () => {
-			this.plugin.settings.repositories =
-				this.plugin.settings.repositories.filter(
-					(r) => r.repository !== repo.repository,
-				);
-			await this.plugin.saveSettings();
-			this.display();
-			modal.close();
-			new Notice(`Deleted repository: ${repo.repository}`);
-		};
-
-		modal.open();
-	}
-
-	private renderIssueSettings(
-		container: HTMLElement,
-		repo: RepositoryTracking,
-	): void {
-		new Setting(container).setName("Issues").setHeading();
-
-		container
-			.createEl("p", {
-				text: "Configure how issues are tracked and stored",
-			})
-			.addClass("setting-item-description");
-
-		const issuesSettingsContainer = container.createDiv(
-			"github-issues-settings-group",
-		);
-
-		// Container for the standard issues folder setting
-		const standardIssuesFolderContainer = issuesSettingsContainer.createDiv();
-
-		// Container for the custom issues folder setting
-		const customIssuesFolderContainer = issuesSettingsContainer.createDiv();
-
-		new Setting(container)
-			.setName("Track issues")
-			.setDesc("Enable or disable issue tracking for this repository")
-			.addToggle((toggle) =>
-				toggle.setValue(repo.trackIssues).onChange(async (value) => {
-					repo.trackIssues = value;
-					issuesSettingsContainer.classList.toggle(
-						"github-issues-settings-hidden",
-						!value,
-					);
-					await this.plugin.saveSettings();
-				}),
-			);
-		issuesSettingsContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.trackIssues,
-		);
-
-		// Update container visibility based on custom folder setting
-		const updateContainerVisibility = () => {
-			standardIssuesFolderContainer.classList.toggle(
-				"github-issues-settings-hidden",
-				repo.useCustomIssueFolder,
-			);
-			customIssuesFolderContainer.classList.toggle(
-				"github-issues-settings-hidden",
-				!repo.useCustomIssueFolder,
-			);
-		};
-
-		const issuesFolderSetting = new Setting(standardIssuesFolderContainer)
-			.setName("Issues folder")
-			.setDesc("The folder where issue files will be stored")
-			.addText((text) => {
-				text
-					.setPlaceholder("GitHub Issues")
-					.setValue(repo.issueFolder)
-					.onChange(async (value) => {
-						repo.issueFolder = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add folder suggestion functionality
-				new FolderSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📁")
-					.setTooltip("Browse folders")
-					.onClick(() => {
-						// The folder suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		new Setting(issuesSettingsContainer)
-			.setName("Use custom folder")
-			.setDesc("Instead of organizing issues by Owner/Repository, place all issues in a custom folder")
-			.addToggle((toggle) => {
-				toggle
-					.setValue(repo.useCustomIssueFolder)
-					.onChange(async (value) => {
-						repo.useCustomIssueFolder = value;
-						updateContainerVisibility();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// Create the custom folder container first
-		const customIssueFolderContainer = issuesSettingsContainer.createDiv(
-			"github-issues-settings-group",
-		);
-		customIssueFolderContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.useCustomIssueFolder,
-		);
-
-		new Setting(customIssuesFolderContainer)
-			.setName("Custom issues folder")
-			.setDesc("Specific folder path where all issues will be placed (overrides the folder structure)")
-			.addText((text) => {
-				text
-					.setPlaceholder("e.g., Issues, GitHub/All Issues")
-					.setValue(repo.customIssueFolder)
-					.onChange(async (value) => {
-						repo.customIssueFolder = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add folder suggestion functionality
-				new FolderSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📁")
-					.setTooltip("Browse folders")
-					.onClick(() => {
-						// The folder suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		// Set initial visibility
-		updateContainerVisibility();
-
-		new Setting(issuesSettingsContainer)
-			.setName("Issue update mode")
-			.setDesc("How to handle updates to existing issues")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("none", "None - Don't update existing issues")
-					.addOption("update", "Update - Overwrite existing content")
-					.addOption("append", "Append - Add new content at the end")
-					.setValue(repo.issueUpdateMode)
-					.onChange(async (value) => {
-						repo.issueUpdateMode = value as
-							| "none"
-							| "update"
-							| "append";
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		// Label filtering settings
-		new Setting(issuesSettingsContainer)
-			.setName("Filter issues by labels")
-			.setDesc("Enable filtering issues based on their labels")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.enableLabelFilter ?? false)
-					.onChange(async (value) => {
-						repo.enableLabelFilter = value;
-						labelFilterContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value,
-						);
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		const labelFilterContainer = issuesSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
-		);
-		labelFilterContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!(repo.enableLabelFilter ?? false),
-		);
-
-		new Setting(labelFilterContainer)
-			.setName("Label filter mode")
-			.setDesc("Choose whether to include or exclude issues with the specified labels")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("include", "Include - Only show issues with these labels")
-					.addOption("exclude", "Exclude - Hide issues with these labels")
-					.setValue(repo.labelFilterMode ?? "include")
-					.onChange(async (value) => {
-						repo.labelFilterMode = value as "include" | "exclude";
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(labelFilterContainer)
-			.setName("Label filters")
-			.setDesc("Comma-separated list of labels to filter by (case-sensitive)")
-			.addTextArea((text) => {
-				text
-					.setPlaceholder("bug, enhancement, help wanted")
-					.setValue((repo.labelFilters || []).join(", "))
-					.onChange(async (value) => {
-						repo.labelFilters = value
-							.split(",")
-							.map(label => label.trim())
-							.filter(label => label.length > 0);
-						await this.plugin.saveSettings();
-					});
-
-				return text;
-			})
-			.addButton((button) =>
-				button
-					.setButtonText("Fetch available labels")
-					.setTooltip("Load labels from this repository to help with configuration")
-					.onClick(async () => {
-						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
-						if (textArea) {
-							await this.fetchAndShowRepositoryLabels(repo.repository, repo, 'labelFilters', textArea);
-						}
-					}),
-			);
-
-		// Assignee filtering settings for issues
-		new Setting(issuesSettingsContainer)
-			.setName("Filter issues by assignees")
-			.setDesc("Enable filtering issues based on who they are assigned to")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.enableAssigneeFilter ?? false)
-					.onChange(async (value) => {
-						repo.enableAssigneeFilter = value;
-						assigneeFilterContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value,
-						);
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		const assigneeFilterContainer = issuesSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
-		);
-		assigneeFilterContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!(repo.enableAssigneeFilter ?? false),
-		);
-
-		new Setting(assigneeFilterContainer)
-			.setName("Assignee filter mode")
-			.setDesc("Choose how to filter issues by assignees")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("assigned-to-me", "Assigned to me - Only my issues")
-					.addOption("assigned-to-specific", "Assigned to specific users")
-					.addOption("unassigned", "Unassigned - Issues with no assignee")
-					.addOption("any-assigned", "Any assigned - Issues with any assignee")
-					.setValue(repo.assigneeFilterMode ?? "assigned-to-me")
-					.onChange(async (value) => {
-						repo.assigneeFilterMode = value as "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
-						assigneeSpecificContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							value !== "assigned-to-specific",
-						);
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		const assigneeSpecificContainer = assigneeFilterContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
-		);
-		assigneeSpecificContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			(repo.assigneeFilterMode ?? "assigned-to-me") !== "assigned-to-specific",
-		);
-
-		new Setting(assigneeSpecificContainer)
-			.setName("Specific assignees")
-			.setDesc("Comma-separated list of GitHub usernames to filter by")
-			.addTextArea((text) => {
-				text
-					.setPlaceholder("username1, username2, username3")
-					.setValue((repo.assigneeFilters || []).join(", "))
-					.onChange(async (value) => {
-						repo.assigneeFilters = value
-							.split(",")
-							.map(username => username.trim())
-							.filter(username => username.length > 0);
-						await this.plugin.saveSettings();
-					});
-
-				return text;
-			})
-			.addButton((button) =>
-				button
-					.setButtonText("Fetch collaborators")
-					.setTooltip("Load collaborators from this repository to help with configuration")
-					.onClick(async () => {
-						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
-						if (textArea) {
-							await this.fetchAndShowRepositoryCollaborators(repo.repository, repo, 'assigneeFilters', textArea);
-						}
-					}),
-			);
-
-		new Setting(issuesSettingsContainer)
-			.setName("Default: Allow issue deletion")
-			.setDesc(
-				"If enabled, issue files will be set to be deleted from your vault when the issue is closed or no longer matches your filter criteria",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.allowDeleteIssue)
-					.onChange(async (value) => {
-						repo.allowDeleteIssue = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(issuesSettingsContainer)
-			.setName("Issue note template")
-			.setDesc(
-				"Template for issue note filenames. Available variables: {title}, {number}, {status}, {author}, {assignee}, {labels}, {repository}, {owner}, {repoName}, {type}, {created}, {updated}. Example: \"{title} - Issue {number}\""
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("Issue - {number}")
-					.setValue(repo.issueNoteTemplate || "Issue - {number}")
-					.onChange(async (value) => {
-						repo.issueNoteTemplate = value || "Issue - {number}";
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(issuesSettingsContainer)
-			.setName("Use custom issue content template")
-			.setDesc("Enable custom template file for issue content instead of the default format")
-			.addToggle((toggle) => {
-				toggle
-					.setValue(repo.useCustomIssueContentTemplate)
-					.onChange(async (value) => {
-						repo.useCustomIssueContentTemplate = value;
-						customIssueTemplateContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value
-						);
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// Create the custom template container
-		const customIssueTemplateContainer = issuesSettingsContainer.createDiv(
-			"github-issues-settings-group",
-		);
-		customIssueTemplateContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.useCustomIssueContentTemplate,
-		);
-
-		new Setting(customIssueTemplateContainer)
-			.setName("Issue content template file")
-			.setDesc("Path to a markdown file that will be used as template for issue content. See /templates folder for examples.")
-			.addText((text) => {
-				text
-					.setPlaceholder("templates/default-issue-template.md")
-					.setValue(repo.issueContentTemplate || "")
-					.onChange(async (value) => {
-						repo.issueContentTemplate = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add file suggestion functionality
-				new FileSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📄")
-					.setTooltip("Browse template files")
-					.onClick(() => {
-						// The file suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		new Setting(issuesSettingsContainer)
-			.setName("Include issue comments")
-			.setDesc(
-				"If enabled, comments from issues will be included in the generated files",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.includeIssueComments)
-					.onChange(async (value) => {
-						repo.includeIssueComments = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-	}
-
-	private renderPullRequestSettings(
-		container: HTMLElement,
-		repo: RepositoryTracking,
-	): void {
-		new Setting(container).setName("Pull requests").setHeading();
-
-		container
-			.createEl("p", {
-				text: "Configure how pull requests are tracked and stored",
-			})
-			.addClass("setting-item-description");
-
-		const pullRequestsSettingsContainer = container.createDiv(
-			"github-issues-settings-group",
-		);
-
-		// Container for the standard pull requests folder setting
-		const standardPRFolderContainer = pullRequestsSettingsContainer.createDiv();
-
-		// Container for the custom pull requests folder setting
-		const customPRFolderContainer = pullRequestsSettingsContainer.createDiv();
-
-		new Setting(container)
-			.setName("Track pull requests")
-			.setDesc(
-				"Enable or disable pull request tracking for this repository",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.trackPullRequest)
-					.onChange(async (value) => {
-						repo.trackPullRequest = value;
-						pullRequestsSettingsContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value,
-						);
-						await this.plugin.saveSettings();
-					}),
-			);
-		pullRequestsSettingsContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.trackPullRequest,
-		);
-
-		// Update container visibility based on custom folder setting
-		const updatePRContainerVisibility = () => {
-			standardPRFolderContainer.classList.toggle(
-				"github-issues-settings-hidden",
-				repo.useCustomPullRequestFolder,
-			);
-			customPRFolderContainer.classList.toggle(
-				"github-issues-settings-hidden",
-				!repo.useCustomPullRequestFolder,
-			);
-		};
-
-		const pullRequestsFolderSetting = new Setting(standardPRFolderContainer)
-			.setName("Pull requests folder")
-			.setDesc("The folder where pull request files will be stored")
-			.addText((text) => {
-				text
-					.setPlaceholder("GitHub Pull Requests")
-					.setValue(repo.pullRequestFolder)
-					.onChange(async (value) => {
-						repo.pullRequestFolder = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add folder suggestion functionality
-				new FolderSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📁")
-					.setTooltip("Browse folders")
-					.onClick(() => {
-						// The folder suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Use custom folder")
-			.setDesc("Instead of organizing pull requests by Owner/Repository, place all pull requests in a custom folder")
-			.addToggle((toggle) => {
-				toggle
-					.setValue(repo.useCustomPullRequestFolder)
-					.onChange(async (value) => {
-						repo.useCustomPullRequestFolder = value;
-						updatePRContainerVisibility();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(customPRFolderContainer)
-			.setName("Custom pull requests folder")
-			.setDesc("Specific folder path where all pull requests will be placed (overrides the folder structure)")
-			.addText((text) => {
-				text
-					.setPlaceholder("e.g., Pull Requests, GitHub/All PRs")
-					.setValue(repo.customPullRequestFolder)
-					.onChange(async (value) => {
-						repo.customPullRequestFolder = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add folder suggestion functionality
-				new FolderSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📁")
-					.setTooltip("Browse folders")
-					.onClick(() => {
-						// The folder suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Pull request update mode")
-			.setDesc("How to handle updates to existing pull requests")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption(
-						"none",
-						"None - Don't update existing pull requests",
-					)
-					.addOption("update", "Update - Overwrite existing content")
-					.addOption("append", "Append - Add new content at the end")
-					.setValue(repo.pullRequestUpdateMode)
-					.onChange(async (value) => {
-						repo.pullRequestUpdateMode = value as
-							| "none"
-							| "update"
-							| "append";
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		// Label filtering settings for pull requests
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Filter pull requests by labels")
-			.setDesc("Enable filtering pull requests based on their labels")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.enablePrLabelFilter ?? false)
-					.onChange(async (value) => {
-						repo.enablePrLabelFilter = value;
-						prLabelFilterContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value,
-						);
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		const prLabelFilterContainer = pullRequestsSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
-		);
-		prLabelFilterContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!(repo.enablePrLabelFilter ?? false),
-		);
-
-		new Setting(prLabelFilterContainer)
-			.setName("PR label filter mode")
-			.setDesc("Choose whether to include or exclude pull requests with the specified labels")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("include", "Include - Only show PRs with these labels")
-					.addOption("exclude", "Exclude - Hide PRs with these labels")
-					.setValue(repo.prLabelFilterMode ?? "include")
-					.onChange(async (value) => {
-						repo.prLabelFilterMode = value as "include" | "exclude";
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(prLabelFilterContainer)
-			.setName("PR label filters")
-			.setDesc("Comma-separated list of labels to filter by (case-sensitive)")
-			.addTextArea((text) => {
-				text
-					.setPlaceholder("bug, enhancement, help wanted")
-					.setValue((repo.prLabelFilters || []).join(", "))
-					.onChange(async (value) => {
-						repo.prLabelFilters = value
-							.split(",")
-							.map(label => label.trim())
-							.filter(label => label.length > 0);
-						await this.plugin.saveSettings();
-					});
-
-				return text;
-			})
-			.addButton((button) =>
-				button
-					.setButtonText("Fetch available labels")
-					.setTooltip("Load labels from this repository to help with configuration")
-					.onClick(async () => {
-						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
-						if (textArea) {
-							await this.fetchAndShowRepositoryLabels(repo.repository, repo, 'prLabelFilters', textArea);
-						}
-					}),
-			);
-
-		// Assignee filtering settings for pull requests
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Filter pull requests by assignees")
-			.setDesc("Enable filtering pull requests based on who they are assigned to")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.enablePrAssigneeFilter ?? false)
-					.onChange(async (value) => {
-						repo.enablePrAssigneeFilter = value;
-						prAssigneeFilterContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value,
-						);
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		const prAssigneeFilterContainer = pullRequestsSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
-		);
-		prAssigneeFilterContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!(repo.enablePrAssigneeFilter ?? false),
-		);
-
-		new Setting(prAssigneeFilterContainer)
-			.setName("PR assignee filter mode")
-			.setDesc("Choose how to filter pull requests by assignees")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("assigned-to-me", "Assigned to me - Only my PRs")
-					.addOption("assigned-to-specific", "Assigned to specific users")
-					.addOption("unassigned", "Unassigned - PRs with no assignee")
-					.addOption("any-assigned", "Any assigned - PRs with any assignee")
-					.setValue(repo.prAssigneeFilterMode ?? "assigned-to-me")
-					.onChange(async (value) => {
-						repo.prAssigneeFilterMode = value as "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
-						prAssigneeSpecificContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							value !== "assigned-to-specific",
-						);
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		const prAssigneeSpecificContainer = prAssigneeFilterContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
-		);
-		prAssigneeSpecificContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			(repo.prAssigneeFilterMode ?? "assigned-to-me") !== "assigned-to-specific",
-		);
-
-		new Setting(prAssigneeSpecificContainer)
-			.setName("Specific PR assignees")
-			.setDesc("Comma-separated list of GitHub usernames to filter by")
-			.addTextArea((text) => {
-				text
-					.setPlaceholder("username1, username2, username3")
-					.setValue((repo.prAssigneeFilters || []).join(", "))
-					.onChange(async (value) => {
-						repo.prAssigneeFilters = value
-							.split(",")
-							.map(username => username.trim())
-							.filter(username => username.length > 0);
-						await this.plugin.saveSettings();
-					});
-
-				return text;
-			})
-			.addButton((button) =>
-				button
-					.setButtonText("Fetch collaborators")
-					.setTooltip("Load collaborators from this repository to help with configuration")
-					.onClick(async () => {
-						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
-						if (textArea) {
-							await this.fetchAndShowRepositoryCollaborators(repo.repository, repo, 'prAssigneeFilters', textArea);
-						}
-					}),
-			);
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Pull request note template")
-			.setDesc(
-				"Template for pull request note filenames. Available variables: {title}, {number}, {status}, {author}, {assignee}, {labels}, {repository}, {owner}, {repoName}, {type}, {created}, {updated}. Example: \"{title} - PR {number}\""
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("PR - {number}")
-					.setValue(repo.pullRequestNoteTemplate || "PR - {number}")
-					.onChange(async (value) => {
-						repo.pullRequestNoteTemplate = value || "PR - {number}";
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Use custom pull request content template")
-			.setDesc("Enable custom template file for pull request content instead of the default format")
-			.addToggle((toggle) => {
-				toggle
-					.setValue(repo.useCustomPullRequestContentTemplate)
-					.onChange(async (value) => {
-						repo.useCustomPullRequestContentTemplate = value;
-						customPRTemplateContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value
-						);
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// Create the custom template container
-		const customPRTemplateContainer = pullRequestsSettingsContainer.createDiv(
-			"github-issues-settings-group",
-		);
-		customPRTemplateContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.useCustomPullRequestContentTemplate,
-		);
-
-		new Setting(customPRTemplateContainer)
-			.setName("Pull request content template file")
-			.setDesc("Path to a markdown file that will be used as template for pull request content. See /templates folder for examples.")
-			.addText((text) => {
-				text
-					.setPlaceholder("templates/default-pr-template.md")
-					.setValue(repo.pullRequestContentTemplate || "")
-					.onChange(async (value) => {
-						repo.pullRequestContentTemplate = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add file suggestion functionality
-				new FileSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📄")
-					.setTooltip("Browse template files")
-					.onClick(() => {
-						// The file suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Default: Allow pull request deletion")
-			.setDesc(
-				"If enabled, pull request files will be set to be deleted from your vault when the pull request is closed or no longer matches your filter criteria",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.allowDeletePullRequest)
-					.onChange(async (value) => {
-						repo.allowDeletePullRequest = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		// Set initial visibility
-		updatePRContainerVisibility();
 	}
 
 	private async renderAvailableRepositories(
@@ -2690,7 +1467,6 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						const trackedContainer = actionContainer.createDiv(
 							"github-issues-tracked-container",
 						);
-						setIcon(trackedContainer, "check");
 						const trackedText = trackedContainer.createEl("span");
 						trackedText.setText("Tracked");
 						trackedText.addClass("github-issues-info-text");
@@ -2741,7 +1517,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			addSelectedButton.onclick = async () => {
 				if (this.selectedRepositories.size > 0) {
 					const selectedRepos = Array.from(this.selectedRepositories);
-					await this.addMultipleRepositories(selectedRepos);
+					await this.repositoryListManager.addMultipleRepositories(selectedRepos);
 					await this.renderAvailableRepositories(container);
 				}
 			};
@@ -2835,274 +1611,6 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 	/**
 	 * Fetch and display available labels for a repository
 	 */
-	private async fetchAndShowRepositoryLabels(
-		repositoryName: string,
-		repo: RepositoryTracking,
-		filterType: 'labelFilters' | 'prLabelFilters',
-		textAreaElement: HTMLTextAreaElement,
-	): Promise<void> {
-		if (!this.plugin.gitHubClient?.isReady()) {
-			new Notice("GitHub client not ready. Please set your GitHub token first.");
-			return;
-		}
-
-		const [owner, repoName] = repositoryName.split("/");
-		if (!owner || !repoName) {
-			new Notice("Invalid repository format. Expected 'owner/repo'.");
-			return;
-		}
-
-		try {
-			new Notice("Fetching labels from repository...");
-			const labels = await this.plugin.gitHubClient.fetchRepositoryLabels(owner, repoName);
-
-			if (labels.length === 0) {
-				new Notice("No labels found in this repository.");
-				return;
-			}
-
-			// Create a modal to show available labels
-			const modal = new Modal(this.app);
-			modal.titleEl.setText(`Available Labels for ${repositoryName}`);
-			modal.containerEl.addClass("github-issues-modal");
-
-			const contentContainer = modal.contentEl.createDiv("github-issues-labels-modal");
-
-			const description = contentContainer.createEl("p", {
-				text: `Found ${labels.length} labels in this repository. Click on labels to add them to your filter:`,
-			});
-			description.addClass("github-issues-modal-description");
-
-			const labelsContainer = contentContainer.createDiv("github-issues-labels-container");
-
-			labels.forEach((label: any) => {
-				const labelElement = labelsContainer.createDiv("github-issues-label-item");
-
-				const labelBadge = labelElement.createDiv("github-issues-label-badge");
-				labelBadge.setText(label.name);
-
-				// Set color as CSS custom properties instead of direct style assignment
-				labelBadge.style.setProperty('--label-bg-color', `#${label.color}`);
-				labelBadge.style.setProperty('--label-text-color', this.getContrastColor(label.color));
-
-				if (label.description) {
-					const description = labelElement.createDiv("github-issues-label-description");
-					description.setText(label.description);
-				}
-
-				const currentFilters = repo[filterType] ?? [];
-				const isSelected = currentFilters.includes(label.name);
-				labelElement.classList.toggle("github-issues-label-selected", isSelected);
-
-				labelElement.addEventListener("click", async () => {
-					const currentFilters = repo[filterType] ?? [];
-					if (currentFilters.includes(label.name)) {
-						// Remove label
-						repo[filterType] = currentFilters.filter((l: string) => l !== label.name);
-						labelElement.classList.remove("github-issues-label-selected");
-					} else {
-						// Add label
-						repo[filterType] = [...currentFilters, label.name];
-						labelElement.classList.add("github-issues-label-selected");
-					}
-
-					// Update the textarea and save settings
-					textAreaElement.value = repo[filterType].join(", ");
-					await this.plugin.saveSettings();
-				});
-			});
-
-			const buttonContainer = contentContainer.createDiv("github-issues-button-container");
-			const closeButton = buttonContainer.createEl("button", { text: "Close" });
-			closeButton.onclick = () => modal.close();
-
-			modal.open();
-			new Notice(`Loaded ${labels.length} labels from ${repositoryName}`);
-		} catch (error) {
-			new Notice(`Error fetching labels: ${(error as Error).message}`);
-		}
-	}
-
-	/**
-	 * Fetch and display available collaborators for a repository
-	 */
-	private async fetchAndShowRepositoryCollaborators(
-		repositoryName: string,
-		repo: RepositoryTracking,
-		filterType: 'assigneeFilters' | 'prAssigneeFilters',
-		textAreaElement: HTMLTextAreaElement,
-	): Promise<void> {
-		if (!this.plugin.gitHubClient?.isReady()) {
-			new Notice("GitHub client not ready. Please set your GitHub token first.");
-			return;
-		}
-
-		const [owner, repoName] = repositoryName.split("/");
-		if (!owner || !repoName) {
-			new Notice("Invalid repository format. Expected 'owner/repo'.");
-			return;
-		}
-
-		try {
-			new Notice("Fetching collaborators from repository...");
-			const collaborators = await this.plugin.gitHubClient.fetchRepositoryCollaborators(owner, repoName);
-
-			if (collaborators.length === 0) {
-				new Notice("No collaborators found in this repository.");
-				return;
-			}
-
-			// Create a modal to show available collaborators
-			const modal = new Modal(this.app);
-			modal.titleEl.setText(`Available Collaborators for ${repositoryName}`);
-			modal.containerEl.addClass("github-issues-modal");
-
-			const contentContainer = modal.contentEl.createDiv("github-issues-collaborators-modal");
-
-			const description = contentContainer.createEl("p", {
-				text: `Found ${collaborators.length} collaborators in this repository. Click on users to add them to your filter:`,
-			});
-			description.addClass("github-issues-modal-description");
-
-			const collaboratorsContainer = contentContainer.createDiv("github-issues-collaborators-container");
-
-			const currentFilters = repo[filterType] ?? [];
-
-			collaborators.forEach((collaborator: any) => {
-				const collaboratorElement = collaboratorsContainer.createDiv("github-issues-collaborator-item");
-
-				const avatarContainer = collaboratorElement.createDiv("github-issues-collaborator-avatar");
-				if (collaborator.avatar_url) {
-					const avatar = avatarContainer.createEl("img");
-					avatar.src = collaborator.avatar_url;
-					avatar.alt = collaborator.login;
-					avatar.addClass("github-issues-avatar");
-				}
-
-				const infoContainer = collaboratorElement.createDiv("github-issues-collaborator-info");
-
-				const username = infoContainer.createDiv("github-issues-collaborator-username");
-				username.setText(collaborator.login);
-
-				if (collaborator.type) {
-					const type = infoContainer.createDiv("github-issues-collaborator-type");
-					type.setText(collaborator.type);
-				}
-
-				const isSelected = currentFilters.includes(collaborator.login);
-				collaboratorElement.classList.toggle("github-issues-collaborator-selected", isSelected);
-
-				collaboratorElement.addEventListener("click", async () => {
-					if (currentFilters.includes(collaborator.login)) {
-						// Remove collaborator
-						repo[filterType] = currentFilters.filter((username: string) => username !== collaborator.login);
-						collaboratorElement.classList.remove("github-issues-collaborator-selected");
-					} else {
-						// Add collaborator
-						repo[filterType] = [...currentFilters, collaborator.login];
-						collaboratorElement.classList.add("github-issues-collaborator-selected");
-					}
-
-					// Update the textarea and save settings
-					textAreaElement.value = repo[filterType].join(", ");
-					await this.plugin.saveSettings();
-				});
-			});
-
-			const buttonContainer = contentContainer.createDiv("github-issues-button-container");
-			const closeButton = buttonContainer.createEl("button", { text: "Close" });
-			closeButton.onclick = () => modal.close();
-
-			modal.open();
-			new Notice(`Loaded ${collaborators.length} collaborators from ${repositoryName}`);
-		} catch (error) {
-			new Notice(`Error fetching collaborators: ${(error as Error).message}`);
-		}
-	}
-
-	/**
-	 * Calculate contrast color for text based on background color
-	 */
-	private getContrastColor(hexColor: string): string {
-		const r = parseInt(hexColor.substr(0, 2), 16);
-		const g = parseInt(hexColor.substr(2, 2), 16);
-		const b = parseInt(hexColor.substr(4, 2), 16);
-		const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-		return brightness > 128 ? "#000000" : "#ffffff";
-	}
-
-	/**
-	 * Update the token status badge
-	 */
-	private addTemplateVariablesHelp(container: HTMLElement, type: 'issue' | 'pr'): void {
-		const helpContainer = container.createDiv("github-issues-template-help");
-
-		const details = helpContainer.createEl("details");
-		const summary = details.createEl("summary");
-		summary.textContent = "Available template variables";
-		summary.addClass("github-issues-template-help-summary");
-
-		const variablesContainer = details.createDiv("github-issues-template-variables");
-
-		// Use the getTemplateHelp function and render as pre-formatted text
-		const helpText = variablesContainer.createEl("pre");
-		helpText.textContent = getTemplateHelp();
-	}
-
-	private addPersistBlocksHelp(container: HTMLElement): void {
-		const helpContainer = container.createDiv("github-issues-template-help");
-
-		const details = helpContainer.createEl("details");
-		const summary = details.createEl("summary");
-		summary.textContent = "Protect your custom notes with Persist Blocks";
-		summary.addClass("github-issues-template-help-summary");
-
-		const contentContainer = details.createDiv("github-issues-template-variables");
-
-		// Introduction
-		const intro = contentContainer.createEl("p");
-		intro.innerHTML = `<strong>Persist blocks</strong> allow you to add your own custom notes to GitHub issue and PR files without them being overwritten during sync.`;
-
-		// Basic usage
-		const usageTitle = contentContainer.createEl("h4");
-		usageTitle.textContent = "Basic Usage";
-
-		const usageExample = contentContainer.createEl("pre");
-		usageExample.textContent = `{% persist "notes" %}
-## My Notes
-- Your custom content here
-- Will never be overwritten!
-{% endpersist %}`;
-
-		// How it works
-		const howTitle = contentContainer.createEl("h4");
-		howTitle.textContent = "How It Works";
-
-		const howList = contentContainer.createEl("ul");
-		howList.innerHTML = `
-			<li><strong>Smart Updates:</strong> Files are only updated if GitHub data has changed (checks the <code>updated</code> field)</li>
-			<li><strong>Content Protection:</strong> Everything inside persist blocks is preserved during sync</li>
-			<li><strong>Position Preservation:</strong> Blocks stay exactly where you placed them using surrounding text as anchors</li>
-		`;
-
-		// Multiple blocks
-		const multipleTitle = contentContainer.createEl("h4");
-		multipleTitle.textContent = "Multiple Blocks";
-
-		const multipleDesc = contentContainer.createEl("p");
-		multipleDesc.textContent = "You can have multiple persist blocks in one file. Each needs a unique name:";
-
-		const multipleExample = contentContainer.createEl("pre");
-		multipleExample.textContent = `{% persist "notes" %}
-Your notes here...
-{% endpersist %}
-
-{% persist "todos" %}
-- [ ] Task 1
-- [ ] Task 2
-{% endpersist %}`;
-}
-
 	private async updateTokenBadge(container?: HTMLElement): Promise<void> {
 		const badgeContainer = container || this.containerEl.querySelector(".github-issues-token-badge-container") as HTMLElement;
 		if (!badgeContainer) return;

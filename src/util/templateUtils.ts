@@ -67,12 +67,14 @@ export function sanitizeFilename(filename: string): string {
  * @param comments Array of comment objects from GitHub API
  * @param dateFormat Date format string for comment timestamps
  * @param escapeMode Escape mode for comment body text
+ * @param escapeHashTags Whether to escape # characters
  * @returns Formatted comments string
  */
 export function formatComments(
 	comments: any[],
 	dateFormat: string = "",
-	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal"
+	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
+	escapeHashTags: boolean = false
 ): string {
 	if (!comments || comments.length === 0) {
 		return "";
@@ -102,7 +104,8 @@ export function formatComments(
 		// Use escapeBody function for proper text escaping
 		commentSection += `${escapeBody(
 			comment.body || "No content",
-			escapeMode
+			escapeMode,
+			escapeHashTags
 		)}\n\n`;
 	});
 
@@ -293,7 +296,8 @@ export function createIssueTemplateData(
 	repository: string,
 	comments: any[] = [],
 	dateFormat: string = "",
-	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal"
+	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
+	escapeHashTags: boolean = false
 ): TemplateData {
 	const [owner, repoName] = repository.split("/");
 
@@ -323,7 +327,7 @@ export function createIssueTemplateData(
 		commentsCount: issue.comments || 0,
 		isLocked: issue.locked || false,
 		lockReason: issue.active_lock_reason || "",
-		comments: formatComments(comments, dateFormat, escapeMode)
+		comments: formatComments(comments, dateFormat, escapeMode, escapeHashTags)
 	};
 }
 
@@ -338,7 +342,8 @@ export function createPullRequestTemplateData(
 	repository: string,
 	comments: any[] = [],
 	dateFormat: string = "",
-	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal"
+	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
+	escapeHashTags: boolean = false
 ): TemplateData {
 	const [owner, repoName] = repository.split("/");
 
@@ -374,7 +379,7 @@ export function createPullRequestTemplateData(
 		merged: pr.merged || false,
 		baseBranch: pr.base?.ref,
 		headBranch: pr.head?.ref,
-		comments: formatComments(comments, dateFormat, escapeMode)
+		comments: formatComments(comments, dateFormat, escapeMode, escapeHashTags)
 	};
 }
 

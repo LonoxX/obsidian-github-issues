@@ -22,6 +22,9 @@ export class ContentGenerator {
 		comments: any[],
 		settings: GitHubTrackerSettings,
 	): Promise<string> {
+		// Determine whether to escape hash tags (repo setting takes precedence if ignoreGlobalSettings is true)
+		const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : settings.escapeHashTags;
+
 		// Check if custom template is enabled and load template content
 		if (repo.useCustomIssueContentTemplate && repo.issueContentTemplate) {
 			const templateContent = await this.fileHelpers.loadTemplateContent(repo.issueContentTemplate);
@@ -31,7 +34,8 @@ export class ContentGenerator {
 					repo.repository,
 					comments,
 					settings.dateFormat,
-					settings.escapeMode
+					settings.escapeMode,
+					shouldEscapeHashTags
 				);
 				return processContentTemplate(templateContent, templateData, settings.dateFormat);
 			}
@@ -68,14 +72,14 @@ updateMode: "${repo.issueUpdateMode}"
 allowDelete: ${repo.allowDeleteIssue ? true : false}
 ---
 
-# ${escapeBody(issue.title, settings.escapeMode)}
+# ${escapeBody(issue.title, settings.escapeMode, false)}
 ${
 	issue.body
-		? escapeBody(issue.body, settings.escapeMode)
+		? escapeBody(issue.body, settings.escapeMode, shouldEscapeHashTags)
 		: "No description found"
 }
 
-${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFormat)}
+${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFormat, shouldEscapeHashTags)}
 `;
 	}
 
@@ -88,6 +92,9 @@ ${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFo
 		comments: any[],
 		settings: GitHubTrackerSettings,
 	): Promise<string> {
+		// Determine whether to escape hash tags (repo setting takes precedence if ignoreGlobalSettings is true)
+		const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : settings.escapeHashTags;
+
 		// Check if custom template is enabled and load template content
 		if (repo.useCustomPullRequestContentTemplate && repo.pullRequestContentTemplate) {
 			const templateContent = await this.fileHelpers.loadTemplateContent(repo.pullRequestContentTemplate);
@@ -97,7 +104,8 @@ ${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFo
 					repo.repository,
 					comments,
 					settings.dateFormat,
-					settings.escapeMode
+					settings.escapeMode,
+					shouldEscapeHashTags
 				);
 				return processContentTemplate(templateContent, templateData, settings.dateFormat);
 			}
@@ -139,14 +147,14 @@ updateMode: "${repo.pullRequestUpdateMode}"
 allowDelete: ${repo.allowDeletePullRequest ? true : false}
 ---
 
-# ${escapeBody(pr.title, settings.escapeMode)}
+# ${escapeBody(pr.title, settings.escapeMode, false)}
 ${
 	pr.body
-		? escapeBody(pr.body, settings.escapeMode)
+		? escapeBody(pr.body, settings.escapeMode, shouldEscapeHashTags)
 		: "No description found"
 }
 
-${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFormat)}
+${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFormat, shouldEscapeHashTags)}
 `;
 	}
 }

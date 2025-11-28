@@ -362,6 +362,18 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		escapingContent.createEl("p").textContent = "• Strict: Only allows alphanumeric, '.,'()/[]{}*+-:\"' and whitespace";
 		escapingContent.createEl("p").textContent = "• Very Strict: Only allows alphanumeric, '.,' and whitespace";
 
+		new Setting(advancedContainer)
+			.setName("Escape hash tags")
+			.setDesc("Escape # characters that are not valid Markdown headers to prevent unintended Obsidian tags (e.g., #134 becomes \\#134)")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.escapeHashTags)
+					.onChange(async (value) => {
+						this.plugin.settings.escapeHashTags = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
 		// Global Defaults Section
 		const globalDefaultsContainer = containerEl.createDiv("github-issues-settings-group");
 		const globalDefaultsHeader = new Setting(globalDefaultsContainer)

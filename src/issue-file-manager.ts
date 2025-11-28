@@ -162,14 +162,16 @@ export class IssueFileManager {
 						this.noticeManager.debug(`Updated issue ${issue.number}`);
 					}
 				} else if (updateMode === "append") {
+					const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : this.settings.escapeHashTags;
 					content = `---\n### New status: "${
 						issue.state
 					}"\n\n# ${escapeBody(
 						issue.title,
 						this.settings.escapeMode,
+						false,
 					)}\n${
 						issue.body
-							? escapeBody(issue.body, this.settings.escapeMode)
+							? escapeBody(issue.body, this.settings.escapeMode, shouldEscapeHashTags)
 							: "No description found"
 					}\n`;
 
@@ -178,6 +180,7 @@ export class IssueFileManager {
 							comments,
 							this.settings.escapeMode,
 							this.settings.dateFormat,
+							shouldEscapeHashTags,
 						);
 					}
 					const currentFileContent = await this.app.vault.read(file);

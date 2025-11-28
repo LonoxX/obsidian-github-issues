@@ -370,6 +370,16 @@ export class RepositoryListManager {
 						}),
 					);
 
+				new Setting(detailsContainer)
+					.setName("Escape hash tags")
+					.setDesc("Escape # characters for this repository (overrides global setting if 'Ignore global settings' is enabled)")
+					.addToggle((toggle: any) =>
+						toggle.setValue(repo.escapeHashTags).onChange(async (value: boolean) => {
+							repo.escapeHashTags = value;
+							await this.plugin.saveSettings();
+						}),
+					);
+
 				const issuesContainer = detailsContainer.createDiv(
 					"github-issues-settings-section",
 				);

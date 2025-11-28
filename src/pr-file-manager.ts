@@ -164,14 +164,16 @@ export class PullRequestFileManager {
 						this.noticeManager.debug(`Updated PR ${pr.number}`);
 					}
 				} else if (updateMode === "append") {
+					const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : this.settings.escapeHashTags;
 					content = `---\n### New status: "${
 						pr.state
 					}"\n\n# ${escapeBody(
 						pr.title,
 						this.settings.escapeMode,
+						false,
 					)}\n${
 						pr.body
-							? escapeBody(pr.body, this.settings.escapeMode)
+							? escapeBody(pr.body, this.settings.escapeMode, shouldEscapeHashTags)
 							: "No description found"
 					}\n`;
 					if (comments.length > 0) {
@@ -179,6 +181,7 @@ export class PullRequestFileManager {
 							comments,
 							this.settings.escapeMode,
 							this.settings.dateFormat,
+							shouldEscapeHashTags,
 						);
 					}
 

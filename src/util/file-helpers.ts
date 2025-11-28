@@ -57,6 +57,7 @@ export class FileHelpers {
 		comments: any[],
 		escapeMode: "disabled" | "normal" | "strict" | "veryStrict",
 		dateFormat: string,
+		escapeHashTags: boolean = false,
 	): string {
 		if (!comments || comments.length === 0) {
 			return "";
@@ -87,6 +88,7 @@ export class FileHelpers {
 			commentSection += `${escapeBody(
 				comment.body || "No content",
 				escapeMode,
+				escapeHashTags,
 			)}\n\n---\n\n`;
 		});
 

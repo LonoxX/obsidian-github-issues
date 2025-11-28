@@ -35,6 +35,7 @@ export interface RepositoryTracking {
 	includePullRequestComments: boolean;
 	includeClosedIssues: boolean;
 	includeClosedPullRequests: boolean;
+	escapeHashTags: boolean;
 }
 
 export interface GlobalDefaults {
@@ -62,6 +63,7 @@ export interface GitHubTrackerSettings {
 	syncNoticeMode: "minimal" | "normal" | "extensive" | "debug";
 	syncInterval: number;
 	escapeMode: "disabled" | "normal" | "strict" | "veryStrict";
+	escapeHashTags: boolean;
 	enableBackgroundSync: boolean;
 	backgroundSyncInterval: number; // in minutes
 	cleanupClosedIssuesDays: number;
@@ -93,6 +95,7 @@ export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	syncNoticeMode: "normal",
 	syncInterval: 0,
 	escapeMode: "strict",
+	escapeHashTags: false,
 	enableBackgroundSync: false,
 	backgroundSyncInterval: 30,
 	cleanupClosedIssuesDays: 30,
@@ -137,4 +140,5 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	includePullRequestComments: true,
 	includeClosedIssues: false,
 	includeClosedPullRequests: false,
+	escapeHashTags: false,
 };

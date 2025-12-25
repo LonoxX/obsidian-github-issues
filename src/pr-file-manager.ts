@@ -1,5 +1,5 @@
 import { App, TFile } from "obsidian";
-import { GitHubTrackerSettings, RepositoryTracking } from "./types";
+import { GitHubTrackerSettings, RepositoryTracking, ProjectData } from "./types";
 import { escapeBody } from "./util/escapeUtils";
 import { NoticeManager } from "./notice-manager";
 import { GitHubClient } from "./github-client";
@@ -58,13 +58,43 @@ export class PullRequestFileManager {
 			allPullRequestsIncludingRecentlyClosed,
 		);
 
+		// Batch fetch project data if tracking is enabled globally
+		let projectDataMap = new Map<string, ProjectData[]>();
+		if (this.settings.enableProjectTracking) {
+			const nodeIds = openPullRequests
+				.filter((pr: any) => pr.node_id)
+				.map((pr: any) => pr.node_id);
+
+			if (nodeIds.length > 0) {
+				this.noticeManager.debug(
+					`Fetching project data for ${nodeIds.length} pull requests`
+				);
+				projectDataMap = await this.gitHubClient.fetchProjectDataForItems(nodeIds);
+			}
+		}
+
+		// Get enabled project IDs from global settings
+		const enabledProjectIds = this.settings.trackedProjects
+			.filter(p => p.enabled)
+			.map(p => p.id);
+
 		// Create or update pull request files (openPullRequests contains filtered PRs from main.ts)
 		for (const pr of openPullRequests) {
+			let projectData = pr.node_id ? projectDataMap.get(pr.node_id) : undefined;
+
+			// Filter by enabled projects from global settings
+			if (projectData && enabledProjectIds.length > 0) {
+				projectData = projectData.filter(p =>
+					enabledProjectIds.includes(p.projectId)
+				);
+			}
+
 			await this.createOrUpdatePullRequestFile(
 				effectiveRepo,
 				ownerCleaned,
 				repoCleaned,
 				pr,
+				projectData,
 			);
 		}
 	}
@@ -74,6 +104,7 @@ export class PullRequestFileManager {
 		ownerCleaned: string,
 		repoCleaned: string,
 		pr: any,
+		projectData?: ProjectData[],
 	): Promise<void> {
 		// Generate filename using template
 		const templateData = createPullRequestTemplateData(pr, repo.repository);
@@ -114,7 +145,7 @@ export class PullRequestFileManager {
 			);
 		}
 
-		let content = await this.contentGenerator.createPullRequestContent(pr, repo, comments, this.settings);
+		let content = await this.contentGenerator.createPullRequestContent(pr, repo, comments, this.settings, projectData);
 
 		if (file) {
 			if (file instanceof TFile) {
@@ -147,6 +178,7 @@ export class PullRequestFileManager {
 						repo,
 						comments,
 						this.settings,
+						projectData,
 					);
 
 					// Merge persist blocks back into new content

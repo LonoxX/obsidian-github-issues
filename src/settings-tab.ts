@@ -570,6 +570,146 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// GitHub Projects Section
+		const projectsContainer = containerEl.createDiv("github-issues-settings-group");
+		projectsContainer.style.marginTop = "30px";
+
+		new Setting(projectsContainer).setName("GitHub Projects").setHeading();
+
+		projectsContainer
+			.createEl("p", {
+				text: "Track GitHub Projects (v2) data and make project fields available as template variables for issues and pull requests.",
+			})
+			.addClass("setting-item-description");
+
+		const projectSettingsContainer = projectsContainer.createDiv(
+			"github-issues-settings-group",
+		);
+
+		new Setting(projectsContainer)
+			.setName("Enable project tracking")
+			.setDesc(
+				"When enabled, project data like status, priority, and custom fields become available as template variables.",
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.enableProjectTracking).onChange(async (value) => {
+					this.plugin.settings.enableProjectTracking = value;
+					projectSettingsContainer.classList.toggle(
+						"github-issues-settings-hidden",
+						!value,
+					);
+					await this.plugin.saveSettings();
+				}),
+			);
+
+		projectSettingsContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			!this.plugin.settings.enableProjectTracking,
+		);
+
+		// Project list
+		const projectListContainer = projectSettingsContainer.createDiv(
+			"github-issues-project-list",
+		);
+
+		this.renderTrackedProjects(projectListContainer);
+
+		// Load projects button
+		const loadProjectsContainer = projectSettingsContainer.createDiv();
+		loadProjectsContainer.style.display = "flex";
+		loadProjectsContainer.style.flexDirection = "column";
+		loadProjectsContainer.style.gap = "8px";
+
+		const loadProjectsButton = loadProjectsContainer.createEl("button");
+		loadProjectsButton.setText("Load Projects");
+		loadProjectsButton.title = "Load projects from tracked repositories";
+
+		const loadDirectContainer = loadProjectsContainer.createDiv();
+		loadDirectContainer.style.display = "flex";
+		loadDirectContainer.style.alignItems = "center";
+		loadDirectContainer.style.gap = "8px";
+
+		const directRepoInput = loadDirectContainer.createEl("input");
+		directRepoInput.type = "text";
+		directRepoInput.placeholder = "owner/repo-name";
+		directRepoInput.style.flex = "1";
+		directRepoInput.style.padding = "4px 8px";
+		directRepoInput.style.border = "1px solid var(--background-modifier-border)";
+		directRepoInput.style.borderRadius = "4px";
+
+		const loadDirectButton = loadDirectContainer.createEl("button");
+		loadDirectButton.setText("Load from Repo");
+		loadDirectButton.title = "Load projects directly from a specific repository";
+
+		loadProjectsButton.onclick = async () => {
+			loadProjectsButton.disabled = true;
+			loadProjectsButton.setText("Loading...");
+
+			try {
+				await this.loadProjectsFromRepositories();
+				projectListContainer.empty();
+				this.renderTrackedProjects(projectListContainer);
+			} catch (error) {
+				new Notice(`Error loading projects: ${error}`);
+			} finally {
+				loadProjectsButton.disabled = false;
+				loadProjectsButton.setText("Load Projects");
+			}
+		};
+
+		loadDirectButton.onclick = async () => {
+			const repoInput = directRepoInput.value.trim();
+			if (!repoInput) {
+				new Notice("Please enter a repository in owner/repo-name format");
+				return;
+			}
+
+			const [owner, repoName] = repoInput.split("/");
+			if (!owner || !repoName) {
+				new Notice("Please enter repository in owner/repo-name format");
+				return;
+			}
+
+			loadDirectButton.disabled = true;
+			loadDirectButton.setText("Loading...");
+
+			try {
+				await this.loadProjectsFromDirectRepository(owner, repoName);
+				projectListContainer.empty();
+				this.renderTrackedProjects(projectListContainer);
+			} catch (error) {
+				new Notice(`Error loading projects: ${error}`);
+			} finally {
+				loadDirectButton.disabled = false;
+				loadDirectButton.setText("Load from Repo");
+			}
+		};
+
+		// Template variables info
+		const projectsInfo = projectSettingsContainer.createDiv();
+		projectsInfo.addClass("github-issues-info-text");
+		projectsInfo.style.marginTop = "8px";
+
+		const projectsDetails = projectsInfo.createEl("details");
+		const projectsSummary = projectsDetails.createEl("summary");
+		projectsSummary.textContent = "Available project template variables";
+		projectsSummary.style.cursor = "pointer";
+		projectsSummary.style.fontWeight = "500";
+
+		const projectsContent = projectsDetails.createDiv();
+		projectsContent.style.marginTop = "8px";
+		projectsContent.style.paddingLeft = "12px";
+
+		projectsContent.createEl("p").textContent = "• {project} - First project title";
+		projectsContent.createEl("p").textContent = "• {project_url} - Project URL";
+		projectsContent.createEl("p").textContent = "• {project_status} - Status field value (e.g., 'In Progress')";
+		projectsContent.createEl("p").textContent = "• {project_priority} - Priority field value";
+		projectsContent.createEl("p").textContent = "• {project_iteration} - Current iteration/sprint name";
+		projectsContent.createEl("p").textContent = "• {project_iteration_start} - Iteration start date";
+		projectsContent.createEl("p").textContent = "• {project_field:FieldName} - Any custom field by name";
+		projectsContent.createEl("p").textContent = "• {projects} - All projects (comma-separated)";
+		projectsContent.createEl("p").textContent = "• {projects_yaml} - All projects as YAML array";
+
 		// Repositories Section
 		const repoContainer = containerEl.createDiv("github-issues-settings-group");
 		repoContainer.style.marginTop = "30px";
@@ -1683,6 +1823,257 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			badgeContainer.empty();
 			const errorBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-error");
 			errorBadge.setText("Error validating token");
+		}
+	}
+
+	/**
+	 * Render the list of tracked projects
+	 */
+	private renderTrackedProjects(container: HTMLElement): void {
+		const projects = this.plugin.settings.trackedProjects;
+
+		if (!projects || projects.length === 0) {
+			const emptyMessage = container.createEl("p", {
+				text: "No projects loaded. Click 'Load Projects' to fetch available projects from your tracked repositories.",
+				cls: "github-issues-empty-message",
+			});
+			emptyMessage.style.color = "var(--text-muted)";
+			emptyMessage.style.fontStyle = "italic";
+			return;
+		}
+
+		const enabledCount = projects.filter(p => p.enabled).length;
+
+		const headerContainer = container.createDiv("github-issues-project-list-header");
+		headerContainer.style.display = "flex";
+		headerContainer.style.justifyContent = "space-between";
+		headerContainer.style.alignItems = "center";
+		headerContainer.style.marginBottom = "8px";
+
+		const headerText = headerContainer.createEl("span", {
+			text: `${enabledCount} of ${projects.length} projects enabled`,
+		});
+		headerText.style.fontWeight = "500";
+
+		const selectAllContainer = headerContainer.createDiv();
+		const selectAllBtn = selectAllContainer.createEl("button", {
+			text: enabledCount === 0 ? "Enable All" : "Disable All",
+			cls: "github-issues-select-toggle-btn",
+		});
+		selectAllBtn.style.fontSize = "12px";
+		selectAllBtn.style.padding = "2px 8px";
+
+		selectAllBtn.onclick = async () => {
+			const newState = enabledCount === 0;
+			for (const project of this.plugin.settings.trackedProjects) {
+				project.enabled = newState;
+			}
+			await this.plugin.saveSettings();
+
+			// Re-render
+			container.empty();
+			this.renderTrackedProjects(container);
+		};
+
+		const listContainer = container.createDiv("github-issues-project-items");
+		listContainer.style.maxHeight = "300px";
+		listContainer.style.overflowY = "auto";
+		listContainer.style.border = "1px solid var(--background-modifier-border)";
+		listContainer.style.borderRadius = "4px";
+		listContainer.style.padding = "4px";
+
+		// Group projects by owner
+		const projectsByOwner: Record<string, typeof projects> = {};
+		for (const project of projects) {
+			if (!projectsByOwner[project.owner]) {
+				projectsByOwner[project.owner] = [];
+			}
+			projectsByOwner[project.owner].push(project);
+		}
+
+		for (const owner of Object.keys(projectsByOwner).sort()) {
+			const ownerProjects = projectsByOwner[owner];
+
+			const ownerHeader = listContainer.createDiv("github-issues-project-owner-header");
+			ownerHeader.style.padding = "6px 8px";
+			ownerHeader.style.fontWeight = "500";
+			ownerHeader.style.backgroundColor = "var(--background-secondary)";
+			ownerHeader.style.borderRadius = "4px";
+			ownerHeader.style.marginTop = "4px";
+			ownerHeader.textContent = owner;
+
+			for (const project of ownerProjects) {
+				const projectItem = listContainer.createDiv("github-issues-project-item");
+				projectItem.style.display = "flex";
+				projectItem.style.alignItems = "center";
+				projectItem.style.padding = "4px 8px";
+				projectItem.style.cursor = "pointer";
+
+				projectItem.onmouseenter = () => {
+					projectItem.style.backgroundColor = "var(--background-modifier-hover)";
+				};
+				projectItem.onmouseleave = () => {
+					projectItem.style.backgroundColor = "";
+				};
+
+				const checkbox = projectItem.createEl("input", {
+					type: "checkbox",
+				});
+				checkbox.checked = project.enabled;
+				checkbox.style.marginRight = "8px";
+
+				const labelContainer = projectItem.createDiv();
+				labelContainer.style.flex = "1";
+
+				const titleEl = labelContainer.createEl("span", {
+					text: project.title,
+				});
+
+				const numberEl = labelContainer.createEl("span", {
+					text: ` #${project.number}`,
+				});
+				numberEl.style.color = "var(--text-muted)";
+				numberEl.style.fontSize = "12px";
+
+				const onToggle = async () => {
+					project.enabled = checkbox.checked;
+					await this.plugin.saveSettings();
+
+					// Update header text
+					const newEnabledCount = this.plugin.settings.trackedProjects.filter(p => p.enabled).length;
+					headerText.textContent = `${newEnabledCount} of ${projects.length} projects enabled`;
+					selectAllBtn.textContent = newEnabledCount === 0 ? "Enable All" : "Disable All";
+				};
+
+				checkbox.onchange = onToggle;
+				projectItem.onclick = (e) => {
+					if (e.target !== checkbox) {
+						checkbox.checked = !checkbox.checked;
+						onToggle();
+					}
+				};
+			}
+		}
+	}
+
+	/**
+	 * Load projects from all tracked repositories
+	 */
+	private async loadProjectsFromRepositories(): Promise<void> {
+		if (!this.plugin.gitHubClient) {
+			throw new Error("GitHub client not initialized");
+		}
+
+		if (this.plugin.settings.repositories.length === 0) {
+			this.plugin.showNotice("No repositories tracked. Please add repositories first before loading projects.", "warning");
+			return;
+		}
+
+		this.plugin.showNotice(`[Projects] Starting to load projects from ${this.plugin.settings.repositories.length} repositories`, "debug");
+
+		const allProjects: Map<string, { id: string; title: string; number: number; url: string; owner: string }> = new Map();
+		let reposAttempted = 0;
+		let reposFailed = 0;
+
+		for (const repo of this.plugin.settings.repositories) {
+			const [owner, repoName] = repo.repository.split("/");
+			if (!owner || !repoName) continue;
+			reposAttempted++;
+
+			try {
+				const projects = await this.plugin.gitHubClient.fetchProjectsForRepository(owner, repoName);
+
+				for (const project of projects) {
+					if (!allProjects.has(project.id)) {
+						allProjects.set(project.id, {
+							id: project.id,
+							title: project.title,
+							number: project.number,
+							url: project.url,
+							owner: owner,
+						});
+					}
+				}
+			} catch (error) {
+				reposFailed++;
+				console.error(`Error fetching projects for ${repo.repository}:`, error);
+			}
+		}
+
+		// Merge with existing tracked projects (preserve enabled state)
+		const existingProjects = new Map(
+			this.plugin.settings.trackedProjects.map(p => [p.id, p])
+		);
+
+		const newTrackedProjects: typeof this.plugin.settings.trackedProjects = [];
+
+		for (const [id, project] of allProjects) {
+			const existing = existingProjects.get(id);
+			newTrackedProjects.push({
+				id: project.id,
+				title: project.title,
+				number: project.number,
+				url: project.url,
+				owner: project.owner,
+				enabled: existing?.enabled ?? true, // Default to enabled for new projects
+			});
+		}
+
+		this.plugin.settings.trackedProjects = newTrackedProjects;
+		await this.plugin.saveSettings();
+
+		if (newTrackedProjects.length === 0 && reposAttempted > 0 && reposFailed > 0) {
+			new Notice(
+				`No projects loaded. Failed to fetch from ${reposFailed}/${reposAttempted} repositories. Check your GitHub token has Projects access (e.g. read:project) and that you can access the repos/projects.`,
+			);
+		} else {
+			new Notice(`Found ${newTrackedProjects.length} projects`);
+		}
+	}
+
+	/**
+	 * Load projects directly from a specific repository
+	 */
+	private async loadProjectsFromDirectRepository(owner: string, repoName: string): Promise<void> {
+		if (!this.plugin.gitHubClient) {
+			throw new Error("GitHub client not initialized");
+		}
+
+		this.plugin.showNotice(`[Projects] Loading projects from ${owner}/${repoName}`, "debug");
+
+		try {
+			const projects = await this.plugin.gitHubClient.fetchProjectsForRepository(owner, repoName);
+
+			// Merge with existing tracked projects (preserve enabled state)
+			const existingProjects = new Map(
+				this.plugin.settings.trackedProjects.map(p => [p.id, p])
+			);
+
+			const newTrackedProjects: typeof this.plugin.settings.trackedProjects = [...this.plugin.settings.trackedProjects];
+
+			for (const project of projects) {
+				const existing = existingProjects.get(project.id);
+				if (!existing) {
+					// Add new project
+					newTrackedProjects.push({
+						id: project.id,
+						title: project.title,
+						number: project.number,
+						url: project.url,
+						owner: owner,
+						enabled: true, // Default to enabled for new projects
+					});
+				}
+			}
+
+			this.plugin.settings.trackedProjects = newTrackedProjects;
+			await this.plugin.saveSettings();
+
+			const newProjectsCount = projects.length - (existingProjects.size - newTrackedProjects.length + projects.length);
+			new Notice(`Found ${projects.length} projects from ${owner}/${repoName}`);
+		} catch (error) {
+			console.error(`Error fetching projects for ${owner}/${repoName}:`, error);
+			throw new Error(`Failed to load projects from ${owner}/${repoName}: ${error}`);
 		}
 	}
 }

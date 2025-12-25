@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { GitHubTrackerSettings, RepositoryTracking } from "./types";
+import { GitHubTrackerSettings, RepositoryTracking, ProjectData } from "./types";
 import { escapeBody, escapeYamlString } from "./util/escapeUtils";
 import {
 	createIssueTemplateData,
@@ -21,6 +21,7 @@ export class ContentGenerator {
 		repo: RepositoryTracking,
 		comments: any[],
 		settings: GitHubTrackerSettings,
+		projectData?: ProjectData[],
 	): Promise<string> {
 		// Determine whether to escape hash tags (repo setting takes precedence if ignoreGlobalSettings is true)
 		const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : settings.escapeHashTags;
@@ -35,17 +36,19 @@ export class ContentGenerator {
 					comments,
 					settings.dateFormat,
 					settings.escapeMode,
-					shouldEscapeHashTags
+					shouldEscapeHashTags,
+					projectData
 				);
 				return processContentTemplate(templateContent, templateData, settings.dateFormat);
 			}
 		}
 
 		// Fallback to default template
-		return `---
+		let frontmatter = `---
 title: "${escapeYamlString(issue.title)}"
 number: ${issue.number}
-status: "${issue.state}"
+state: "${issue.state}"
+type: "issue"
 created: "${
 			settings.dateFormat !== ""
 				? format(new Date(issue.created_at), settings.dateFormat)
@@ -69,7 +72,19 @@ labels: [${(
 			) || []
 		).join(", ")}]
 updateMode: "${repo.issueUpdateMode}"
-allowDelete: ${repo.allowDeleteIssue ? true : false}
+allowDelete: ${repo.allowDeleteIssue ? true : false}`;
+
+		// Add projectData if available
+		if (projectData && projectData.length > 0) {
+			frontmatter += `
+projectData:`;
+			for (const project of projectData) {
+				frontmatter += `
+  - projectId: "${project.projectId}"`;
+			}
+		}
+
+		frontmatter += `
 ---
 
 # ${escapeBody(issue.title, settings.escapeMode, false)}
@@ -79,8 +94,9 @@ ${
 		: "No description found"
 }
 
-${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFormat, shouldEscapeHashTags)}
-`;
+${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFormat, shouldEscapeHashTags)}`;
+
+		return frontmatter;
 	}
 
 	/**
@@ -91,6 +107,7 @@ ${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFo
 		repo: RepositoryTracking,
 		comments: any[],
 		settings: GitHubTrackerSettings,
+		projectData?: ProjectData[],
 	): Promise<string> {
 		// Determine whether to escape hash tags (repo setting takes precedence if ignoreGlobalSettings is true)
 		const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : settings.escapeHashTags;
@@ -105,17 +122,19 @@ ${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFo
 					comments,
 					settings.dateFormat,
 					settings.escapeMode,
-					shouldEscapeHashTags
+					shouldEscapeHashTags,
+					projectData
 				);
 				return processContentTemplate(templateContent, templateData, settings.dateFormat);
 			}
 		}
 
 		// Fallback to default template
-		return `---
+		let frontmatter = `---
 title: "${escapeYamlString(pr.title)}"
 number: ${pr.number}
-status: "${pr.state}"
+state: "${pr.state}"
+type: "pr"
 created: "${
 			settings.dateFormat !== ""
 				? format(new Date(pr.created_at), settings.dateFormat)
@@ -144,7 +163,19 @@ labels: [${(
 			) || []
 		).join(", ")}]
 updateMode: "${repo.pullRequestUpdateMode}"
-allowDelete: ${repo.allowDeletePullRequest ? true : false}
+allowDelete: ${repo.allowDeletePullRequest ? true : false}`;
+
+		// Add projectData if available
+		if (projectData && projectData.length > 0) {
+			frontmatter += `
+projectData:`;
+			for (const project of projectData) {
+				frontmatter += `
+  - projectId: "${project.projectId}"`;
+			}
+		}
+
+		frontmatter += `
 ---
 
 # ${escapeBody(pr.title, settings.escapeMode, false)}
@@ -154,7 +185,8 @@ ${
 		: "No description found"
 }
 
-${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFormat, shouldEscapeHashTags)}
-`;
+${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFormat, shouldEscapeHashTags)}`;
+
+		return frontmatter;
 	}
 }

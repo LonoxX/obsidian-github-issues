@@ -8,6 +8,7 @@ import { GitHubClient } from "./github-client";
 import { FileManager } from "./file-manager";
 import { GitHubTrackerSettingTab } from "./settings-tab";
 import { NoticeManager } from "./notice-manager";
+import { GitHubKanbanView, KANBAN_VIEW_TYPE } from "./kanban-view";
 
 export default class GitHubTrackerPlugin extends Plugin {
 	settings: GitHubTrackerSettings = DEFAULT_SETTINGS;
@@ -222,8 +223,36 @@ export default class GitHubTrackerPlugin extends Plugin {
 			name: "Sync GitHub issues & pull requests",
 			callback: () => this.sync(),
 		});
+
+		// Register Kanban View
+		this.registerView(
+			KANBAN_VIEW_TYPE,
+			(leaf) => new GitHubKanbanView(leaf, this.settings, this.gitHubClient)
+		);
+
+		this.addCommand({
+			id: "open-kanban-view",
+			name: "Open GitHub Projects Kanban",
+			callback: () => this.openKanbanView(),
+		});
+
 		this.addSettingTab(new GitHubTrackerSettingTab(this.app, this));
 		this.startBackgroundSync();
+	}
+
+	private async openKanbanView(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(KANBAN_VIEW_TYPE);
+		if (existing.length > 0) {
+			this.app.workspace.revealLeaf(existing[0]);
+			return;
+		}
+
+		const leaf = this.app.workspace.getLeaf();
+		await leaf.setViewState({
+			type: KANBAN_VIEW_TYPE,
+			active: true,
+		});
+		this.app.workspace.revealLeaf(leaf);
 	}
 
 	onunload() {

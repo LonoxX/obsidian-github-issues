@@ -8,6 +8,10 @@ created: "{created}"
 author: "{author}"
 assignees: {assignees_yaml}
 labels: {labels_yaml}
+project: "{project}"
+project_status: "{project_status}"
+project_priority: "{project_priority}"
+project_iteration: "{project_iteration}"
 updateMode: "none"
 allowDelete: true
 ---
@@ -16,6 +20,15 @@ allowDelete: true
 
 **{type} #{number}** in **{repository}**
 
+{project:## Project
+
+| Field | Value |
+|-------|-------|
+| **Project** | [{project}]({project_url}) |
+| **Status** | {project_status} |
+| **Priority** | {project_priority} |
+| **Iteration** | {project_iteration} |
+}
 ## Summary
 
 {body}
@@ -29,17 +42,15 @@ allowDelete: true
 
 - **Status:** `{status}`
 - **Labels:** {labels}
-- **Type:** {type}
+- **Milestone:** {milestone}
+## Dates
 
-## Stats
-
-- **Comments:** {commentsCount}
 - **Created:** {created}
 - **Updated:** {updated}
-
+- **Closed:** {closed}
 ## Links
 
-[View on GitHub]({url})
+[View on GitHub]({url}){project: | [View in Project]({project_url})}
 
 {comments}
 

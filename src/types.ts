@@ -38,6 +38,87 @@ export interface RepositoryTracking {
 	escapeHashTags: boolean;
 }
 
+// Basic project info for selection UI
+export interface ProjectInfo {
+	id: string;
+	title: string;
+	number: number;
+	url: string;
+	closed: boolean;
+	owner?: string; // Owner (user or org) of the project
+}
+
+// Status option from GitHub Projects
+export interface ProjectStatusOption {
+	id: string;
+	name: string;
+	color?: string;
+	description?: string;
+}
+
+export interface TrackedProject {
+	id: string;
+	title: string;
+	number: number;
+	url: string;
+	owner: string;
+	enabled: boolean;
+	issueFolder?: string;
+	useCustomIssueFolder?: boolean;
+	customIssueFolder?: string;
+	pullRequestFolder?: string;
+	useCustomPullRequestFolder?: boolean;
+	customPullRequestFolder?: string;
+	issueNoteTemplate?: string;
+	pullRequestNoteTemplate?: string;
+	useCustomIssueContentTemplate?: boolean;
+	issueContentTemplate?: string;
+	useCustomPullRequestContentTemplate?: boolean;
+	pullRequestContentTemplate?: string;
+	statusOptions?: ProjectStatusOption[];
+	customStatusOrder?: string[];
+	useCustomStatusOrder?: boolean;
+	showEmptyColumns?: boolean;
+	hiddenStatuses?: string[];
+	skipHiddenStatusesOnSync?: boolean;
+}
+
+// GitHub Projects v2 types
+export interface ProjectFieldValue {
+	fieldName: string;
+	type: 'text' | 'number' | 'date' | 'single_select' | 'iteration' | 'user' | 'labels';
+	value: string | number | null;
+	startDate?: string;
+	duration?: number;
+	users?: string[];
+	labels?: string[];
+}
+
+export interface ProjectData {
+	projectId: string;
+	projectTitle: string;
+	projectNumber: number;
+	projectUrl: string;
+	status?: string;
+	priority?: string;
+	iteration?: {
+		title: string;
+		startDate: string;
+		duration: number;
+	};
+	customFields: Record<string, ProjectFieldValue>;
+}
+
+export interface IssueWithProjectData {
+	issue: any;
+	projectData: ProjectData[];
+}
+
+export interface PullRequestWithProjectData {
+	pullRequest: any;
+	projectData: ProjectData[];
+}
+
 export interface GlobalDefaults {
 	issueUpdateMode: "none" | "update" | "append";
 	allowDeleteIssue: boolean;
@@ -68,6 +149,9 @@ export interface GitHubTrackerSettings {
 	backgroundSyncInterval: number; // in minutes
 	cleanupClosedIssuesDays: number;
 	globalDefaults: GlobalDefaults;
+	// GitHub Projects settings
+	enableProjectTracking: boolean;
+	trackedProjects: TrackedProject[];
 }
 
 export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
@@ -100,6 +184,8 @@ export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	backgroundSyncInterval: 30,
 	cleanupClosedIssuesDays: 30,
 	globalDefaults: DEFAULT_GLOBAL_DEFAULTS,
+	enableProjectTracking: true,
+	trackedProjects: [],
 };
 
 // Default repository tracking settings

@@ -4,6 +4,7 @@
 
 import { format } from "date-fns";
 import { escapeBody , escapeYamlString} from "./escapeUtils";
+import { ProjectData } from "../types";
 
 /**
  * Represents the data available for template replacement
@@ -39,6 +40,8 @@ interface TemplateData {
 	isLocked: boolean;
 	lockReason?: string;
 	comments?: string; // Formatted comments section
+	// GitHub Projects fields
+	projectData?: ProjectData[];
 }
 
 /**
@@ -196,13 +199,84 @@ export function processTemplate(
 	// Add comments variable
 	replacements["{comments}"] = data.comments || "";
 
+	// Add GitHub Projects variables
+	if (data.projectData && data.projectData.length > 0) {
+		const firstProject = data.projectData[0];
+
+		// Basic project info
+		replacements["{project}"] = firstProject.projectTitle || "";
+		replacements["{project_url}"] = firstProject.projectUrl || "";
+		replacements["{project_number}"] = firstProject.projectNumber?.toString() || "";
+		replacements["{project_status}"] = firstProject.status || "";
+		replacements["{project_priority}"] = firstProject.priority || "";
+
+		// Iteration info
+		if (firstProject.iteration) {
+			replacements["{project_iteration}"] = firstProject.iteration.title || "";
+			replacements["{project_iteration_start}"] = firstProject.iteration.startDate || "";
+			replacements["{project_iteration_duration}"] = firstProject.iteration.duration?.toString() || "";
+		} else {
+			replacements["{project_iteration}"] = "";
+			replacements["{project_iteration_start}"] = "";
+			replacements["{project_iteration_duration}"] = "";
+		}
+
+		// All projects (for items in multiple projects)
+		replacements["{projects}"] = data.projectData.map(p => p.projectTitle).join(", ");
+		replacements["{projects_yaml}"] = `[${data.projectData.map(p => `"${p.projectTitle}"`).join(", ")}]`;
+
+		// Custom fields as YAML
+		const customFieldsYaml = Object.entries(firstProject.customFields)
+			.map(([name, field]) => `  ${name}: "${field.value}"`)
+			.join("\n");
+		replacements["{project_fields}"] = customFieldsYaml ? `\n${customFieldsYaml}` : "";
+	} else {
+		// Empty project variables when no project data
+		replacements["{project}"] = "";
+		replacements["{project_url}"] = "";
+		replacements["{project_number}"] = "";
+		replacements["{project_status}"] = "";
+		replacements["{project_priority}"] = "";
+		replacements["{project_iteration}"] = "";
+		replacements["{project_iteration_start}"] = "";
+		replacements["{project_iteration_duration}"] = "";
+		replacements["{projects}"] = "";
+		replacements["{projects_yaml}"] = "[]";
+		replacements["{project_fields}"] = "";
+	}
+
 	// Replace all variables
 	for (const [placeholder, value] of Object.entries(replacements)) {
 		result = result.replace(new RegExp(escapeRegExp(placeholder), "g"), value);
 	}
 
+	// Process dynamic project field access: {project_field:FieldName}
+	result = processProjectFieldAccess(result, data.projectData);
+
 	return result;
-}/**
+}
+
+/**
+ * Process dynamic project field access patterns like {project_field:FieldName}
+ */
+function processProjectFieldAccess(template: string, projectData?: ProjectData[]): string {
+	if (!projectData || projectData.length === 0) {
+		// Remove all project_field patterns with empty string
+		return template.replace(/\{project_field:([^}]+)\}/g, "");
+	}
+
+	const firstProject = projectData[0];
+
+	return template.replace(/\{project_field:([^}]+)\}/g, (match, fieldName) => {
+		const field = firstProject.customFields[fieldName];
+		if (field) {
+			return String(field.value || "");
+		}
+		return "";
+	});
+}
+
+/**
  * Process a template string for filename generation (with sanitization)
  * @param template The template string for filename
  * @param data The data to use for replacement
@@ -249,7 +323,8 @@ function escapeRegExp(string: string): string {
  */
 function processConditionalBlocks(template: string, data: TemplateData): string {
 	// Pattern: {variableName:content} - show content only if variableName has a value
-	const conditionalPattern = /\{(\w+):(.*?)\}/g;
+	// This pattern supports nested variables like {project:{project_url}}
+	const conditionalPattern = /\{(\w+):([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g;
 
 	return template.replace(conditionalPattern, (match, variableName, content) => {
 		// Check if the variable exists and has a meaningful value
@@ -281,6 +356,12 @@ function getVariableValue(variableName: string, data: TemplateData): string | un
 		case "headBranch": return data.headBranch;
 		case "merged": return data.merged ? "true" : undefined;
 		case "mergeable": return data.mergeable !== undefined ? "true" : undefined;
+		// Project-related conditionals
+		case "project": return data.projectData && data.projectData.length > 0 ? data.projectData[0].projectTitle : undefined;
+		case "project_status": return data.projectData && data.projectData.length > 0 ? data.projectData[0].status : undefined;
+		case "project_priority": return data.projectData && data.projectData.length > 0 ? data.projectData[0].priority : undefined;
+		case "project_iteration": return data.projectData && data.projectData.length > 0 && data.projectData[0].iteration ? data.projectData[0].iteration.title : undefined;
+		case "projects": return data.projectData && data.projectData.length > 0 ? "true" : undefined;
 		default: return undefined;
 	}
 }
@@ -289,6 +370,11 @@ function getVariableValue(variableName: string, data: TemplateData): string | un
  * Create template data from an issue object
  * @param issue The issue data from GitHub API
  * @param repository The repository string (owner/repo)
+ * @param comments Array of comments
+ * @param dateFormat Date format string
+ * @param escapeMode Escape mode for text
+ * @param escapeHashTags Whether to escape hash tags
+ * @param projectData Optional project data from GitHub Projects
  * @returns TemplateData object
  */
 export function createIssueTemplateData(
@@ -297,7 +383,8 @@ export function createIssueTemplateData(
 	comments: any[] = [],
 	dateFormat: string = "",
 	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
-	escapeHashTags: boolean = false
+	escapeHashTags: boolean = false,
+	projectData?: ProjectData[]
 ): TemplateData {
 	const [owner, repoName] = repository.split("/");
 
@@ -327,7 +414,8 @@ export function createIssueTemplateData(
 		commentsCount: issue.comments || 0,
 		isLocked: issue.locked || false,
 		lockReason: issue.active_lock_reason || "",
-		comments: formatComments(comments, dateFormat, escapeMode, escapeHashTags)
+		comments: formatComments(comments, dateFormat, escapeMode, escapeHashTags),
+		projectData: projectData,
 	};
 }
 
@@ -335,6 +423,11 @@ export function createIssueTemplateData(
  * Create template data from a pull request object
  * @param pr The pull request data from GitHub API
  * @param repository The repository string (owner/repo)
+ * @param comments Array of comments
+ * @param dateFormat Date format string
+ * @param escapeMode Escape mode for text
+ * @param escapeHashTags Whether to escape hash tags
+ * @param projectData Optional project data from GitHub Projects
  * @returns TemplateData object
  */
 export function createPullRequestTemplateData(
@@ -343,7 +436,8 @@ export function createPullRequestTemplateData(
 	comments: any[] = [],
 	dateFormat: string = "",
 	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
-	escapeHashTags: boolean = false
+	escapeHashTags: boolean = false,
+	projectData?: ProjectData[]
 ): TemplateData {
 	const [owner, repoName] = repository.split("/");
 
@@ -379,7 +473,8 @@ export function createPullRequestTemplateData(
 		merged: pr.merged || false,
 		baseBranch: pr.base?.ref,
 		headBranch: pr.head?.ref,
-		comments: formatComments(comments, dateFormat, escapeMode, escapeHashTags)
+		comments: formatComments(comments, dateFormat, escapeMode, escapeHashTags),
+		projectData: projectData,
 	};
 }
 

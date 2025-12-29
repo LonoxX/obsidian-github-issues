@@ -68,8 +68,51 @@
 | `{lockReason}` | Reason for locking | "resolved", "spam", "off-topic" |
 | `{comments}` | Formatted comments section | Complete comments with formatting |
 
+## GitHub Projects
+
+These variables are available when the issue/PR is part of a GitHub Project (Projects V2).
+
+### Basic Project Information
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{project}` | Project title (first project if in multiple) | "Sprint Board" |
+| `{project_url}` | Project URL | "https://github.com/orgs/owner/projects/1" |
+| `{project_number}` | Project number | "1" |
+| `{project_status}` | Status field value | "In Progress", "Done" |
+| `{project_priority}` | Priority field value | "High", "Medium", "Low" |
+
+### Iteration Information
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{project_iteration}` | Current iteration title | "Sprint 5" |
+| `{project_iteration_start}` | Iteration start date | "2025-01-15" |
+| `{project_iteration_duration}` | Iteration duration in days | "14" |
+
+### Multiple Projects
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{projects}` | All project names as comma-separated list | "Sprint Board, Backlog" |
+| `{projects_yaml}` | All project names as YAML array | `["Sprint Board", "Backlog"]` |
+
+### Custom Fields
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{project_fields}` | All custom fields as YAML | `  Effort: "5"` (with newlines) |
+| `{project_field:FieldName}` | Access specific custom field by name | `{project_field:Effort}` → "5" |
+
 ## Conditional Blocks
 
 | Syntax | Description | Example |
 |--------|-------------|---------|
-| `{variable:content}` | Shows content only if variable has a value | `Milestone: {milestone}}` |
+| `{variable:content}` | Shows content only if variable has a value | `{milestone:Milestone: {milestone}}` |
+
+### Project-related Conditionals
+
+| Syntax | Description |
+|--------|-------------|
+| `{project:content}` | Shows content only if item is in a project |
+| `{projects:content}` | Shows content if item is in any project |

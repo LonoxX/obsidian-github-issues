@@ -1,5 +1,5 @@
 import { App, TFile } from "obsidian";
-import { GitHubTrackerSettings, RepositoryTracking } from "./types";
+import { GitHubTrackerSettings, RepositoryTracking, ProjectData } from "./types";
 import { escapeBody } from "./util/escapeUtils";
 import { NoticeManager } from "./notice-manager";
 import { GitHubClient } from "./github-client";
@@ -56,13 +56,41 @@ export class IssueFileManager {
 			allIssuesIncludingRecentlyClosed,
 		);
 
+		// Batch fetch project data if tracking is enabled globally
+		let projectDataMap = new Map<string, ProjectData[]>();
+		if (this.settings.enableProjectTracking) {
+			const nodeIds = openIssues
+				.filter((issue: any) => issue.node_id)
+				.map((issue: any) => issue.node_id);
+
+			if (nodeIds.length > 0) {
+				this.noticeManager.debug(
+					`Fetching project data for ${nodeIds.length} issues`
+				);
+				projectDataMap = await this.gitHubClient.fetchProjectDataForItems(nodeIds);
+			}
+		}
+
+		// Get tracked project IDs from global settings
+		const trackedProjectIds = this.settings.trackedProjects.map(p => p.id);
+
 		// Create or update issue files (openIssues contains filtered issues from main.ts)
 		for (const issue of openIssues) {
+			let projectData = issue.node_id ? projectDataMap.get(issue.node_id) : undefined;
+
+			// Filter by tracked projects from global settings
+			if (projectData && trackedProjectIds.length > 0) {
+				projectData = projectData.filter(p =>
+					trackedProjectIds.includes(p.projectId)
+				);
+			}
+
 			await this.createOrUpdateIssueFile(
 				effectiveRepo,
 				ownerCleaned,
 				repoCleaned,
 				issue,
+				projectData,
 			);
 		}
 	}
@@ -72,6 +100,7 @@ export class IssueFileManager {
 		ownerCleaned: string,
 		repoCleaned: string,
 		issue: any,
+		projectData?: ProjectData[],
 	): Promise<void> {
 		// Generate filename using template
 		const templateData = createIssueTemplateData(issue, repo.repository);
@@ -112,7 +141,7 @@ export class IssueFileManager {
 			);
 		}
 
-		let content = await this.contentGenerator.createIssueContent(issue, repo, comments, this.settings);
+		let content = await this.contentGenerator.createIssueContent(issue, repo, comments, this.settings, projectData);
 
 		if (file) {
 			if (file instanceof TFile) {
@@ -145,6 +174,7 @@ export class IssueFileManager {
 						repo,
 						comments,
 						this.settings,
+						projectData,
 					);
 
 					// Merge persist blocks back into new content

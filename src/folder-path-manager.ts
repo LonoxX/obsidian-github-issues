@@ -1,4 +1,4 @@
-import { RepositoryTracking } from "./types";
+import { RepositoryTracking, TrackedProject } from "./types";
 
 export class FolderPathManager {
 	/**
@@ -19,5 +19,37 @@ export class FolderPathManager {
 			return repo.customPullRequestFolder.trim();
 		}
 		return `${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`;
+	}
+
+	public getProjectIssueFolderPath(project: TrackedProject): string {
+		if (project.useCustomIssueFolder && project.customIssueFolder?.trim()) {
+			return this.processProjectFolderTemplate(project.customIssueFolder.trim(), project);
+		}
+		const folder = project.issueFolder?.trim() || "GitHub/{project}";
+		return this.processProjectFolderTemplate(folder, project);
+	}
+
+	public getProjectPullRequestFolderPath(project: TrackedProject): string | null {
+		if (project.useCustomPullRequestFolder && project.customPullRequestFolder?.trim()) {
+			return this.processProjectFolderTemplate(project.customPullRequestFolder.trim(), project);
+		}
+		if (project.pullRequestFolder?.trim()) {
+			return this.processProjectFolderTemplate(project.pullRequestFolder, project);
+		}
+		return null;
+	}
+
+	public processProjectFolderTemplate(folderTemplate: string, project: TrackedProject): string {
+		return folderTemplate
+			.replace(/\{project\}/g, this.sanitizeFolderPart(project.title))
+			.replace(/\{owner\}/g, this.sanitizeFolderPart(project.owner))
+			.replace(/\{project_number\}/g, project.number.toString());
+	}
+
+	private sanitizeFolderPart(str: string): string {
+		return str
+			.replace(/[<>:"|?*\\]/g, "-")
+			.replace(/\.\./g, ".")
+			.trim();
 	}
 }

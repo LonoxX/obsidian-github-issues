@@ -30,6 +30,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 			this.noticeManager.info("Syncing issues and pull requests");
 			await this.fetchIssues();
 			await this.fetchPullRequests();
+			await this.syncProjects();
 			await this.fileManager?.cleanupEmptyFolders();
 
 			this.noticeManager.success("Synced issues and pull requests");
@@ -40,6 +41,55 @@ export default class GitHubTrackerPlugin extends Plugin {
 			);
 		} finally {
 			this.isSyncing = false;
+		}
+	}
+
+	/**
+	 * Sync items from tracked GitHub Projects
+	 */
+	private async syncProjects() {
+		if (!this.settings.enableProjectTracking) {
+			return;
+		}
+
+		if (!this.gitHubClient || !this.fileManager) {
+			return;
+		}
+
+		const hasAnyFolderConfigured = (p: any) =>
+			p.issueFolder || p.pullRequestFolder || p.customIssueFolder || p.customPullRequestFolder;
+
+		const enabledProjects = this.settings.trackedProjects.filter(
+			(p) => p.enabled && hasAnyFolderConfigured(p)
+		);
+
+		if (enabledProjects.length === 0) {
+			this.noticeManager.debug("No projects with folders configured");
+			return;
+		}
+
+		for (const project of enabledProjects) {
+			try {
+				this.noticeManager.debug(`Syncing project: ${project.title}`);
+
+				const items = await this.gitHubClient.fetchProjectItems(project.id);
+
+				if (items.length === 0) {
+					this.noticeManager.debug(`No items found in project ${project.title}`);
+					continue;
+				}
+
+				await this.fileManager.createProjectItemFiles(project, items);
+
+				this.noticeManager.debug(
+					`Processed ${items.length} items for project ${project.title}`
+				);
+			} catch (error: unknown) {
+				this.noticeManager.error(
+					`Error syncing project ${project.title}`,
+					error
+				);
+			}
 		}
 	}
 
@@ -171,6 +221,67 @@ export default class GitHubTrackerPlugin extends Plugin {
 		} catch (error: unknown) {
 			this.noticeManager.error(
 				`Error syncing repository ${repositoryName}`,
+				error,
+			);
+		} finally {
+			this.isSyncing = false;
+		}
+	}
+
+	/**
+	 * Sync a single project by ID
+	 */
+	async syncSingleProject(projectId: string) {
+		if (this.isSyncing) {
+			this.noticeManager.warning("Already syncing...");
+			return;
+		}
+
+		if (!this.gitHubClient || !this.fileManager) {
+			this.noticeManager.error(
+				"GitHub client or file manager not initialized",
+			);
+			return;
+		}
+
+		const project = this.settings.trackedProjects.find(
+			(p) => p.id === projectId,
+		);
+
+		if (!project) {
+			this.noticeManager.error(
+				`Project ${projectId} not found in settings`,
+			);
+			return;
+		}
+
+		const hasAnyFolder = project.issueFolder || project.pullRequestFolder ||
+			project.customIssueFolder || project.customPullRequestFolder;
+
+		if (!hasAnyFolder) {
+			this.noticeManager.warning(
+				`No folder configured for project ${project.title}. Please configure a folder in project settings.`,
+			);
+			return;
+		}
+
+		this.isSyncing = true;
+		try {
+			this.noticeManager.info(`Syncing project: ${project.title}`);
+
+			const items = await this.gitHubClient.fetchProjectItems(project.id);
+
+			if (items.length === 0) {
+				this.noticeManager.info(`No items found in project ${project.title}`);
+			} else {
+				await this.fileManager.createProjectItemFiles(project, items);
+				this.noticeManager.success(
+					`Successfully synced ${items.length} items from ${project.title}`,
+				);
+			}
+		} catch (error: unknown) {
+			this.noticeManager.error(
+				`Error syncing project ${project.title}`,
 				error,
 			);
 		} finally {
@@ -310,6 +421,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 			if (!merged.pullRequestFolder) merged.pullRequestFolder = DEFAULT_REPOSITORY_TRACKING.pullRequestFolder;
 			return merged;
 		});
+
 	}
 
 	async saveSettings() {

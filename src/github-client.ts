@@ -1,4 +1,4 @@
-import { GitHubTrackerSettings, ProjectData, ProjectFieldValue, ProjectInfo } from "./types";
+import { GitHubTrackerSettings, ProjectData, ProjectFieldValue, ProjectInfo, ProjectStatusOption } from "./types";
 import { Octokit } from "octokit";
 import { NoticeManager } from "./notice-manager";
 import {
@@ -8,6 +8,7 @@ import {
 	GET_ORGANIZATION_PROJECTS,
 	GET_USER_PROJECTS,
 	GET_PROJECT_ITEMS,
+	GET_PROJECT_FIELDS,
 	parseItemProjectData,
 	ProjectItemData,
 } from "./github-graphql";
@@ -690,6 +691,130 @@ export class GitHubClient {
 	}
 
 	/**
+	 * Fetch all available projects for the authenticated user (user + org projects)
+	 */
+	public async fetchAllAvailableProjects(): Promise<ProjectInfo[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		const projects: ProjectInfo[] = [];
+		const seenIds = new Set<string>();
+
+		try {
+			// Get authenticated user
+			const user = await this.fetchAuthenticatedUser();
+			if (!user) {
+				this.noticeManager.error("Could not get authenticated user");
+				return [];
+			}
+
+			// Fetch user's own projects
+			try {
+				let hasNextPage = true;
+				let cursor: string | null = null;
+
+				while (hasNextPage) {
+					const userResponse: any = await this.octokit.graphql(
+						GET_USER_PROJECTS,
+						{
+							user: user,
+							first: 50,
+							after: cursor,
+						},
+					);
+
+					if (userResponse?.user?.projectsV2?.nodes) {
+						for (const node of userResponse.user.projectsV2.nodes) {
+							if (!seenIds.has(node.id)) {
+								seenIds.add(node.id);
+								projects.push({
+									id: node.id,
+									title: node.title,
+									number: node.number,
+									url: node.url,
+									closed: node.closed,
+									owner: user,
+								});
+							}
+						}
+					}
+
+					hasNextPage = userResponse?.user?.projectsV2?.pageInfo?.hasNextPage ?? false;
+					cursor = userResponse?.user?.projectsV2?.pageInfo?.endCursor ?? null;
+				}
+			} catch (error) {
+				this.noticeManager.debug(`Error fetching user projects: ${error}`);
+			}
+
+			// Fetch organization projects
+			try {
+				let allOrgs: { login: string }[] = [];
+				let orgsPage = 1;
+				let hasMoreOrgs = true;
+
+				while (hasMoreOrgs) {
+					const { data: orgs } = await this.octokit.rest.orgs.listForAuthenticatedUser({
+						per_page: 100,
+						page: orgsPage,
+					});
+
+					allOrgs = [...allOrgs, ...orgs];
+					hasMoreOrgs = orgs.length === 100;
+					orgsPage++;
+				}
+
+				for (const org of allOrgs) {
+					try {
+						let hasNextPage = true;
+						let cursor: string | null = null;
+
+						while (hasNextPage) {
+							const orgResponse: any = await this.octokit.graphql(
+								GET_ORGANIZATION_PROJECTS,
+								{
+									org: org.login,
+									first: 50,
+									after: cursor,
+								},
+							);
+
+							if (orgResponse?.organization?.projectsV2?.nodes) {
+								for (const node of orgResponse.organization.projectsV2.nodes) {
+									if (!seenIds.has(node.id)) {
+										seenIds.add(node.id);
+										projects.push({
+											id: node.id,
+											title: node.title,
+											number: node.number,
+											url: node.url,
+											closed: node.closed,
+											owner: org.login,
+										});
+									}
+								}
+							}
+
+							hasNextPage = orgResponse?.organization?.projectsV2?.pageInfo?.hasNextPage ?? false;
+							cursor = orgResponse?.organization?.projectsV2?.pageInfo?.endCursor ?? null;
+						}
+					} catch (error) {
+						this.noticeManager.debug(`Error fetching projects for org ${org.login}: ${error}`);
+					}
+				}
+			} catch (error) {
+				this.noticeManager.debug(`Error fetching organizations: ${error}`);
+			}
+
+			this.noticeManager.debug(`Found ${projects.length} total projects`);
+		} catch (error) {
+			this.noticeManager.error("Error fetching all projects", error);
+		}
+
+		return projects;
+	}
+
+	/**
 	 * Fetch available projects for a repository (includes org projects)
 	 */
 	public async fetchProjectsForRepository(
@@ -702,15 +827,12 @@ export class GitHubClient {
 
 		const projects: ProjectInfo[] = [];
 
-		this.noticeManager.debug(`[Projects] Fetching for owner='${owner}', repo='${repo}'`);
-
 		try {
 			// First, try to get repository-linked projects
 			let hasNextPage = true;
 			let cursor: string | null = null;
 
 			while (hasNextPage) {
-				this.noticeManager.debug(`[Projects] Querying repository projects: owner='${owner}', repo='${repo}', after='${cursor}'`);
 				const response: any = await this.octokit.graphql(
 					GET_REPOSITORY_PROJECTS,
 					{
@@ -735,12 +857,10 @@ export class GitHubClient {
 
 				hasNextPage = response?.repository?.projectsV2?.pageInfo?.hasNextPage ?? false;
 				cursor = response?.repository?.projectsV2?.pageInfo?.endCursor ?? null;
-				this.noticeManager.debug(`[Projects] Repo projects page: found=${response?.repository?.projectsV2?.nodes?.length ?? 0}, hasNextPage=${hasNextPage}`);
 			}
 
 			// Also try to get organization projects if the owner is an org
 			try {
-				this.noticeManager.debug(`[Projects] Querying org projects: org='${owner}', after='${cursor}'`);
 				hasNextPage = true;
 				cursor = null;
 
@@ -771,17 +891,13 @@ export class GitHubClient {
 
 					hasNextPage = orgResponse?.organization?.projectsV2?.pageInfo?.hasNextPage ?? false;
 					cursor = orgResponse?.organization?.projectsV2?.pageInfo?.endCursor ?? null;
-					this.noticeManager.debug(`[Projects] Org projects page: found=${orgResponse?.organization?.projectsV2?.nodes?.length ?? 0}, hasNextPage=${hasNextPage}`);
 				}
-			} catch (orgError) {
-				// Owner is probably a user, not an org - that's fine
-				this.noticeManager.debug(`Could not fetch org projects for ${owner}: likely a user account`);
-				this.noticeManager.debug(`[Projects] Org projects error: ${orgError}`);
+			} catch {
+				// Owner is probably a user, not an org - try user projects instead
 			}
 
 			// Also try to get user projects if the owner is a user
 			try {
-				this.noticeManager.debug(`[Projects] Querying user projects: user='${owner}', after='${cursor}'`);
 				hasNextPage = true;
 				cursor = null;
 
@@ -811,17 +927,14 @@ export class GitHubClient {
 
 					hasNextPage = userResponse?.user?.projectsV2?.pageInfo?.hasNextPage ?? false;
 					cursor = userResponse?.user?.projectsV2?.pageInfo?.endCursor ?? null;
-					this.noticeManager.debug(`[Projects] User projects page: found=${userResponse?.user?.projectsV2?.nodes?.length ?? 0}, hasNextPage=${hasNextPage}`);
 				}
-			} catch (userError) {
-				this.noticeManager.debug(`Could not fetch user projects for ${owner}: likely an org account`);
-				this.noticeManager.debug(`[Projects] User projects error: ${userError}`);
+			} catch {
+				// Owner is an org, not a user - that's fine
 			}
 
 			this.noticeManager.debug(
 				`Found ${projects.length} projects for ${owner}/${repo}`,
 			);
-			this.noticeManager.debug(`[Projects] Final project count for owner='${owner}', repo='${repo}': ${projects.length}`);
 		} catch (error) {
 			this.noticeManager.debug(
 				`Error fetching projects for ${owner}/${repo}: ${error}`,
@@ -882,6 +995,44 @@ export class GitHubClient {
 			this.noticeManager.error(
 				`Error fetching project items for ${projectId}`,
 				error,
+			);
+			return [];
+		}
+	}
+
+	/**
+	 * Fetch status field options for a project (in GitHub's order)
+	 */
+	public async fetchProjectStatusOptions(projectId: string): Promise<ProjectStatusOption[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		try {
+			const response: any = await this.octokit.graphql(GET_PROJECT_FIELDS, {
+				projectId,
+			});
+
+			if (!response?.node?.fields?.nodes) {
+				return [];
+			}
+
+			// Find the Status field (SingleSelectField with name "Status")
+			for (const field of response.node.fields.nodes) {
+				if (field.name === 'Status' && field.options) {
+					return field.options.map((opt: any) => ({
+						id: opt.id,
+						name: opt.name,
+						color: opt.color,
+						description: opt.description,
+					}));
+				}
+			}
+
+			return [];
+		} catch (error) {
+			this.noticeManager.debug(
+				`Error fetching status options for project ${projectId}: ${error}`,
 			);
 			return [];
 		}

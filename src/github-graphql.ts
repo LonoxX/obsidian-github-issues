@@ -2,6 +2,54 @@
  * GraphQL queries for GitHub Projects v2 API
  */
 
+// Shared fragment for project field values - reduces query duplication
+const FIELD_VALUES_FRAGMENT = `
+fieldValues(first: 30) {
+  nodes {
+    ... on ProjectV2ItemFieldTextValue {
+      text
+      field { ... on ProjectV2Field { name } }
+    }
+    ... on ProjectV2ItemFieldNumberValue {
+      number
+      field { ... on ProjectV2Field { name } }
+    }
+    ... on ProjectV2ItemFieldDateValue {
+      date
+      field { ... on ProjectV2Field { name } }
+    }
+    ... on ProjectV2ItemFieldSingleSelectValue {
+      name
+      optionId
+      field { ... on ProjectV2SingleSelectField { name } }
+    }
+    ... on ProjectV2ItemFieldIterationValue {
+      title
+      startDate
+      duration
+      iterationId
+      field { ... on ProjectV2IterationField { name } }
+    }
+    ... on ProjectV2ItemFieldUserValue {
+      users(first: 10) { nodes { login } }
+      field { ... on ProjectV2Field { name } }
+    }
+    ... on ProjectV2ItemFieldLabelValue {
+      labels(first: 20) { nodes { name } }
+      field { ... on ProjectV2Field { name } }
+    }
+  }
+}`;
+
+// Shared fragment for project item info
+const PROJECT_INFO_FRAGMENT = `
+project {
+  id
+  title
+  number
+  url
+}`;
+
 // Query to get projects linked to a repository
 export const GET_REPOSITORY_PROJECTS = `
 query GetRepositoryProjects($owner: String!, $repo: String!, $first: Int!, $after: String) {
@@ -116,84 +164,8 @@ query GetItemProjectData($nodeId: ID!) {
       projectItems(first: 10) {
         nodes {
           id
-          project {
-            id
-            title
-            number
-            url
-          }
-          fieldValues(first: 30) {
-            nodes {
-              ... on ProjectV2ItemFieldTextValue {
-                text
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldNumberValue {
-                number
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldDateValue {
-                date
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldSingleSelectValue {
-                name
-                optionId
-                field {
-                  ... on ProjectV2SingleSelectField {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldIterationValue {
-                title
-                startDate
-                duration
-                iterationId
-                field {
-                  ... on ProjectV2IterationField {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldUserValue {
-                users(first: 10) {
-                  nodes {
-                    login
-                  }
-                }
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldLabelValue {
-                labels(first: 20) {
-                  nodes {
-                    name
-                  }
-                }
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-            }
-          }
+          ${PROJECT_INFO_FRAGMENT}
+          ${FIELD_VALUES_FRAGMENT}
         }
       }
     }
@@ -201,84 +173,8 @@ query GetItemProjectData($nodeId: ID!) {
       projectItems(first: 10) {
         nodes {
           id
-          project {
-            id
-            title
-            number
-            url
-          }
-          fieldValues(first: 30) {
-            nodes {
-              ... on ProjectV2ItemFieldTextValue {
-                text
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldNumberValue {
-                number
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldDateValue {
-                date
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldSingleSelectValue {
-                name
-                optionId
-                field {
-                  ... on ProjectV2SingleSelectField {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldIterationValue {
-                title
-                startDate
-                duration
-                iterationId
-                field {
-                  ... on ProjectV2IterationField {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldUserValue {
-                users(first: 10) {
-                  nodes {
-                    login
-                  }
-                }
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldLabelValue {
-                labels(first: 20) {
-                  nodes {
-                    name
-                  }
-                }
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-            }
-          }
+          ${PROJECT_INFO_FRAGMENT}
+          ${FIELD_VALUES_FRAGMENT}
         }
       }
     }
@@ -296,84 +192,8 @@ query GetItemsProjectDataBatch($nodeIds: [ID!]!) {
       projectItems(first: 10) {
         nodes {
           id
-          project {
-            id
-            title
-            number
-            url
-          }
-          fieldValues(first: 30) {
-            nodes {
-              ... on ProjectV2ItemFieldTextValue {
-                text
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldNumberValue {
-                number
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldDateValue {
-                date
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldSingleSelectValue {
-                name
-                optionId
-                field {
-                  ... on ProjectV2SingleSelectField {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldIterationValue {
-                title
-                startDate
-                duration
-                iterationId
-                field {
-                  ... on ProjectV2IterationField {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldUserValue {
-                users(first: 10) {
-                  nodes {
-                    login
-                  }
-                }
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldLabelValue {
-                labels(first: 20) {
-                  nodes {
-                    name
-                  }
-                }
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-            }
-          }
+          ${PROJECT_INFO_FRAGMENT}
+          ${FIELD_VALUES_FRAGMENT}
         }
       }
     }
@@ -383,84 +203,8 @@ query GetItemsProjectDataBatch($nodeIds: [ID!]!) {
       projectItems(first: 10) {
         nodes {
           id
-          project {
-            id
-            title
-            number
-            url
-          }
-          fieldValues(first: 30) {
-            nodes {
-              ... on ProjectV2ItemFieldTextValue {
-                text
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldNumberValue {
-                number
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldDateValue {
-                date
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldSingleSelectValue {
-                name
-                optionId
-                field {
-                  ... on ProjectV2SingleSelectField {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldIterationValue {
-                title
-                startDate
-                duration
-                iterationId
-                field {
-                  ... on ProjectV2IterationField {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldUserValue {
-                users(first: 10) {
-                  nodes {
-                    login
-                  }
-                }
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-              ... on ProjectV2ItemFieldLabelValue {
-                labels(first: 20) {
-                  nodes {
-                    name
-                  }
-                }
-                field {
-                  ... on ProjectV2Field {
-                    name
-                  }
-                }
-              }
-            }
-          }
+          ${PROJECT_INFO_FRAGMENT}
+          ${FIELD_VALUES_FRAGMENT}
         }
       }
     }
@@ -621,12 +365,60 @@ query GetProjectItems($projectId: ID!, $first: Int!, $after: String) {
             ... on Issue {
               number
               title
+              state
               url
+              body
+              createdAt
+              updatedAt
+              closedAt
+              author {
+                login
+              }
+              assignees(first: 10) {
+                nodes {
+                  login
+                }
+              }
+              labels(first: 10) {
+                nodes {
+                  name
+                  color
+                }
+              }
+              milestone {
+                title
+              }
             }
             ... on PullRequest {
               number
               title
+              state
               url
+              body
+              createdAt
+              updatedAt
+              closedAt
+              mergedAt
+              merged
+              author {
+                login
+              }
+              assignees(first: 10) {
+                nodes {
+                  login
+                }
+              }
+              labels(first: 10) {
+                nodes {
+                  name
+                  color
+                }
+              }
+              milestone {
+                title
+              }
+              baseRefName
+              headRefName
             }
           }
           fieldValues(first: 20) {

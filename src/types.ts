@@ -48,14 +48,39 @@ export interface ProjectInfo {
 	owner?: string; // Owner (user or org) of the project
 }
 
-// Tracked project configuration
+// Status option from GitHub Projects
+export interface ProjectStatusOption {
+	id: string;
+	name: string;
+	color?: string;
+	description?: string;
+}
+
 export interface TrackedProject {
 	id: string;
 	title: string;
 	number: number;
 	url: string;
-	owner: string; // User or organization that owns the project
-	enabled: boolean; // Whether this project is being tracked
+	owner: string;
+	enabled: boolean;
+	issueFolder?: string;
+	useCustomIssueFolder?: boolean;
+	customIssueFolder?: string;
+	pullRequestFolder?: string;
+	useCustomPullRequestFolder?: boolean;
+	customPullRequestFolder?: string;
+	issueNoteTemplate?: string;
+	pullRequestNoteTemplate?: string;
+	useCustomIssueContentTemplate?: boolean;
+	issueContentTemplate?: string;
+	useCustomPullRequestContentTemplate?: boolean;
+	pullRequestContentTemplate?: string;
+	statusOptions?: ProjectStatusOption[];
+	customStatusOrder?: string[];
+	useCustomStatusOrder?: boolean;
+	showEmptyColumns?: boolean;
+	hiddenStatuses?: string[];
+	skipHiddenStatusesOnSync?: boolean;
 }
 
 // GitHub Projects v2 types
@@ -159,7 +184,7 @@ export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	backgroundSyncInterval: 30,
 	cleanupClosedIssuesDays: 30,
 	globalDefaults: DEFAULT_GLOBAL_DEFAULTS,
-	enableProjectTracking: false,
+	enableProjectTracking: true,
 	trackedProjects: [],
 };
 

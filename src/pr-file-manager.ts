@@ -73,19 +73,17 @@ export class PullRequestFileManager {
 			}
 		}
 
-		// Get enabled project IDs from global settings
-		const enabledProjectIds = this.settings.trackedProjects
-			.filter(p => p.enabled)
-			.map(p => p.id);
+		// Get tracked project IDs from global settings
+		const trackedProjectIds = this.settings.trackedProjects.map(p => p.id);
 
 		// Create or update pull request files (openPullRequests contains filtered PRs from main.ts)
 		for (const pr of openPullRequests) {
 			let projectData = pr.node_id ? projectDataMap.get(pr.node_id) : undefined;
 
-			// Filter by enabled projects from global settings
-			if (projectData && enabledProjectIds.length > 0) {
+			// Filter by tracked projects from global settings
+			if (projectData && trackedProjectIds.length > 0) {
 				projectData = projectData.filter(p =>
-					enabledProjectIds.includes(p.projectId)
+					trackedProjectIds.includes(p.projectId)
 				);
 			}
 

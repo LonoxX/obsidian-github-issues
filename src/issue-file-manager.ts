@@ -71,19 +71,17 @@ export class IssueFileManager {
 			}
 		}
 
-		// Get enabled project IDs from global settings
-		const enabledProjectIds = this.settings.trackedProjects
-			.filter(p => p.enabled)
-			.map(p => p.id);
+		// Get tracked project IDs from global settings
+		const trackedProjectIds = this.settings.trackedProjects.map(p => p.id);
 
 		// Create or update issue files (openIssues contains filtered issues from main.ts)
 		for (const issue of openIssues) {
 			let projectData = issue.node_id ? projectDataMap.get(issue.node_id) : undefined;
 
-			// Filter by enabled projects from global settings
-			if (projectData && enabledProjectIds.length > 0) {
+			// Filter by tracked projects from global settings
+			if (projectData && trackedProjectIds.length > 0) {
 				projectData = projectData.filter(p =>
-					enabledProjectIds.includes(p.projectId)
+					trackedProjectIds.includes(p.projectId)
 				);
 			}
 

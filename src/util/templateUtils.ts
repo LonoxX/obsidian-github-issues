@@ -323,7 +323,8 @@ function escapeRegExp(string: string): string {
  */
 function processConditionalBlocks(template: string, data: TemplateData): string {
 	// Pattern: {variableName:content} - show content only if variableName has a value
-	const conditionalPattern = /\{(\w+):(.*?)\}/g;
+	// This pattern supports nested variables like {project:{project_url}}
+	const conditionalPattern = /\{(\w+):([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g;
 
 	return template.replace(conditionalPattern, (match, variableName, content) => {
 		// Check if the variable exists and has a meaningful value

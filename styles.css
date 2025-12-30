@@ -1761,3 +1761,558 @@ button:disabled {
 	color: var(--text-normal);
 	font-size: 0.9em;
 }
+
+/* Kanban View Styles */
+.github-kanban-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 16px;
+	padding: 5px 20px;
+	background: var(--background-secondary);
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.github-kanban-header h2 {
+	margin: 0;
+	font-size: 1.4em;
+	font-weight: 700;
+	color: var(--text-normal);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.github-kanban-refresh-btn {
+	padding: 8px 14px;
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 0.85em;
+	font-weight: 500;
+	transition: all 0.2s ease;
+}
+
+.github-kanban-refresh-btn:hover {
+	background-color: var(--interactive-accent-hover);
+	transform: translateY(-1px);
+}
+
+.github-kanban-refresh-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Tab Navigation */
+.github-kanban-tabs {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 20px;
+	padding: 8px;
+	background: var(--background-secondary);
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+	flex-wrap: wrap;
+}
+
+.github-kanban-tab {
+	padding: 10px 18px;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 0.9em;
+	font-weight: 500;
+	transition: all 0.2s ease;
+	background-color: transparent;
+	color: var(--text-muted);
+}
+
+.github-kanban-tab:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.github-kanban-tab.active,
+.github-kanban-tab[style*="interactive-accent"] {
+	background-color: var(--interactive-accent) !important;
+	color: var(--text-on-accent) !important;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Loading State */
+.github-kanban-loading {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 60px 20px;
+	color: var(--text-muted);
+}
+
+.github-kanban-loading p {
+	font-size: 1em;
+	margin: 0;
+}
+
+.github-kanban-empty {
+	text-align: center;
+	color: var(--text-muted);
+	padding: 60px 40px;
+	background: var(--background-secondary);
+	border-radius: 8px;
+	border: 1px dashed var(--background-modifier-border);
+}
+
+/* Project Board */
+.github-kanban-project {
+	margin-bottom: 24px;
+}
+
+.github-kanban-project h3 {
+	margin: 0 0 16px 0;
+	font-size: 1.1em;
+	font-weight: 600;
+	color: var(--text-muted);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.github-kanban-board {
+	display: flex;
+	gap: 16px;
+	overflow-x: auto;
+	padding: 8px 4px 16px 4px;
+	scroll-behavior: smooth;
+}
+
+.github-kanban-board::-webkit-scrollbar {
+	height: 8px;
+}
+
+.github-kanban-board::-webkit-scrollbar-track {
+	background: var(--background-secondary);
+	border-radius: 4px;
+}
+
+.github-kanban-board::-webkit-scrollbar-thumb {
+	background: var(--background-modifier-border);
+	border-radius: 4px;
+}
+
+.github-kanban-board::-webkit-scrollbar-thumb:hover {
+	background: var(--background-modifier-border-hover);
+}
+
+/* Columns */
+.github-kanban-column {
+	flex: 0 0 300px;
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	padding: 0;
+	min-height: 200px;
+	max-height: 70vh;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.github-kanban-column h4 {
+	margin: 0;
+	font-size: 0.9em;
+	font-weight: 600;
+	color: var(--text-normal);
+	text-align: left;
+	padding: 14px 16px;
+	background-color: var(--background-primary);
+	border-radius: 10px 10px 0 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.github-kanban-items {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px;
+	overflow-y: auto;
+	flex: 1;
+}
+
+/* Cards */
+.github-kanban-item {
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 14px;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.github-kanban-item:hover {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	transform: translateY(-2px);
+}
+
+.github-kanban-item-title {
+	font-weight: 600;
+	color: var(--text-normal);
+	margin-bottom: 8px;
+	line-height: 1.4;
+	font-size: 0.9em;
+	word-wrap: break-word;
+}
+
+.github-kanban-item-meta {
+	font-size: 0.8em;
+	color: var(--text-muted);
+	margin-bottom: 6px;
+}
+
+.github-kanban-item-meta svg {
+	width: 12px;
+	height: 12px;
+	opacity: 0.7;
+}
+
+.github-kanban-item-labels {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	margin-top: 10px;
+}
+
+.github-kanban-label {
+	padding: 3px 8px;
+	border-radius: 12px;
+	font-size: 0.7em;
+	font-weight: 600;
+	color: white;
+	text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+/* Collapsible details */
+.github-kanban-item details {
+	margin-top: 8px;
+	font-size: 0.75em;
+}
+
+.github-kanban-item details summary {
+	cursor: pointer;
+	color: var(--text-muted);
+	user-select: none;
+}
+
+.github-kanban-item details summary:hover {
+	color: var(--text-normal);
+}
+
+.github-kanban-item details pre {
+	margin-top: 8px;
+	padding: 8px;
+	background: var(--background-secondary);
+	border-radius: 4px;
+	overflow-x: auto;
+	font-size: 0.9em;
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+/* Dark theme adjustments */
+.theme-dark .github-kanban-column {
+	background-color: var(--background-primary-alt);
+}
+
+.theme-dark .github-kanban-item {
+	background-color: var(--background-secondary);
+}
+
+.theme-dark .github-kanban-column h4 {
+	background-color: var(--background-secondary);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+	.github-kanban-tabs {
+		padding: 6px;
+	}
+
+	.github-kanban-tab {
+		padding: 8px 12px;
+		font-size: 0.85em;
+	}
+
+	.github-kanban-board {
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.github-kanban-column {
+		flex: none;
+		width: 100%;
+		min-height: auto;
+		max-height: none;
+	}
+
+	.github-kanban-header {
+		flex-direction: column;
+		gap: 12px;
+		text-align: center;
+	}
+}
+
+/* Project status order list */
+.github-issues-status-order-list {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 8px;
+	margin-bottom: 16px;
+	min-height: 60px;
+	background: var(--background-secondary);
+}
+
+.github-issues-status-item {
+	display: flex;
+	align-items: center;
+	padding: 8px 10px;
+	margin-bottom: 4px;
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	gap: 8px;
+	cursor: grab;
+	transition: all 0.15s ease;
+}
+
+.github-issues-status-item:hover {
+	background-color: var(--background-modifier-hover);
+	border-color: var(--interactive-accent);
+}
+
+.github-issues-status-item.dragging {
+	opacity: 0.5;
+	cursor: grabbing;
+}
+
+.github-issues-status-item.drag-over {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.github-issues-status-drag-handle {
+	color: var(--text-muted);
+	cursor: grab;
+	display: flex;
+	align-items: center;
+}
+
+.github-issues-status-name {
+	flex: 1;
+	font-weight: 500;
+}
+
+.github-issues-status-name.github-issues-status-hidden {
+	text-decoration: line-through;
+	opacity: 0.5;
+}
+
+.github-issues-status-move-buttons {
+	display: flex;
+	gap: 4px;
+}
+
+.github-issues-status-move-btn {
+	padding: 4px;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	color: var(--text-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	transition: all 0.15s ease;
+}
+
+.github-issues-status-move-btn:hover:not(:disabled) {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.github-issues-status-move-btn:disabled {
+	opacity: 0.3;
+	cursor: not-allowed;
+}
+
+.github-issues-status-visibility-btn {
+	padding: 4px;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	color: var(--text-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	transition: all 0.15s ease;
+}
+
+.github-issues-status-visibility-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* Project number in header */
+.github-issues-project-number {
+	color: var(--text-muted);
+	font-size: 0.85em;
+	margin-left: 4px;
+}
+
+/* Kanban inline styles moved to CSS */
+.github-kanban-tabs-inline {
+	display: flex;
+	gap: 4px;
+	margin-bottom: 16px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding-bottom: 8px;
+	flex-wrap: wrap;
+	align-items: center;
+}
+
+.github-kanban-tab-styled {
+	padding: 8px 16px;
+	border: none;
+	border-radius: 4px 4px 0 0;
+	cursor: pointer;
+	background-color: var(--background-secondary);
+	color: var(--text-normal);
+}
+
+.github-kanban-tab-styled.active {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.github-kanban-spacer {
+	flex-grow: 1;
+}
+
+.github-kanban-refresh-styled {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 8px;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+}
+
+.github-kanban-loading-styled {
+	text-align: center;
+	padding: 40px;
+}
+
+.github-kanban-item-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 4px;
+}
+
+.github-kanban-item-type {
+	font-size: 0.85em;
+	color: var(--text-muted);
+}
+
+.github-kanban-item-title {
+	font-weight: 600;
+	margin-bottom: 6px;
+}
+
+.github-kanban-item-labels {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-bottom: 6px;
+}
+
+.github-kanban-label {
+	padding: 2px 6px;
+	border-radius: 10px;
+	font-size: 0.75em;
+	font-weight: 500;
+}
+
+.github-kanban-label-more {
+	font-size: 0.75em;
+	color: var(--text-muted);
+}
+
+.github-kanban-item-creator {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	margin-bottom: 6px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.github-kanban-user-icon {
+	display: flex;
+}
+
+.github-kanban-item-description {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	line-height: 1.4;
+	overflow: hidden;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+}
+
+/* Settings inline styles moved to CSS */
+.github-issues-escaping-info {
+	margin-top: 8px;
+}
+
+.github-issues-escaping-summary {
+	cursor: pointer;
+	font-weight: 500;
+}
+
+.github-issues-escaping-content {
+	margin-top: 8px;
+	padding-left: 12px;
+}
+
+.github-issues-section-margin {
+	margin-top: 30px;
+}
+
+.github-issues-checkbox-hidden {
+	visibility: hidden;
+}
+
+.github-issues-closed-badge {
+	color: var(--text-muted);
+	font-size: 11px;
+	margin-left: 8px;
+	padding: 2px 6px;
+	background-color: var(--background-modifier-border);
+	border-radius: 4px;
+}

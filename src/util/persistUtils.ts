@@ -160,10 +160,21 @@ function insertPersistBlocksIntelligently(
 		// Try to find these context lines in the new content
 		let insertIndex = -1;
 
-		// Look for the last context line before the block
+		// First, find where the frontmatter ends in the new content
+		let frontmatterEnd = 0;
+		if (newLines[0]?.trim() === '---') {
+			for (let i = 1; i < newLines.length; i++) {
+				if (newLines[i]?.trim() === '---') {
+					frontmatterEnd = i + 1;
+					break;
+				}
+			}
+		}
+
+		// Look for the last context line before the block (but only outside frontmatter)
 		if (contextBefore.length > 0) {
 			const lastContextLine = contextBefore[contextBefore.length - 1];
-			for (let i = 0; i < newLines.length; i++) {
+			for (let i = frontmatterEnd; i < newLines.length; i++) {
 				if (newLines[i].trim() === lastContextLine) {
 					insertIndex = i + 1;
 					break;
@@ -171,10 +182,10 @@ function insertPersistBlocksIntelligently(
 			}
 		}
 
-		// If we couldn't find context before, look for context after
+		// If we couldn't find context before, look for context after (but only outside frontmatter)
 		if (insertIndex === -1 && contextAfter.length > 0) {
 			const firstContextAfter = contextAfter[0];
-			for (let i = 0; i < newLines.length; i++) {
+			for (let i = frontmatterEnd; i < newLines.length; i++) {
 				if (newLines[i].trim() === firstContextAfter) {
 					insertIndex = i;
 					break;
@@ -183,22 +194,12 @@ function insertPersistBlocksIntelligently(
 		}
 
 		// Strategy 2: If no context found, use relative position
-		if (insertIndex === -1) {
+		if (insertIndex === -1 || insertIndex < frontmatterEnd) {
 			// Calculate relative position (percentage through the document)
 			const relativePosition = oldLineNumber / oldLines.length;
 			insertIndex = Math.floor(newLines.length * relativePosition);
 
 			// Make sure we're not in the frontmatter
-			let frontmatterEnd = 0;
-			if (newLines[0]?.trim() === '---') {
-				for (let i = 1; i < newLines.length; i++) {
-					if (newLines[i]?.trim() === '---') {
-						frontmatterEnd = i + 1;
-						break;
-					}
-				}
-			}
-
 			if (insertIndex < frontmatterEnd) {
 				insertIndex = frontmatterEnd;
 			}

@@ -1,6 +1,17 @@
-import { GitHubTrackerSettings } from "./types";
+import { GitHubTrackerSettings, ProjectData, ProjectFieldValue, ProjectInfo, ProjectStatusOption } from "./types";
 import { Octokit } from "octokit";
 import { NoticeManager } from "./notice-manager";
+import {
+	GET_ITEM_PROJECT_DATA,
+	GET_ITEMS_PROJECT_DATA_BATCH,
+	GET_REPOSITORY_PROJECTS,
+	GET_ORGANIZATION_PROJECTS,
+	GET_USER_PROJECTS,
+	GET_PROJECT_ITEMS,
+	GET_PROJECT_FIELDS,
+	parseItemProjectData,
+	ProjectItemData,
+} from "./github-graphql";
 
 export class GitHubClient {
 	private octokit: Octokit | null = null;
@@ -561,6 +572,469 @@ export class GitHubClient {
 			};
 		} catch (error) {
 			return null;
+		}
+	}
+
+	/**
+	 * Fetch project data for a single issue or PR by its node ID
+	 */
+	public async fetchProjectDataForItem(nodeId: string): Promise<ProjectData[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		try {
+			const response: any = await this.octokit.graphql(GET_ITEM_PROJECT_DATA, {
+				nodeId,
+			});
+
+			if (!response?.node) {
+				return [];
+			}
+
+			const projectItems = parseItemProjectData(response.node);
+			return this.convertToProjectData(projectItems);
+		} catch (error) {
+			this.noticeManager.debug(
+				`Error fetching project data for item ${nodeId}: ${error}`,
+			);
+			return [];
+		}
+	}
+
+	/**
+	 * Batch fetch project data for multiple issues/PRs
+	 * Returns a map of nodeId -> ProjectData[]
+	 */
+	public async fetchProjectDataForItems(
+		nodeIds: string[],
+	): Promise<Map<string, ProjectData[]>> {
+		const result = new Map<string, ProjectData[]>();
+
+		if (!this.octokit || nodeIds.length === 0) {
+			return result;
+		}
+
+		// Process in batches of 50 to avoid hitting GraphQL limits
+		const batchSize = 50;
+		for (let i = 0; i < nodeIds.length; i += batchSize) {
+			const batch = nodeIds.slice(i, i + batchSize);
+
+			try {
+				const response: any = await this.octokit.graphql(
+					GET_ITEMS_PROJECT_DATA_BATCH,
+					{ nodeIds: batch },
+				);
+
+				if (response?.nodes) {
+					for (const node of response.nodes) {
+						if (node?.id) {
+							const projectItems = parseItemProjectData(node);
+							result.set(node.id, this.convertToProjectData(projectItems));
+						}
+					}
+				}
+			} catch (error) {
+				this.noticeManager.debug(
+					`Error fetching batch project data: ${error}`,
+				);
+				// Continue with other batches even if one fails
+			}
+		}
+
+		this.noticeManager.debug(
+			`Fetched project data for ${result.size} items`,
+		);
+		return result;
+	}
+
+	/**
+	 * Convert parsed project items to ProjectData format
+	 */
+	private convertToProjectData(projectItems: ProjectItemData[]): ProjectData[] {
+		return projectItems.map((item) => {
+			const customFields: Record<string, ProjectFieldValue> = {};
+			let status: string | undefined;
+			let priority: string | undefined;
+			let iteration: { title: string; startDate: string; duration: number } | undefined;
+
+			for (const field of item.fieldValues) {
+				// Store in customFields
+				customFields[field.fieldName] = field;
+
+				// Extract common fields
+				const fieldNameLower = field.fieldName.toLowerCase();
+				if (fieldNameLower === 'status' && field.type === 'single_select') {
+					status = field.value as string;
+				} else if (fieldNameLower === 'priority' && field.type === 'single_select') {
+					priority = field.value as string;
+				} else if (field.type === 'iteration' && field.startDate && field.duration !== undefined) {
+					iteration = {
+						title: field.value as string,
+						startDate: field.startDate,
+						duration: field.duration,
+					};
+				}
+			}
+
+			return {
+				projectId: item.projectId,
+				projectTitle: item.projectTitle,
+				projectNumber: item.projectNumber,
+				projectUrl: item.projectUrl,
+				status,
+				priority,
+				iteration,
+				customFields,
+			};
+		});
+	}
+
+	/**
+	 * Fetch all available projects for the authenticated user (user + org projects)
+	 */
+	public async fetchAllAvailableProjects(): Promise<ProjectInfo[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		const projects: ProjectInfo[] = [];
+		const seenIds = new Set<string>();
+
+		try {
+			// Get authenticated user
+			const user = await this.fetchAuthenticatedUser();
+			if (!user) {
+				this.noticeManager.error("Could not get authenticated user");
+				return [];
+			}
+
+			// Fetch user's own projects
+			try {
+				let hasNextPage = true;
+				let cursor: string | null = null;
+
+				while (hasNextPage) {
+					const userResponse: any = await this.octokit.graphql(
+						GET_USER_PROJECTS,
+						{
+							user: user,
+							first: 50,
+							after: cursor,
+						},
+					);
+
+					if (userResponse?.user?.projectsV2?.nodes) {
+						for (const node of userResponse.user.projectsV2.nodes) {
+							if (!seenIds.has(node.id)) {
+								seenIds.add(node.id);
+								projects.push({
+									id: node.id,
+									title: node.title,
+									number: node.number,
+									url: node.url,
+									closed: node.closed,
+									owner: user,
+								});
+							}
+						}
+					}
+
+					hasNextPage = userResponse?.user?.projectsV2?.pageInfo?.hasNextPage ?? false;
+					cursor = userResponse?.user?.projectsV2?.pageInfo?.endCursor ?? null;
+				}
+			} catch (error) {
+				this.noticeManager.debug(`Error fetching user projects: ${error}`);
+			}
+
+			// Fetch organization projects
+			try {
+				let allOrgs: { login: string }[] = [];
+				let orgsPage = 1;
+				let hasMoreOrgs = true;
+
+				while (hasMoreOrgs) {
+					const { data: orgs } = await this.octokit.rest.orgs.listForAuthenticatedUser({
+						per_page: 100,
+						page: orgsPage,
+					});
+
+					allOrgs = [...allOrgs, ...orgs];
+					hasMoreOrgs = orgs.length === 100;
+					orgsPage++;
+				}
+
+				for (const org of allOrgs) {
+					try {
+						let hasNextPage = true;
+						let cursor: string | null = null;
+
+						while (hasNextPage) {
+							const orgResponse: any = await this.octokit.graphql(
+								GET_ORGANIZATION_PROJECTS,
+								{
+									org: org.login,
+									first: 50,
+									after: cursor,
+								},
+							);
+
+							if (orgResponse?.organization?.projectsV2?.nodes) {
+								for (const node of orgResponse.organization.projectsV2.nodes) {
+									if (!seenIds.has(node.id)) {
+										seenIds.add(node.id);
+										projects.push({
+											id: node.id,
+											title: node.title,
+											number: node.number,
+											url: node.url,
+											closed: node.closed,
+											owner: org.login,
+										});
+									}
+								}
+							}
+
+							hasNextPage = orgResponse?.organization?.projectsV2?.pageInfo?.hasNextPage ?? false;
+							cursor = orgResponse?.organization?.projectsV2?.pageInfo?.endCursor ?? null;
+						}
+					} catch (error) {
+						this.noticeManager.debug(`Error fetching projects for org ${org.login}: ${error}`);
+					}
+				}
+			} catch (error) {
+				this.noticeManager.debug(`Error fetching organizations: ${error}`);
+			}
+
+			this.noticeManager.debug(`Found ${projects.length} total projects`);
+		} catch (error) {
+			this.noticeManager.error("Error fetching all projects", error);
+		}
+
+		return projects;
+	}
+
+	/**
+	 * Fetch available projects for a repository (includes org projects)
+	 */
+	public async fetchProjectsForRepository(
+		owner: string,
+		repo: string,
+	): Promise<ProjectInfo[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		const projects: ProjectInfo[] = [];
+
+		try {
+			// First, try to get repository-linked projects
+			let hasNextPage = true;
+			let cursor: string | null = null;
+
+			while (hasNextPage) {
+				const response: any = await this.octokit.graphql(
+					GET_REPOSITORY_PROJECTS,
+					{
+						owner,
+						repo,
+						first: 50,
+						after: cursor,
+					},
+				);
+
+				if (response?.repository?.projectsV2?.nodes) {
+					for (const node of response.repository.projectsV2.nodes) {
+						projects.push({
+							id: node.id,
+							title: node.title,
+							number: node.number,
+							url: node.url,
+							closed: node.closed,
+						});
+					}
+				}
+
+				hasNextPage = response?.repository?.projectsV2?.pageInfo?.hasNextPage ?? false;
+				cursor = response?.repository?.projectsV2?.pageInfo?.endCursor ?? null;
+			}
+
+			// Also try to get organization projects if the owner is an org
+			try {
+				hasNextPage = true;
+				cursor = null;
+
+				while (hasNextPage) {
+					const orgResponse: any = await this.octokit.graphql(
+						GET_ORGANIZATION_PROJECTS,
+						{
+							org: owner,
+							first: 50,
+							after: cursor,
+						},
+					);
+
+					if (orgResponse?.organization?.projectsV2?.nodes) {
+						for (const node of orgResponse.organization.projectsV2.nodes) {
+							// Avoid duplicates
+							if (!projects.some(p => p.id === node.id)) {
+								projects.push({
+									id: node.id,
+									title: node.title,
+									number: node.number,
+									url: node.url,
+									closed: node.closed,
+								});
+							}
+						}
+					}
+
+					hasNextPage = orgResponse?.organization?.projectsV2?.pageInfo?.hasNextPage ?? false;
+					cursor = orgResponse?.organization?.projectsV2?.pageInfo?.endCursor ?? null;
+				}
+			} catch {
+				// Owner is probably a user, not an org - try user projects instead
+			}
+
+			// Also try to get user projects if the owner is a user
+			try {
+				hasNextPage = true;
+				cursor = null;
+
+				while (hasNextPage) {
+					const userResponse: any = await this.octokit.graphql(
+						GET_USER_PROJECTS,
+						{
+							user: owner,
+							first: 50,
+							after: cursor,
+						},
+					);
+
+					if (userResponse?.user?.projectsV2?.nodes) {
+						for (const node of userResponse.user.projectsV2.nodes) {
+							if (!projects.some(p => p.id === node.id)) {
+								projects.push({
+									id: node.id,
+									title: node.title,
+									number: node.number,
+									url: node.url,
+									closed: node.closed,
+								});
+							}
+						}
+					}
+
+					hasNextPage = userResponse?.user?.projectsV2?.pageInfo?.hasNextPage ?? false;
+					cursor = userResponse?.user?.projectsV2?.pageInfo?.endCursor ?? null;
+				}
+			} catch {
+				// Owner is an org, not a user - that's fine
+			}
+
+			this.noticeManager.debug(
+				`Found ${projects.length} projects for ${owner}/${repo}`,
+			);
+		} catch (error) {
+			this.noticeManager.debug(
+				`Error fetching projects for ${owner}/${repo}: ${error}`,
+			);
+		}
+
+		return projects;
+	}
+
+	/**
+	 * Check if token has read:project scope
+	 */
+	public async hasProjectScope(): Promise<boolean> {
+		const { scopes } = await this.validateToken();
+		return scopes.some(scope =>
+			scope === 'read:project' ||
+			scope === 'project' ||
+			scope === 'repo' // repo scope includes project access
+		);
+	}
+
+	/**
+	 * Fetch all items for a specific project
+	 */
+	public async fetchProjectItems(projectId: string): Promise<any[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		try {
+			let allItems: any[] = [];
+			let hasNextPage = true;
+			let cursor: string | null = null;
+
+			while (hasNextPage) {
+				const response: any = await this.octokit.graphql(
+					GET_PROJECT_ITEMS,
+					{
+						projectId,
+						first: 50,
+						after: cursor,
+					},
+				);
+
+				if (response?.node?.items?.nodes) {
+					allItems = [...allItems, ...response.node.items.nodes];
+				}
+
+				hasNextPage = response?.node?.items?.pageInfo?.hasNextPage ?? false;
+				cursor = response?.node?.items?.pageInfo?.endCursor ?? null;
+			}
+
+			this.noticeManager.debug(
+				`Fetched ${allItems.length} items for project ${projectId}`,
+			);
+			return allItems;
+		} catch (error) {
+			this.noticeManager.error(
+				`Error fetching project items for ${projectId}`,
+				error,
+			);
+			return [];
+		}
+	}
+
+	/**
+	 * Fetch status field options for a project (in GitHub's order)
+	 */
+	public async fetchProjectStatusOptions(projectId: string): Promise<ProjectStatusOption[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		try {
+			const response: any = await this.octokit.graphql(GET_PROJECT_FIELDS, {
+				projectId,
+			});
+
+			if (!response?.node?.fields?.nodes) {
+				return [];
+			}
+
+			// Find the Status field (SingleSelectField with name "Status")
+			for (const field of response.node.fields.nodes) {
+				if (field.name === 'Status' && field.options) {
+					return field.options.map((opt: any) => ({
+						id: opt.id,
+						name: opt.name,
+						color: opt.color,
+						description: opt.description,
+					}));
+				}
+			}
+
+			return [];
+		} catch (error) {
+			this.noticeManager.debug(
+				`Error fetching status options for project ${projectId}: ${error}`,
+			);
+			return [];
 		}
 	}
 

@@ -394,14 +394,24 @@ export class GitHubKanbanView extends ItemView {
 				const normalizedItemUrl = this.normalizeUrl(itemUrl);
 
 				let fullProjectData: any = null;
-				const fmNum = this.parseNumber(frontmatter.number);
-				if (fmNum !== null) {
-					fullProjectData = cachedItemsForProject.find((ci: any) => Number(ci.number) === fmNum) || null;
-					if (fullProjectData) matchedNumbers.add(fmNum);
-				}
-				if (!fullProjectData && normalizedItemUrl) {
+
+				// Try URL matching first (most reliable for cross-repository projects)
+				if (normalizedItemUrl) {
 					fullProjectData = cachedItemsForProject.find((ci: any) => ci.normalizedUrl === normalizedItemUrl) || null;
-					if (fullProjectData && fullProjectData.normalizedUrl) matchedUrls.add(fullProjectData.normalizedUrl);
+					if (fullProjectData && fullProjectData.normalizedUrl) {
+						matchedUrls.add(fullProjectData.normalizedUrl);
+					}
+				}
+
+				// Fall back to number matching only if URL didn't match
+				if (!fullProjectData) {
+					const fmNum = this.parseNumber(frontmatter.number);
+					if (fmNum !== null) {
+						fullProjectData = cachedItemsForProject.find((ci: any) => Number(ci.number) === fmNum) || null;
+						if (fullProjectData) {
+							matchedNumbers.add(fmNum);
+						}
+					}
 				}
 
 				if (isInProjectFolder || fullProjectData || fileMatchesProject) {

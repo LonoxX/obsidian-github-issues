@@ -140,6 +140,8 @@ export interface GlobalDefaults {
 
 export interface GitHubTrackerSettings {
 	githubToken: string;
+	useSecretStorage: boolean;
+	secretTokenName: string;
 	repositories: RepositoryTracking[];
 	dateFormat: string;
 	syncOnStartup: boolean;
@@ -177,6 +179,8 @@ export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
 
 export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	githubToken: "",
+	useSecretStorage: false,
+	secretTokenName: "",
 	repositories: [],
 	dateFormat: "",
 	syncOnStartup: true,

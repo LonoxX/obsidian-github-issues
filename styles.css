@@ -247,10 +247,7 @@ github-issues-confirmation-modal .warning-text {
 	margin-bottom: 15px;
 }
 
-.github-issues-hidden {
-	display: none;
-}
-
+.github-issues-hidden,
 .github-issues-settings-hidden {
 	display: none;
 }
@@ -511,6 +508,11 @@ github-issues-confirmation-modal .warning-text {
 }
 
 .github-issues-tracked-container {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--text-accent);
+	font-weight: 500;
 	animation: pulse 1s ease-in-out;
 }
 
@@ -668,7 +670,7 @@ github-issues-confirmation-modal .warning-text {
 	display: flex;
 	align-items: center;
 	flex-grow: 1;
-	gap: 6px;
+	gap: 8px;
 }
 
 .github-issues-settings-group {
@@ -818,10 +820,6 @@ github-issues-confirmation-modal .warning-text {
 	transition: all 0.2s ease;
 }
 
-.github-issues-config-button {
-	position: relative;
-}
-
 .github-issues-sync-button {
 	background-color: var(--interactive-accent);
 	color: var(--text-on-accent);
@@ -878,18 +876,6 @@ github-issues-confirmation-modal .warning-text {
 	margin-right: 5px;
 }
 
-.github-issues-repo-header-container {
-	position: relative;
-}
-
-@keyframes loading {
-	0% {
-		transform: rotate(0deg);
-	}
-	100% {
-		transform: rotate(360deg);
-	}
-}
 
 .github-issues-loading::before {
 	content: "";
@@ -899,7 +885,7 @@ github-issues-confirmation-modal .warning-text {
 	border: 2px solid rgba(255, 255, 255, 0.3);
 	border-radius: 50%;
 	border-top-color: white;
-	animation: loading 1s linear infinite;
+	animation: spin 1s linear infinite;
 	margin-right: 8px;
 }
 
@@ -932,6 +918,7 @@ button:disabled {
 	width: 100%;
 	box-sizing: border-box;
 	cursor: pointer;
+	position: relative;
 }
 
 .github-issues-card {
@@ -1008,7 +995,7 @@ button:disabled {
 }
 
 .github-issues-spinner {
-	animation: rotate 2s linear infinite;
+	animation: spin 2s linear infinite;
 	width: 40px;
 	height: 40px;
 }
@@ -1017,12 +1004,6 @@ button:disabled {
 	stroke: var(--text-accent);
 	stroke-linecap: round;
 	animation: dash 1.5s ease-in-out infinite;
-}
-
-@keyframes rotate {
-	100% {
-		transform: rotate(360deg);
-	}
 }
 
 @keyframes dash {
@@ -1142,14 +1123,6 @@ button:disabled {
 	transform: translateY(-1px);
 }
 
-.github-issues-tracked-container {
-	display: flex;
-	align-items: center;
-	gap: 5px;
-	color: var(--text-accent);
-	font-weight: 500;
-}
-
 .github-issues-empty-state {
 	text-align: center;
 	padding: 40px 20px;
@@ -1236,7 +1209,10 @@ button:disabled {
 }
 
 .github-issues-repo-checkbox {
-	margin-right: 12px;
+	cursor: pointer;
+	width: 18px;
+	height: 18px;
+	margin-right: 8px;
 	flex-shrink: 0;
 }
 
@@ -1245,13 +1221,6 @@ button:disabled {
 	height: 16px;
 	cursor: pointer;
 	accent-color: var(--interactive-accent);
-}
-
-.github-issues-repo-info {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex-grow: 1;
 }
 
 .github-issues-item .github-issues-repo-info {
@@ -1731,15 +1700,6 @@ button:disabled {
 	cursor: not-allowed;
 }
 
-/* Repository Checkbox */
-.github-issues-repo-checkbox {
-	cursor: pointer;
-	width: 18px;
-	height: 18px;
-	margin-right: 8px;
-	flex-shrink: 0;
-}
-
 /* Delete Modal Repository List */
 .github-issues-delete-repo-list {
 	margin: 12px 0;
@@ -1991,6 +1951,7 @@ button:disabled {
 	flex-wrap: wrap;
 	gap: 5px;
 	margin-top: 10px;
+	margin-bottom: 6px;
 }
 
 .github-kanban-label {
@@ -2236,25 +2197,6 @@ button:disabled {
 .github-kanban-item-type {
 	font-size: 0.85em;
 	color: var(--text-muted);
-}
-
-.github-kanban-item-title {
-	font-weight: 600;
-	margin-bottom: 6px;
-}
-
-.github-kanban-item-labels {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	margin-bottom: 6px;
-}
-
-.github-kanban-label {
-	padding: 2px 6px;
-	border-radius: 10px;
-	font-size: 0.75em;
-	font-weight: 500;
 }
 
 .github-kanban-label-more {

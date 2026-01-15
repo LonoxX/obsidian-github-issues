@@ -19,6 +19,99 @@ export default class GitHubTrackerPlugin extends Plugin {
 	currentUser: string = "";
 	private backgroundSyncIntervalId: number | null = null;
 
+	/**
+	 * Get the GitHub token, either from SecretStorage or from settings
+	 * @returns The GitHub token or empty string if not available
+	 */
+	getGitHubToken(): string {
+		if (this.settings.useSecretStorage && this.settings.secretTokenName) {
+			try {
+				const secret = this.app.secretStorage?.getSecret(this.settings.secretTokenName);
+				if (secret) {
+					return secret;
+				}
+				// If secret not found but useSecretStorage is enabled, warn user
+				console.warn(`Secret "${this.settings.secretTokenName}" not found in SecretStorage`);
+			} catch (error) {
+				console.error("Error retrieving secret from SecretStorage:", error);
+			}
+		}
+		// Fallback to legacy token in settings
+		return this.settings.githubToken || "";
+	}
+
+	/**
+	 * Check if SecretStorage is available (Obsidian 1.11)
+	 */
+	isSecretStorageAvailable(): boolean {
+		return !!this.app.secretStorage;
+	}
+
+	/**
+	 * Validate that the configured secret exists and has a value
+	 * @returns true if secret is valid or not using SecretStorage, false if secret is missing/invalid
+	 */
+	validateSecretStorage(): boolean {
+		if (!this.settings.useSecretStorage) {
+			return true;
+		}
+
+		if (!this.settings.secretTokenName) {
+			return false;
+		}
+
+		try {
+			const secret = this.app.secretStorage?.getSecret(this.settings.secretTokenName);
+			return !!secret;
+		} catch (error) {
+			console.error("Error validating secret:", error);
+			return false;
+		}
+	}
+
+	/**
+	 * Migrate token from settings to SecretStorage
+	 * @param secretName The name to use for the secret
+	 * @returns true if migration was successful
+	 */
+	async migrateTokenToSecretStorage(secretName: string): Promise<boolean> {
+		if (!this.isSecretStorageAvailable()) {
+			new Notice("SecretStorage is not available. Please update Obsidian to version 1.11 or later.");
+			return false;
+		}
+
+		if (!this.app.secretStorage) {
+			new Notice("SecretStorage is not initialized.");
+			return false;
+		}
+
+		if (!this.settings.githubToken) {
+			new Notice("No token to migrate. Please enter a token first.");
+			return false;
+		}
+
+		try {
+			// Store the token in SecretStorage
+			this.app.secretStorage.setSecret(secretName, this.settings.githubToken);
+
+			// Update settings
+			this.settings.useSecretStorage = true;
+			this.settings.secretTokenName = secretName;
+
+			// Clear the plaintext token from settings
+			this.settings.githubToken = "";
+
+			await this.saveSettings();
+
+			new Notice("Token successfully migrated to SecretStorage!");
+			return true;
+		} catch (error) {
+			console.error("Failed to migrate token to SecretStorage:", error);
+			new Notice("Failed to migrate token. See console for details.");
+			return false;
+		}
+	}
+
 	async sync() {
 		if (this.isSyncing) {
 			this.noticeManager.warning("Already syncing...");
@@ -293,7 +386,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.noticeManager = new NoticeManager(this.settings);
-		this.gitHubClient = new GitHubClient(this.settings, this.noticeManager);
+		this.gitHubClient = new GitHubClient(this.settings, this.noticeManager, () => this.getGitHubToken());
 		if (this.gitHubClient.isReady()) {
 			this.currentUser = await this.gitHubClient.fetchAuthenticatedUser();
 		}
@@ -426,7 +519,8 @@ export default class GitHubTrackerPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-		if (this.settings.githubToken) {
+		const token = this.getGitHubToken();
+		if (token) {
 			this.gitHubClient?.initializeClient();
 		}
 		if (this.noticeManager) {
@@ -444,7 +538,8 @@ export default class GitHubTrackerPlugin extends Plugin {
 			return [];
 		}
 
-		if (!this.settings.githubToken) {
+		const token = this.getGitHubToken();
+		if (!token) {
 			this.noticeManager.error(
 				"No GitHub token provided. Please add your GitHub token in the settings.",
 			);
@@ -452,7 +547,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 		}
 
 		try {
-			await this.gitHubClient.initializeClient(this.settings.githubToken);
+			this.gitHubClient.initializeClient();
 
 			if (!this.currentUser) {
 				this.currentUser =

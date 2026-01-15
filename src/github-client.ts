@@ -16,19 +16,22 @@ import {
 export class GitHubClient {
 	private octokit: Octokit | null = null;
 	private currentUser: string = "";
+	private tokenGetter: () => string;
 
 	constructor(
 		private settings: GitHubTrackerSettings,
 		private noticeManager: NoticeManager,
+		tokenGetter: () => string,
 	) {
+		this.tokenGetter = tokenGetter;
 		this.initializeClient();
 	}
 
 	/**
 	 * Initialize GitHub client with the current token
 	 */
-	public initializeClient(token?: string): void {
-		const authToken = token || this.settings.githubToken;
+	public initializeClient(): void {
+		const authToken = this.tokenGetter();
 
 		if (!authToken) {
 			this.noticeManager.error(

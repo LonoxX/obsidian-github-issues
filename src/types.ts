@@ -125,12 +125,14 @@ export interface GlobalDefaults {
 	issueFolder: string;
 	issueNoteTemplate: string;
 	issueContentTemplate: string;
+	useCustomIssueContentTemplate: boolean;
 	includeIssueComments: boolean;
 	pullRequestUpdateMode: "none" | "update" | "append";
 	allowDeletePullRequest: boolean;
 	pullRequestFolder: string;
 	pullRequestNoteTemplate: string;
 	pullRequestContentTemplate: string;
+	useCustomPullRequestContentTemplate: boolean;
 	includePullRequestComments: boolean;
 	includeClosedIssues: boolean;
 	includeClosedPullRequests: boolean;
@@ -160,12 +162,14 @@ export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
 	issueFolder: "GitHub",
 	issueNoteTemplate: "Issue - {number}",
 	issueContentTemplate: "",
+	useCustomIssueContentTemplate: false,
 	includeIssueComments: true,
 	pullRequestUpdateMode: "none",
 	allowDeletePullRequest: true,
 	pullRequestFolder: "GitHub Pull Requests",
 	pullRequestNoteTemplate: "PR - {number}",
 	pullRequestContentTemplate: "",
+	useCustomPullRequestContentTemplate: false,
 	includePullRequestComments: true,
 	includeClosedIssues: false,
 	includeClosedPullRequests: false,

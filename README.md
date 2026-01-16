@@ -21,6 +21,12 @@ An Obsidian plugin that integrates with GitHub to track issues and pull requests
 - Custom field support (status, priority, iteration)
 - Project-specific filtering and organization
 
+### 🔗 Sub-Issues Support
+- Track GitHub sub-issues (parent/child relationships)
+- Display sub-issues list with status indicators
+- Navigate between parent and child issues
+- Progress tracking with completion percentage
+
 ### 📝 Markdown Notes
 - Create markdown notes for each issue or PR
 - Customizable filename templates with variables

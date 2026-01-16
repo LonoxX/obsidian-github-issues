@@ -94,7 +94,7 @@ export class RepositoryRenderer {
 
 		new Setting(issuesSettingsContainer)
 			.setName("Use custom folder")
-			.setDesc("Instead of organizing issues by Owner/Repository, place all issues in a custom folder")
+			.setDesc("Use custom folder instead of Owner/Repository structure")
 			.addToggle((toggle) => {
 				toggle
 					.setValue(repo.useCustomIssueFolder)
@@ -116,7 +116,7 @@ export class RepositoryRenderer {
 
 		new Setting(customIssuesFolderContainer)
 			.setName("Custom issues folder")
-			.setDesc("Specific folder path where all issues will be placed (overrides the folder structure)")
+			.setDesc("Custom folder path for all issues")
 			.addText((text) => {
 				text
 					.setPlaceholder("e.g., Issues, GitHub/All Issues")
@@ -174,7 +174,7 @@ export class RepositoryRenderer {
 		new Setting(issuesSettingsContainer)
 			.setName("Default: Allow issue deletion")
 			.setDesc(
-				"If enabled, issue files will be set to be deleted from your vault when the issue is closed or no longer matches your filter criteria",
+				"Delete issue files when closed or filtered out",
 			)
 			.addToggle((toggle) => {
 				allowDeleteIssueToggle = toggle;
@@ -189,9 +189,7 @@ export class RepositoryRenderer {
 
 		new Setting(issuesSettingsContainer)
 			.setName("Issue note template")
-			.setDesc(
-				"Template for issue note filenames. Available variables: {title}, {number}, {status}, {author}, {assignee}, {labels}, {repository}, {owner}, {repoName}, {type}, {created}, {updated}. Example: \"{title} - Issue {number}\""
-			)
+			.setDesc("Template for issue filenames")
 			.addText((text) =>
 				text
 					.setPlaceholder("Issue - {number}")
@@ -204,7 +202,7 @@ export class RepositoryRenderer {
 
 		new Setting(issuesSettingsContainer)
 			.setName("Use custom issue content template")
-			.setDesc("Enable custom template file for issue content instead of the default format")
+			.setDesc("Use custom template for issue content")
 			.addToggle((toggle) => {
 				toggle
 					.setValue(repo.useCustomIssueContentTemplate)
@@ -258,7 +256,7 @@ export class RepositoryRenderer {
 		new Setting(issuesSettingsContainer)
 			.setName("Include issue comments")
 			.setDesc(
-				"If enabled, comments from issues will be included in the generated files",
+				"Include comments in generated files",
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -272,7 +270,7 @@ export class RepositoryRenderer {
 		new Setting(issuesSettingsContainer)
 			.setName("Include closed issues")
 			.setDesc(
-				"If enabled, closed issues will also be created and updated (not just deleted after the cleanup period).",
+				"Include closed issues in tracking",
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -297,7 +295,7 @@ export class RepositoryRenderer {
 
 		new Setting(issuesSettingsContainer)
 			.setName("Include sub-issues")
-			.setDesc("If enabled, sub-issues will be included in the generated files")
+			.setDesc("Include sub-issues in generated files")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(repo.includeSubIssues ?? false)
@@ -394,7 +392,7 @@ export class RepositoryRenderer {
 
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Use custom folder")
-			.setDesc("Instead of organizing pull requests by Owner/Repository, place all pull requests in a custom folder")
+			.setDesc("Use custom folder instead of Owner/Repository structure")
 			.addToggle((toggle) => {
 				toggle
 					.setValue(repo.useCustomPullRequestFolder)
@@ -407,7 +405,7 @@ export class RepositoryRenderer {
 
 		new Setting(customPRFolderContainer)
 			.setName("Custom pull requests folder")
-			.setDesc("Specific folder path where all pull requests will be placed (overrides the folder structure)")
+			.setDesc("Custom folder path for all pull requests")
 			.addText((text) => {
 				text
 					.setPlaceholder("e.g., Pull Requests, GitHub/All PRs")
@@ -462,9 +460,7 @@ export class RepositoryRenderer {
 
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Pull request note template")
-			.setDesc(
-				"Template for pull request note filenames. Available variables: {title}, {number}, {status}, {author}, {assignee}, {labels}, {repository}, {owner}, {repoName}, {type}, {created}, {updated}. Example: \"{title} - PR {number}\""
-			)
+			.setDesc("Template for pull request filenames")
 			.addText((text) =>
 				text
 					.setPlaceholder("PR - {number}")
@@ -477,7 +473,7 @@ export class RepositoryRenderer {
 
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Use custom pull request content template")
-			.setDesc("Enable custom template file for pull request content instead of the default format")
+			.setDesc("Use custom template for PR content")
 			.addToggle((toggle) => {
 				toggle
 					.setValue(repo.useCustomPullRequestContentTemplate)
@@ -533,7 +529,7 @@ export class RepositoryRenderer {
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Default: Allow pull request deletion")
 			.setDesc(
-				"If enabled, pull request files will be set to be deleted from your vault when the pull request is closed or no longer matches your filter criteria. Automatically disabled when 'Include closed pull requests' is enabled.",
+				"Delete PR files when closed or filtered out",
 			)
 			.addToggle((toggle) => {
 				allowDeletePRToggle = toggle;
@@ -549,7 +545,7 @@ export class RepositoryRenderer {
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Include pull request comments")
 			.setDesc(
-				"If enabled, comments from pull requests will be included in the generated files",
+				"Include comments in generated files",
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -563,7 +559,7 @@ export class RepositoryRenderer {
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Include closed pull requests")
 			.setDesc(
-				"If enabled, closed pull requests will also be created and updated (not just deleted after the cleanup period). This is useful for building a knowledge base.",
+				"Include closed PRs in tracking",
 			)
 			.addToggle((toggle) =>
 				toggle

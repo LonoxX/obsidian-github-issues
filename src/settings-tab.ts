@@ -63,9 +63,20 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		const linksContainer = subtitleContainer.createDiv({ cls: "github-issues-subtitle-links" });
 
+		const wikiLink = linksContainer.createEl("a", {
+			href: "https://github.com/LonoxX/obsidian-github-issues/wiki",
+			cls: "github-issues-header-link",
+		});
+		wikiLink.setAttribute("target", "_blank");
+		const wikiIcon = wikiLink.createSpan({ cls: "github-issues-link-icon" });
+		setIcon(wikiIcon, "book-open");
+		wikiLink.createSpan({ text: "Wiki" });
+
+		linksContainer.createSpan({ text: " • " });
+
 		const bugLink = linksContainer.createEl("a", {
 			href: "https://github.com/LonoxX/obsidian-github-issues/issues/new",
-			cls: "github-issues-bug-link",
+			cls: "github-issues-header-link",
 		});
 		bugLink.setAttribute("target", "_blank");
 		const bugIcon = bugLink.createSpan({ cls: "github-issues-link-icon" });
@@ -76,7 +87,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		const sponsorLink = linksContainer.createEl("a", {
 			href: "https://github.com/sponsors/LonoxX",
-			cls: "github-issues-sponsor-link",
+			cls: "github-issues-header-link",
 		});
 		sponsorLink.setAttribute("target", "_blank");
 		const sponsorIcon = sponsorLink.createSpan({ cls: "github-issues-link-icon" });
@@ -87,7 +98,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		const kofiLink = linksContainer.createEl("a", {
 			href: "https://ko-fi.com/lonoxx",
-			cls: "github-issues-kofi-link",
+			cls: "github-issues-header-link",
 		});
 		kofiLink.setAttribute("target", "_blank");
 		const kofiIcon = kofiLink.createSpan({ cls: "github-issues-link-icon" });
@@ -98,7 +109,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		const bmcLink = linksContainer.createEl("a", {
 			href: "https://buymeacoffee.com/lonoxx",
-			cls: "github-issues-bmc-link",
+			cls: "github-issues-header-link",
 		});
 		bmcLink.setAttribute("target", "_blank");
 		const bmcIcon = bmcLink.createSpan({ cls: "github-issues-link-icon" });
@@ -298,7 +309,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		new Setting(syncContainer)
 			.setName("Cleanup closed items after (days)")
-			.setDesc("Delete local files for items closed longer than this many days")
+			.setDesc("Delete files for items closed longer than X days")
 			.addText((text) =>
 				text
 					.setPlaceholder("30")
@@ -342,12 +353,6 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		// Advanced Settings Section
 		const advancedContainer = containerEl.createDiv("github-issues-settings-group");
 		new Setting(advancedContainer).setName("Advanced Settings").setHeading();
-
-		// Template variables help
-		UIHelpers.addTemplateVariablesHelp(advancedContainer, 'issue');
-
-		// Persist blocks help
-		UIHelpers.addPersistBlocksHelp(advancedContainer);
 
 		new Setting(advancedContainer)
 			.setName("Date format")
@@ -448,7 +453,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		new Setting(advancedContainer)
 			.setName("Escape hash tags")
-			.setDesc("Escape # characters that are not valid Markdown headers to prevent unintended Obsidian tags (e.g., #134 becomes \\#134)")
+			.setDesc("Escape # to prevent unintended Obsidian tags")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.escapeHashTags)

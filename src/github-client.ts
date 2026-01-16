@@ -1041,6 +1041,96 @@ export class GitHubClient {
 		}
 	}
 
+	/**
+	 * Fetch sub-issues for an issue
+	 * Uses the GitHub Sub-Issues API: GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues
+	 */
+	public async fetchSubIssues(
+		owner: string,
+		repo: string,
+		issueNumber: number,
+	): Promise<any[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		try {
+			let allSubIssues: any[] = [];
+			let page = 1;
+			let hasMorePages = true;
+
+			while (hasMorePages) {
+				const response = await this.octokit.request(
+					'GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+					{
+						owner,
+						repo,
+						issue_number: issueNumber,
+						per_page: 100,
+						page,
+					}
+				);
+
+				allSubIssues = [...allSubIssues, ...response.data];
+				hasMorePages = response.data.length === 100;
+				page++;
+			}
+
+			this.noticeManager.debug(
+				`Fetched ${allSubIssues.length} sub-issues for issue #${issueNumber}`,
+			);
+			return allSubIssues;
+		} catch (error: any) {
+			// 404 means no sub-issues or feature not available
+			if (error.status === 404) {
+				return [];
+			}
+			this.noticeManager.debug(
+				`Error fetching sub-issues for issue #${issueNumber}: ${error.message}`,
+			);
+			return [];
+		}
+	}
+
+	/**
+	 * Fetch parent issue for a sub-issue
+	 * Uses the GitHub Sub-Issues API: GET /repos/{owner}/{repo}/issues/{issue_number}/parent
+	 */
+	public async fetchParentIssue(
+		owner: string,
+		repo: string,
+		issueNumber: number,
+	): Promise<any | null> {
+		if (!this.octokit) {
+			return null;
+		}
+
+		try {
+			const response = await this.octokit.request(
+				'GET /repos/{owner}/{repo}/issues/{issue_number}/parent',
+				{
+					owner,
+					repo,
+					issue_number: issueNumber,
+				}
+			);
+
+			this.noticeManager.debug(
+				`Found parent issue #${response.data.number} for issue #${issueNumber}`,
+			);
+			return response.data;
+		} catch (error: any) {
+			// 404 means no parent issue
+			if (error.status === 404) {
+				return null;
+			}
+			this.noticeManager.debug(
+				`Error fetching parent issue for #${issueNumber}: ${error.message}`,
+			);
+			return null;
+		}
+	}
+
 	public dispose(): void {
 		this.octokit = null;
 		this.currentUser = "";

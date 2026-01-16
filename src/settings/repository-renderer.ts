@@ -294,6 +294,18 @@ export class RepositoryRenderer {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		new Setting(issuesSettingsContainer)
+			.setName("Include sub-issues")
+			.setDesc("If enabled, sub-issues will be included in the generated files")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.includeSubIssues ?? false)
+					.onChange(async (value) => {
+						repo.includeSubIssues = value;
+						await this.plugin.saveSettings();
+					}),
+			);
 	}
 
 	renderPullRequestSettings(

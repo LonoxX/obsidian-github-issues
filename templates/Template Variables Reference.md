@@ -104,6 +104,34 @@ These variables are available when the issue/PR is part of a GitHub Project (Pro
 | `{project_fields}` | All custom fields as YAML | `  Effort: "5"` (with newlines) |
 | `{project_field:FieldName}` | Access specific custom field by name | `{project_field:Effort}` → "5" |
 
+## Sub-Issues
+
+These variables are available when sub-issues are enabled and the issue has sub-issues.
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{sub_issues_count}` | Total number of sub-issues | "5" |
+| `{sub_issues_open}` | Number of open sub-issues | "3" |
+| `{sub_issues_closed}` | Number of closed sub-issues | "2" |
+| `{sub_issues_progress}` | Progress indicator (closed/total) | "2 of 5" |
+| `{sub_issues}` | Sub-issues as comma-separated links | "[#123](url), [#124](url)" |
+| `{sub_issues_list}` | Sub-issues as markdown list with status | "- ● [#123 Title](url)<br>- ● [#124 Title](url)" |
+| `{sub_issues_simple_list}` | Sub-issues as simple markdown list | "- [#123 Title](url)<br>- [#124 Title](url)" |
+| `{sub_issues_yaml}` | Sub-issue numbers as YAML array | "[123, 124, 125]" |
+| `{sub_issues_numbers}` | Sub-issue numbers only | "#123, #124, #125" |
+
+## Parent Issues
+
+These variables are available when the issue is a sub-issue itself.
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{parent_issue}` | Parent issue title | "Main Feature Implementation" |
+| `{parent_issue_number}` | Parent issue number | "456" |
+| `{parent_issue_url}` | Parent issue URL | "https://github.com/owner/repo/issues/456" |
+| `{parent_issue_link}` | Parent issue as markdown link | "[#456 Main Feature](url)" |
+| `{parent_issue_state}` | Parent issue status | "open" or "closed" |
+
 ## Conditional Blocks
 
 | Syntax | Description | Example |

@@ -156,6 +156,19 @@ export class ProjectRenderer {
 					});
 			});
 
+		new Setting(issuesSettingsContainer)
+			.setName("Include sub-issues")
+			.setDesc("If enabled, sub-issues will be included in the generated files")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(project.includeSubIssues ?? false)
+					.onChange(async (value) => {
+						project.includeSubIssues = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+	}
+
 		// ===== PULL REQUESTS STORAGE SECTION =====
 		new Setting(container).setName("Pull Requests Storage").setHeading();
 

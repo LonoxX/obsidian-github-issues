@@ -22,6 +22,8 @@ export class ContentGenerator {
 		comments: any[],
 		settings: GitHubTrackerSettings,
 		projectData?: ProjectData[],
+		subIssues?: any[],
+		parentIssue?: any,
 	): Promise<string> {
 		// Determine whether to escape hash tags (repo setting takes precedence if ignoreGlobalSettings is true)
 		const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : settings.escapeHashTags;
@@ -37,7 +39,9 @@ export class ContentGenerator {
 					settings.dateFormat,
 					settings.escapeMode,
 					shouldEscapeHashTags,
-					projectData
+					projectData,
+					subIssues,
+					parentIssue
 				);
 				return processContentTemplate(templateContent, templateData, settings.dateFormat);
 			}

@@ -36,6 +36,7 @@ export interface RepositoryTracking {
 	includeClosedIssues: boolean;
 	includeClosedPullRequests: boolean;
 	escapeHashTags: boolean;
+	includeSubIssues: boolean;
 }
 
 // Basic project info for selection UI
@@ -81,6 +82,7 @@ export interface TrackedProject {
 	showEmptyColumns?: boolean;
 	hiddenStatuses?: string[];
 	skipHiddenStatusesOnSync?: boolean;
+	includeSubIssues?: boolean;
 }
 
 // GitHub Projects v2 types
@@ -235,4 +237,5 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	includeClosedIssues: false,
 	includeClosedPullRequests: false,
 	escapeHashTags: false,
+	includeSubIssues: false,
 };

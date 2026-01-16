@@ -360,6 +360,24 @@ project_status: "${status}"`;
 requested_reviewers: [${reviewers.join(", ")}]`;
 		}
 
+		// Add parent issue if available
+		if (parentIssue) {
+			frontmatter += `
+parent_issue: ${parentIssue.number}
+parent_issue_url: "${parentIssue.url}"`;
+		}
+
+		// Add sub-issues metadata if available
+		if (subIssues && subIssues.length > 0) {
+			const closedCount = subIssues.filter((si: any) => si.state === "closed").length;
+			const openCount = subIssues.length - closedCount;
+			frontmatter += `
+sub_issues: [${subIssues.map((si: any) => si.number).join(", ")}]
+sub_issues_count: ${subIssues.length}
+sub_issues_open: ${openCount}
+sub_issues_closed: ${closedCount}`;
+		}
+
 		frontmatter += `
 ---
 
@@ -369,6 +387,27 @@ ${
 		? escapeBody(content.body, this.settings.escapeMode, shouldEscapeHashTags)
 		: "_No description provided._"
 }`;
+
+		// Add sub-issues section if available
+		if (subIssues && subIssues.length > 0) {
+			frontmatter += `
+
+## Sub-Issues
+${subIssues.map((si: any) => {
+	const statusIcon = si.state === "closed"
+		? '<span class="github-issues-sub-issue-closed">●</span>'
+		: '<span class="github-issues-sub-issue-open">●</span>';
+	return `- ${statusIcon} [#${si.number} ${si.title}](${si.url})`;
+}).join("\n")}`;
+		}
+
+		// Add parent issue link if available
+		if (parentIssue) {
+			frontmatter += `
+
+## Parent Issue
+- [#${parentIssue.number} ${parentIssue.title}](${parentIssue.url})`;
+		}
 
 		return frontmatter;
 	}

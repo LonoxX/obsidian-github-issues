@@ -350,9 +350,9 @@ export function processTemplate(
 		replacements["{parent_issue_state}"] = "";
 	}
 
-	// Replace all variables
+	// Replace all variables (using replaceAll to avoid ReDoS vulnerabilities)
 	for (const [placeholder, value] of Object.entries(replacements)) {
-		result = result.replace(new RegExp(escapeRegExp(placeholder), "g"), value);
+		result = result.replaceAll(placeholder, value);
 	}
 
 	// Process dynamic project field access: {project_field:FieldName}

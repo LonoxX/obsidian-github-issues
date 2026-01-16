@@ -9,6 +9,27 @@ import { ProjectData } from "../types";
 /**
  * Represents the data available for template replacement
  */
+/**
+ * Sub-issue data for template replacement
+ */
+interface SubIssueData {
+	number: number;
+	title: string;
+	state: string;
+	url: string;
+	vaultPath?: string; // Path to the sub-issue file in the vault (if it exists)
+}
+
+/**
+ * Parent issue data for template replacement
+ */
+interface ParentIssueData {
+	number: number;
+	title: string;
+	state: string;
+	url: string;
+}
+
 interface TemplateData {
 	title: string;
 	title_yaml: string;
@@ -42,6 +63,9 @@ interface TemplateData {
 	comments?: string; // Formatted comments section
 	// GitHub Projects fields
 	projectData?: ProjectData[];
+	// Sub-issues fields
+	subIssues?: SubIssueData[];
+	parentIssue?: ParentIssueData;
 }
 
 /**
@@ -245,9 +269,90 @@ export function processTemplate(
 		replacements["{project_fields}"] = "";
 	}
 
-	// Replace all variables
+	// Add Sub-Issues variables
+	if (data.subIssues && data.subIssues.length > 0) {
+		// Count open and closed sub-issues
+		const closedCount = data.subIssues.filter(si => si.state === "closed").length;
+		const openCount = data.subIssues.length - closedCount;
+		const totalCount = data.subIssues.length;
+
+		// Sub-issues counts
+		replacements["{sub_issues_count}"] = totalCount.toString();
+		replacements["{sub_issues_open}"] = openCount.toString();
+		replacements["{sub_issues_closed}"] = closedCount.toString();
+
+		// Progress indicator (e.g., "2 of 5")
+		replacements["{sub_issues_progress}"] = `${closedCount} of ${totalCount}`;
+
+		// Sub-issues as comma-separated links
+		replacements["{sub_issues}"] = data.subIssues
+			.map(si => `[#${si.number}](${si.url})`)
+			.join(", ");
+
+		// Sub-issues as markdown list with status indicators
+		replacements["{sub_issues_list}"] = data.subIssues
+			.map(si => {
+				const isClosed = si.state === "closed";
+				const cssClass = isClosed
+					? "github-issues-sub-issue-closed"
+					: "github-issues-sub-issue-open";
+				const statusIcon = `<span class="${cssClass}">●</span>`;
+				const link = si.vaultPath
+					? `[[${si.vaultPath}|#${si.number} ${si.title}]]`
+					: `[#${si.number} ${si.title}](${si.url})`;
+				return `- ${statusIcon} ${link}`;
+			})
+			.join("\n");
+
+		// Sub-issues as simple list (without status icons)
+		replacements["{sub_issues_simple_list}"] = data.subIssues
+			.map(si => {
+				const link = si.vaultPath
+					? `[[${si.vaultPath}|#${si.number} ${si.title}]]`
+					: `[#${si.number} ${si.title}](${si.url})`;
+				return `- ${link}`;
+			})
+			.join("\n");
+
+		// Sub-issues for YAML frontmatter
+		replacements["{sub_issues_yaml}"] = `[${data.subIssues
+			.map(si => si.number)
+			.join(", ")}]`;
+
+		// Sub-issues numbers only
+		replacements["{sub_issues_numbers}"] = data.subIssues
+			.map(si => `#${si.number}`)
+			.join(", ");
+	} else {
+		replacements["{sub_issues_count}"] = "0";
+		replacements["{sub_issues_open}"] = "0";
+		replacements["{sub_issues_closed}"] = "0";
+		replacements["{sub_issues_progress}"] = "0 of 0";
+		replacements["{sub_issues}"] = "";
+		replacements["{sub_issues_list}"] = "";
+		replacements["{sub_issues_simple_list}"] = "";
+		replacements["{sub_issues_yaml}"] = "[]";
+		replacements["{sub_issues_numbers}"] = "";
+	}
+
+	// Add Parent Issue variables
+	if (data.parentIssue) {
+		replacements["{parent_issue}"] = data.parentIssue.title;
+		replacements["{parent_issue_number}"] = data.parentIssue.number.toString();
+		replacements["{parent_issue_url}"] = data.parentIssue.url;
+		replacements["{parent_issue_link}"] = `[#${data.parentIssue.number} ${data.parentIssue.title}](${data.parentIssue.url})`;
+		replacements["{parent_issue_state}"] = data.parentIssue.state;
+	} else {
+		replacements["{parent_issue}"] = "";
+		replacements["{parent_issue_number}"] = "";
+		replacements["{parent_issue_url}"] = "";
+		replacements["{parent_issue_link}"] = "";
+		replacements["{parent_issue_state}"] = "";
+	}
+
+	// Replace all variables (using replaceAll to avoid ReDoS vulnerabilities)
 	for (const [placeholder, value] of Object.entries(replacements)) {
-		result = result.replace(new RegExp(escapeRegExp(placeholder), "g"), value);
+		result = result.replaceAll(placeholder, value);
 	}
 
 	// Process dynamic project field access: {project_field:FieldName}
@@ -362,6 +467,11 @@ function getVariableValue(variableName: string, data: TemplateData): string | un
 		case "project_priority": return data.projectData && data.projectData.length > 0 ? data.projectData[0].priority : undefined;
 		case "project_iteration": return data.projectData && data.projectData.length > 0 && data.projectData[0].iteration ? data.projectData[0].iteration.title : undefined;
 		case "projects": return data.projectData && data.projectData.length > 0 ? "true" : undefined;
+		// Sub-issues conditionals
+		case "sub_issues": return data.subIssues && data.subIssues.length > 0 ? "true" : undefined;
+		case "sub_issues_count": return data.subIssues && data.subIssues.length > 0 ? data.subIssues.length.toString() : undefined;
+		case "parent_issue": return data.parentIssue ? data.parentIssue.title : undefined;
+		case "parent_issue_number": return data.parentIssue ? data.parentIssue.number.toString() : undefined;
 		default: return undefined;
 	}
 }
@@ -375,6 +485,8 @@ function getVariableValue(variableName: string, data: TemplateData): string | un
  * @param escapeMode Escape mode for text
  * @param escapeHashTags Whether to escape hash tags
  * @param projectData Optional project data from GitHub Projects
+ * @param subIssues Optional array of sub-issues
+ * @param parentIssue Optional parent issue data
  * @returns TemplateData object
  */
 export function createIssueTemplateData(
@@ -384,12 +496,31 @@ export function createIssueTemplateData(
 	dateFormat: string = "",
 	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
 	escapeHashTags: boolean = false,
-	projectData?: ProjectData[]
+	projectData?: ProjectData[],
+	subIssues?: any[],
+	parentIssue?: any
 ): TemplateData {
 	const [owner, repoName] = repository.split("/");
 
 	// Ensure milestone data is properly extracted
 	const milestoneTitle = issue.milestone?.title || issue.milestone?.name || "";
+
+	// Convert raw sub-issues to SubIssueData format
+	const subIssueData: SubIssueData[] | undefined = subIssues?.map(si => ({
+		number: si.number,
+		title: si.title,
+		state: si.state || "open",
+		url: si.html_url || si.url || "",
+		vaultPath: si.vaultPath, // Path to the sub-issue file in the vault (if it exists)
+	}));
+
+	// Convert raw parent issue to ParentIssueData format
+	const parentIssueData: ParentIssueData | undefined = parentIssue ? {
+		number: parentIssue.number,
+		title: parentIssue.title,
+		state: parentIssue.state || "open",
+		url: parentIssue.html_url || parentIssue.url || "",
+	} : undefined;
 
 	return {
 		title: issue.title || "Untitled",
@@ -416,6 +547,8 @@ export function createIssueTemplateData(
 		lockReason: issue.active_lock_reason || "",
 		comments: formatComments(comments, dateFormat, escapeMode, escapeHashTags),
 		projectData: projectData,
+		subIssues: subIssueData,
+		parentIssue: parentIssueData,
 	};
 }
 

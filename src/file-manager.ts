@@ -29,7 +29,7 @@ export class FileManager {
 		private app: App,
 		private settings: GitHubTrackerSettings,
 		private noticeManager: NoticeManager,
-		gitHubClient: GitHubClient,
+		private gitHubClient: GitHubClient,
 	) {
 		this.issueFileManager = new IssueFileManager(app, settings, noticeManager, gitHubClient);
 		this.prFileManager = new PullRequestFileManager(app, settings, noticeManager, gitHubClient);
@@ -159,6 +159,29 @@ export class FileManager {
 			const repository = this.extractRepositoryFromUrl(content.url) || `${project.owner}/unknown`;
 			const projectData = this.convertFieldValuesToProjectData(project, status, item.fieldValues?.nodes || []);
 
+			// Fetch sub-issues and parent issue for template support (only if enabled for project)
+			let subIssues: any[] = [];
+			let parentIssue: any = null;
+
+			if (isIssue && project.includeSubIssues) {
+				const [owner, repoName] = repository.split("/");
+				if (owner && repoName) {
+					subIssues = await this.gitHubClient.fetchSubIssues(owner, repoName, content.number);
+					parentIssue = await this.gitHubClient.fetchParentIssue(owner, repoName, content.number);
+
+					// Enrich sub-issues with vault paths if they exist
+					const noteTemplate = project.issueNoteTemplate || "Issue - {number} - {title}";
+					subIssues = await this.fileHelpers.enrichSubIssuesWithVaultPaths(
+						subIssues,
+						folderPath,
+						noteTemplate,
+						repository,
+						this.settings.dateFormat,
+						this.settings.escapeMode
+					);
+				}
+			}
+
 			const templateData = isIssue
 				? createIssueTemplateData(
 					this.convertToIssueFormat(content),
@@ -167,7 +190,9 @@ export class FileManager {
 					this.settings.dateFormat,
 					this.settings.escapeMode,
 					this.settings.escapeHashTags,
-					[projectData]
+					[projectData],
+					subIssues,
+					parentIssue
 				)
 				: createPullRequestTemplateData(
 					this.convertToPullRequestFormat(content),
@@ -193,7 +218,9 @@ export class FileManager {
 				project,
 				status,
 				isIssue,
-				item.fieldValues?.nodes || []
+				item.fieldValues?.nodes || [],
+				subIssues,
+				parentIssue
 			);
 
 			if (existingFile && existingFile instanceof TFile) {
@@ -226,6 +253,8 @@ export class FileManager {
 		status: string,
 		isIssue: boolean,
 		fieldValues: any[],
+		subIssues?: any[],
+		parentIssue?: any,
 	): Promise<string> {
 		const shouldEscapeHashTags = this.settings.escapeHashTags;
 
@@ -255,7 +284,9 @@ export class FileManager {
 						this.settings.dateFormat,
 						this.settings.escapeMode,
 						shouldEscapeHashTags,
-						[projectData]
+						[projectData],
+						subIssues,
+						parentIssue
 					)
 					: createPullRequestTemplateData(
 						this.convertToPullRequestFormat(content),
@@ -272,7 +303,7 @@ export class FileManager {
 		}
 
 		// Fallback to default format
-		return this.generateDefaultProjectItemContent(content, project, status, isIssue, fieldValues);
+		return this.generateDefaultProjectItemContent(content, project, status, isIssue, fieldValues, subIssues, parentIssue);
 	}
 
 	/**
@@ -284,6 +315,8 @@ export class FileManager {
 		status: string,
 		isIssue: boolean,
 		fieldValues: any[],
+		subIssues?: any[],
+		parentIssue?: any,
 	): string {
 		const shouldEscapeHashTags = this.settings.escapeHashTags;
 		const dateFormat = this.settings.dateFormat;
@@ -327,6 +360,24 @@ project_status: "${status}"`;
 requested_reviewers: [${reviewers.join(", ")}]`;
 		}
 
+		// Add parent issue if available
+		if (parentIssue) {
+			frontmatter += `
+parent_issue: ${parentIssue.number}
+parent_issue_url: "${parentIssue.url}"`;
+		}
+
+		// Add sub-issues metadata if available
+		if (subIssues && subIssues.length > 0) {
+			const closedCount = subIssues.filter((si: any) => si.state === "closed").length;
+			const openCount = subIssues.length - closedCount;
+			frontmatter += `
+sub_issues: [${subIssues.map((si: any) => si.number).join(", ")}]
+sub_issues_count: ${subIssues.length}
+sub_issues_open: ${openCount}
+sub_issues_closed: ${closedCount}`;
+		}
+
 		frontmatter += `
 ---
 
@@ -336,6 +387,27 @@ ${
 		? escapeBody(content.body, this.settings.escapeMode, shouldEscapeHashTags)
 		: "_No description provided._"
 }`;
+
+		// Add sub-issues section if available
+		if (subIssues && subIssues.length > 0) {
+			frontmatter += `
+
+## Sub-Issues
+${subIssues.map((si: any) => {
+	const statusIcon = si.state === "closed"
+		? '<span class="github-issues-sub-issue-closed">●</span>'
+		: '<span class="github-issues-sub-issue-open">●</span>';
+	return `- ${statusIcon} [#${si.number} ${si.title}](${si.url})`;
+}).join("\n")}`;
+		}
+
+		// Add parent issue link if available
+		if (parentIssue) {
+			frontmatter += `
+
+## Parent Issue
+- [#${parentIssue.number} ${parentIssue.title}](${parentIssue.url})`;
+		}
 
 		return frontmatter;
 	}

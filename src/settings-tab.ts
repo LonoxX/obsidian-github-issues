@@ -9,6 +9,7 @@ import {
 	TFolder,
 	AbstractInputSuggest,
 	TAbstractFile,
+	SecretComponent,
 } from "obsidian";
 import { RepositoryTracking, DEFAULT_REPOSITORY_TRACKING, TrackedProject } from "./types";
 import GitHubTrackerPlugin from "./main";
@@ -28,6 +29,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 	private modalManager: ModalManager;
 	private projectListManager: ProjectListManager;
 	private projectRenderer: ProjectRenderer;
+	private isValidatingToken: boolean = false;
 
 	constructor(
 		app: App,
@@ -61,9 +63,20 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		const linksContainer = subtitleContainer.createDiv({ cls: "github-issues-subtitle-links" });
 
+		const wikiLink = linksContainer.createEl("a", {
+			href: "https://github.com/LonoxX/obsidian-github-issues/wiki",
+			cls: "github-issues-header-link",
+		});
+		wikiLink.setAttribute("target", "_blank");
+		const wikiIcon = wikiLink.createSpan({ cls: "github-issues-link-icon" });
+		setIcon(wikiIcon, "book-open");
+		wikiLink.createSpan({ text: "Wiki" });
+
+		linksContainer.createSpan({ text: " • " });
+
 		const bugLink = linksContainer.createEl("a", {
 			href: "https://github.com/LonoxX/obsidian-github-issues/issues/new",
-			cls: "github-issues-bug-link",
+			cls: "github-issues-header-link",
 		});
 		bugLink.setAttribute("target", "_blank");
 		const bugIcon = bugLink.createSpan({ cls: "github-issues-link-icon" });
@@ -74,7 +87,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		const sponsorLink = linksContainer.createEl("a", {
 			href: "https://github.com/sponsors/LonoxX",
-			cls: "github-issues-sponsor-link",
+			cls: "github-issues-header-link",
 		});
 		sponsorLink.setAttribute("target", "_blank");
 		const sponsorIcon = sponsorLink.createSpan({ cls: "github-issues-link-icon" });
@@ -85,7 +98,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		const kofiLink = linksContainer.createEl("a", {
 			href: "https://ko-fi.com/lonoxx",
-			cls: "github-issues-kofi-link",
+			cls: "github-issues-header-link",
 		});
 		kofiLink.setAttribute("target", "_blank");
 		const kofiIcon = kofiLink.createSpan({ cls: "github-issues-link-icon" });
@@ -96,7 +109,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		const bmcLink = linksContainer.createEl("a", {
 			href: "https://buymeacoffee.com/lonoxx",
-			cls: "github-issues-bmc-link",
+			cls: "github-issues-header-link",
 		});
 		bmcLink.setAttribute("target", "_blank");
 		const bmcIcon = bmcLink.createSpan({ cls: "github-issues-link-icon" });
@@ -107,37 +120,119 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		const authContainer = containerEl.createDiv("github-issues-settings-group github-issues-settings-group-compact");
 		new Setting(authContainer).setName("Authentication").setHeading();
 
-		const tokenSetting = new Setting(authContainer)
-			.setName("GitHub token")
-			.setDesc("Your GitHub personal access token");
+		// Check if SecretStorage is available and show appropriate UI
+		const isSecretStorageAvailable = this.plugin.isSecretStorageAvailable();
+		const isUsingSecretStorage = this.plugin.settings.useSecretStorage;
 
-		let isTokenVisible = false;
-		const tokenInput = tokenSetting.addText((text) => {
-			text
-				.setPlaceholder("Enter your GitHub token")
-				.setValue(this.plugin.settings.githubToken)
-				.onChange(async (value) => {
-					this.plugin.settings.githubToken = value;
-					await this.plugin.saveSettings();
-					this.updateTokenBadge(); // Update badge when token changes
-				});
-			text.inputEl.type = "password";
-			return text;
-		});
+		if (isSecretStorageAvailable) {
+			// Show SecretStorage toggle option
+			new Setting(authContainer)
+				.setName("Use SecretStorage")
+				.setDesc("Store your GitHub token securely using Obsidian's Keychain (recommended).")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(isUsingSecretStorage)
+						.onChange(async (value) => {
+							this.plugin.settings.useSecretStorage = value;
+							if (value) {
+								// clear the legacy token from data.json
+								this.plugin.settings.githubToken = "";
+							} else {
+								// Disable SecretStorage - clear the secret name
+								this.plugin.settings.secretTokenName = "";
+							}
+							await this.plugin.saveSettings();
+							this.display();
+						}),
+				);
+		}
 
-		tokenSetting.addButton((button) => {
-			button
-				.setIcon("eye")
-				.setTooltip("Show/hide token")
-				.onClick(() => {
-					isTokenVisible = !isTokenVisible;
-					const inputEl = tokenSetting.controlEl.querySelector("input");
-					if (inputEl) {
-						inputEl.type = isTokenVisible ? "text" : "password";
+		if (isUsingSecretStorage && isSecretStorageAvailable) {
+			new Setting(authContainer)
+				.setName("GitHub Token Secret")
+				.setDesc("Select an existing secret or create a new one")
+				.addComponent((containerEl) => {
+					const secretComponent = new SecretComponent(this.app, containerEl);
+
+					// Set initial value if exists
+					if (this.plugin.settings.secretTokenName) {
+						secretComponent.setValue(this.plugin.settings.secretTokenName);
 					}
-					button.setIcon(isTokenVisible ? "eye-off" : "eye");
+
+					secretComponent.onChange(async (value) => {
+						this.plugin.settings.secretTokenName = value;
+						await this.plugin.saveSettings();
+
+						// Re-initialize the GitHub client with the new token
+						if (this.plugin.getGitHubToken() && this.plugin.gitHubClient) {
+							this.plugin.gitHubClient.initializeClient();
+						}
+
+						// Update the badge
+						await this.updateTokenBadge();
+					});
+
+					return secretComponent;
 				});
-		});
+		} else {
+			// Show traditional token input
+			const tokenSetting = new Setting(authContainer)
+				.setName("GitHub token")
+				.setDesc("Your GitHub personal access token");
+
+			let isTokenVisible = false;
+			tokenSetting.addText((text) => {
+				text
+					.setPlaceholder("Enter your GitHub token")
+					.setValue(this.plugin.settings.githubToken)
+					.onChange(async (value) => {
+						this.plugin.settings.githubToken = value;
+						await this.plugin.saveSettings();
+
+						// Re-initialize the GitHub client with the new token
+						if (value && this.plugin.gitHubClient) {
+							this.plugin.gitHubClient.initializeClient();
+						}
+
+						// Update the badge
+						await this.updateTokenBadge();
+					});
+				text.inputEl.type = "password";
+				return text;
+			});
+
+			tokenSetting.addButton((button) => {
+				button
+					.setIcon("eye")
+					.setTooltip("Show/hide token")
+					.onClick(() => {
+						isTokenVisible = !isTokenVisible;
+						const inputEl = tokenSetting.controlEl.querySelector("input");
+						if (inputEl) {
+							inputEl.type = isTokenVisible ? "text" : "password";
+						}
+						button.setIcon(isTokenVisible ? "eye-off" : "eye");
+					});
+			});
+
+			// Show migration button if SecretStorage is available and token exists
+			if (isSecretStorageAvailable && this.plugin.settings.githubToken) {
+				new Setting(authContainer)
+					.setName("Migrate to Keychain")
+					.setDesc("Move your existing token to Obsidian's Keychain")
+					.addButton((button) =>
+						button
+							.setButtonText("Migrate now")
+							.setCta()
+							.onClick(async () => {
+								const success = await this.plugin.migrateTokenToSecretStorage("github-issues-token");
+								if (success) {
+									this.display();
+								}
+							})
+					);
+			}
+		}
 
 		// Add token status badge
 		const tokenBadgeContainer = authContainer.createDiv("github-issues-token-badge-container");
@@ -214,7 +309,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		new Setting(syncContainer)
 			.setName("Cleanup closed items after (days)")
-			.setDesc("Delete local files for items closed longer than this many days")
+			.setDesc("Delete files for items closed longer than X days")
 			.addText((text) =>
 				text
 					.setPlaceholder("30")
@@ -258,12 +353,6 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		// Advanced Settings Section
 		const advancedContainer = containerEl.createDiv("github-issues-settings-group");
 		new Setting(advancedContainer).setName("Advanced Settings").setHeading();
-
-		// Template variables help
-		UIHelpers.addTemplateVariablesHelp(advancedContainer, 'issue');
-
-		// Persist blocks help
-		UIHelpers.addPersistBlocksHelp(advancedContainer);
 
 		new Setting(advancedContainer)
 			.setName("Date format")
@@ -355,7 +444,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		const escapingContent = escapingDetails.createDiv("github-issues-escaping-content");
 
 		const warningP = escapingContent.createEl("p");
-		warningP.textContent = "⚠️ CAUTION: Disabling escaping may allow malicious scripts to execute";
+		warningP.textContent = "CAUTION: Disabling escaping may allow malicious scripts to execute";
 		warningP.addClass("github-issues-warning-text");
 
 		escapingContent.createEl("p").textContent = "• Normal: Escapes template syntax like '`', '{{', '}}', '<%', '%>'";
@@ -364,7 +453,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 		new Setting(advancedContainer)
 			.setName("Escape hash tags")
-			.setDesc("Escape # characters that are not valid Markdown headers to prevent unintended Obsidian tags (e.g., #134 becomes \\#134)")
+			.setDesc("Escape # to prevent unintended Obsidian tags")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.escapeHashTags)
@@ -1749,15 +1838,40 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 	}
 
 	/**
-	 * Fetch and display available labels for a repository
+	 * Update token validation badge
 	 */
 	private async updateTokenBadge(container?: HTMLElement): Promise<void> {
+		// Prevent multiple simultaneous validation attempts
+		if (this.isValidatingToken) {
+			return;
+		}
+
 		const badgeContainer = container || this.containerEl.querySelector(".github-issues-token-badge-container") as HTMLElement;
 		if (!badgeContainer) return;
 
 		badgeContainer.empty();
 
-		if (!this.plugin.settings.githubToken) {
+		// Check if using SecretStorage and if secret exists
+		if (this.plugin.settings.useSecretStorage) {
+			if (!this.plugin.settings.secretTokenName) {
+				const badge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-invalid");
+				badge.setText("No secret selected");
+				return;
+			}
+
+			// Check if secret actually has a value
+			const secretValue = this.app.secretStorage?.getSecret(this.plugin.settings.secretTokenName);
+			if (!secretValue) {
+				const badge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-invalid");
+				badge.setText("Secret not found or empty");
+				return;
+			}
+		}
+
+		// Get token using the plugin's getGitHubToken method (supports both SecretStorage and settings)
+		const currentToken = this.plugin.getGitHubToken();
+
+		if (!currentToken) {
 			const badge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-invalid");
 			badge.setText("No token");
 			return;
@@ -1773,9 +1887,11 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		const loadingBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-loading");
 		loadingBadge.setText("Validating token...");
 
+		this.isValidatingToken = true;
+
 		try {
 			// Initialize client with current token
-			this.plugin.gitHubClient.initializeClient(this.plugin.settings.githubToken);
+			this.plugin.gitHubClient.initializeClient();
 
 			// Validate token and get information
 			const [tokenInfo, rateLimit] = await Promise.all([
@@ -1783,13 +1899,13 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				this.plugin.gitHubClient.getRateLimit()
 			]);
 
-			// Clear loading state
+			// Clear loading badge first
 			badgeContainer.empty();
 
 			if (tokenInfo.valid) {
 				// Valid token badge
 				const validBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-valid");
-				validBadge.setText("✓ Valid token");
+				validBadge.setText("Valid token");
 
 				// Scopes badge
 				if (tokenInfo.scopes.length > 0) {
@@ -1804,13 +1920,15 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				}
 			} else {
 				const invalidBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-invalid");
-				invalidBadge.setText("✗ Invalid token");
+				invalidBadge.setText("Invalid token");
 			}
 		} catch (error) {
-			// Clear loading state and show error
+			// Clear loading badge and show error
 			badgeContainer.empty();
 			const errorBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-error");
 			errorBadge.setText("Error validating token");
+		} finally {
+			this.isValidatingToken = false;
 		}
 	}
 

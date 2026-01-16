@@ -22,13 +22,15 @@ export function getEffectiveRepoSettings(
 		allowDeleteIssue: globalDefaults.allowDeleteIssue,
 		issueFolder: repo.useCustomIssueFolder ? repo.customIssueFolder : globalDefaults.issueFolder,
 		issueNoteTemplate: globalDefaults.issueNoteTemplate,
-		issueContentTemplate: repo.useCustomIssueContentTemplate ? repo.issueContentTemplate : globalDefaults.issueContentTemplate,
+		issueContentTemplate: (repo.useCustomIssueContentTemplate && repo.issueContentTemplate) ? repo.issueContentTemplate : globalDefaults.issueContentTemplate,
+		useCustomIssueContentTemplate: (repo.useCustomIssueContentTemplate && repo.issueContentTemplate) ? repo.useCustomIssueContentTemplate : globalDefaults.useCustomIssueContentTemplate,
 		includeIssueComments: globalDefaults.includeIssueComments,
 		pullRequestUpdateMode: globalDefaults.pullRequestUpdateMode,
 		allowDeletePullRequest: globalDefaults.allowDeletePullRequest,
 		pullRequestFolder: repo.useCustomPullRequestFolder ? repo.customPullRequestFolder : globalDefaults.pullRequestFolder,
 		pullRequestNoteTemplate: globalDefaults.pullRequestNoteTemplate,
-		pullRequestContentTemplate: repo.useCustomPullRequestContentTemplate ? repo.pullRequestContentTemplate : globalDefaults.pullRequestContentTemplate,
+		pullRequestContentTemplate: (repo.useCustomPullRequestContentTemplate && repo.pullRequestContentTemplate) ? repo.pullRequestContentTemplate : globalDefaults.pullRequestContentTemplate,
+		useCustomPullRequestContentTemplate: (repo.useCustomPullRequestContentTemplate && repo.pullRequestContentTemplate) ? repo.useCustomPullRequestContentTemplate : globalDefaults.useCustomPullRequestContentTemplate,
 		includePullRequestComments: globalDefaults.includePullRequestComments,
 	};
 }

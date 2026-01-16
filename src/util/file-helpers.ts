@@ -2,6 +2,7 @@ import { App, TFile } from "obsidian";
 import { format } from "date-fns";
 import { escapeBody } from "./escapeUtils";
 import { NoticeManager } from "../notice-manager";
+import { createIssueTemplateData, processFilenameTemplate } from "./templateUtils";
 
 export class FileHelpers {
 	constructor(
@@ -93,5 +94,58 @@ export class FileHelpers {
 		});
 
 		return commentSection;
+	}
+
+	/**
+	 * Enrich sub-issues with vault paths if the corresponding files exist
+	 * This allows templates to use internal Obsidian links instead of GitHub URLs
+	 */
+	public async enrichSubIssuesWithVaultPaths(
+		subIssues: any[],
+		issueFolder: string,
+		noteTemplate: string,
+		repository: string,
+		dateFormat: string,
+		escapeMode: "disabled" | "normal" | "strict" | "veryStrict"
+	): Promise<any[]> {
+		if (!subIssues || subIssues.length === 0) {
+			return subIssues;
+		}
+
+		return Promise.all(subIssues.map(async (subIssue) => {
+			const templateData = createIssueTemplateData(
+				{
+					title: subIssue.title || "Untitled",
+					number: subIssue.number,
+					state: subIssue.state || "open",
+					user: { login: subIssue.user?.login || "unknown" },
+					created_at: subIssue.created_at || new Date().toISOString(),
+					updated_at: subIssue.updated_at || new Date().toISOString(),
+					html_url: subIssue.html_url || subIssue.url || "",
+					body: subIssue.body || "",
+					comments: 0,
+					locked: false,
+				},
+				repository,
+				[],
+				dateFormat,
+				escapeMode,
+				false
+			);
+
+			const expectedFilename = processFilenameTemplate(noteTemplate, templateData, dateFormat);
+			const expectedPath = `${issueFolder}/${expectedFilename}.md`;
+
+			// Check if the file exists in the vault
+			const file = this.app.vault.getAbstractFileByPath(expectedPath);
+			if (file instanceof TFile) {
+				return {
+					...subIssue,
+					vaultPath: expectedFilename,
+				};
+			}
+
+			return subIssue;
+		}));
 	}
 }

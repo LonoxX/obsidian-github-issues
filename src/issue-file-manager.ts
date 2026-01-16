@@ -113,7 +113,36 @@ export class IssueFileManager {
 			);
 		}
 
-		let content = await this.contentGenerator.createIssueContent(issue, repo, comments, this.settings);
+		// Fetch sub-issues and parent issue for template support (only if enabled)
+		let subIssues: any[] = [];
+		let parentIssue: any = null;
+
+		if (repo.includeSubIssues) {
+			subIssues = await this.gitHubClient.fetchSubIssues(owner, repoName, issue.number);
+			parentIssue = await this.gitHubClient.fetchParentIssue(owner, repoName, issue.number);
+
+			// Enrich sub-issues with vault paths if they exist
+			const issueFolder = this.folderPathManager.getIssueFolderPath(repo, owner, repoName);
+			const noteTemplate = repo.issueNoteTemplate || "Issue - {number}";
+			subIssues = await this.fileHelpers.enrichSubIssuesWithVaultPaths(
+				subIssues,
+				issueFolder,
+				noteTemplate,
+				repo.repository,
+				this.settings.dateFormat,
+				this.settings.escapeMode
+			);
+		}
+
+		let content = await this.contentGenerator.createIssueContent(
+			issue,
+			repo,
+			comments,
+			this.settings,
+			undefined, // projectData
+			subIssues,
+			parentIssue
+		);
 
 		if (file) {
 			if (file instanceof TFile) {
@@ -146,6 +175,9 @@ export class IssueFileManager {
 						repo,
 						comments,
 						this.settings,
+						undefined, // projectData
+						subIssues,
+						parentIssue
 					);
 
 					// Merge persist blocks back into new content

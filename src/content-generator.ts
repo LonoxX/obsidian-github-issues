@@ -22,6 +22,8 @@ export class ContentGenerator {
 		comments: any[],
 		settings: GitHubTrackerSettings,
 		projectData?: ProjectData[],
+		subIssues?: any[],
+		parentIssue?: any,
 	): Promise<string> {
 		// Determine whether to escape hash tags (repo setting takes precedence if ignoreGlobalSettings is true)
 		const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : settings.escapeHashTags;
@@ -37,7 +39,9 @@ export class ContentGenerator {
 					settings.dateFormat,
 					settings.escapeMode,
 					shouldEscapeHashTags,
-					projectData
+					projectData,
+					subIssues,
+					parentIssue
 				);
 				return processContentTemplate(templateContent, templateData, settings.dateFormat);
 			}
@@ -74,6 +78,24 @@ labels: [${(
 updateMode: "${repo.issueUpdateMode}"
 allowDelete: ${repo.allowDeleteIssue ? true : false}`;
 
+		// Add parent issue if available
+		if (parentIssue) {
+			frontmatter += `
+parent_issue: ${parentIssue.number}
+parent_issue_url: "${parentIssue.url}"`;
+		}
+
+		// Add sub-issues metadata if available
+		if (subIssues && subIssues.length > 0) {
+			const closedCount = subIssues.filter((si: any) => si.state === "closed").length;
+			const openCount = subIssues.length - closedCount;
+			frontmatter += `
+sub_issues: [${subIssues.map((si: any) => si.number).join(", ")}]
+sub_issues_count: ${subIssues.length}
+sub_issues_open: ${openCount}
+sub_issues_closed: ${closedCount}`;
+		}
+
 		// Add projectData if available
 		if (projectData && projectData.length > 0) {
 			frontmatter += `
@@ -95,6 +117,27 @@ ${
 }
 
 ${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFormat, shouldEscapeHashTags)}`;
+
+		// Add sub-issues section if available
+		if (subIssues && subIssues.length > 0) {
+			frontmatter += `
+
+## Sub-Issues
+${subIssues.map((si: any) => {
+	const statusIcon = si.state === "closed"
+		? '<span class="github-issues-sub-issue-closed">●</span>'
+		: '<span class="github-issues-sub-issue-open">●</span>';
+	return `- ${statusIcon} [#${si.number} ${si.title}](${si.url})`;
+}).join("\n")}`;
+		}
+
+		// Add parent issue link if available
+		if (parentIssue) {
+			frontmatter += `
+
+## Parent Issue
+- [#${parentIssue.number} ${parentIssue.title}](${parentIssue.url})`;
+		}
 
 		return frontmatter;
 	}

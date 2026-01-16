@@ -36,6 +36,7 @@ export interface RepositoryTracking {
 	includeClosedIssues: boolean;
 	includeClosedPullRequests: boolean;
 	escapeHashTags: boolean;
+	includeSubIssues: boolean;
 }
 
 // Basic project info for selection UI
@@ -81,6 +82,7 @@ export interface TrackedProject {
 	showEmptyColumns?: boolean;
 	hiddenStatuses?: string[];
 	skipHiddenStatusesOnSync?: boolean;
+	includeSubIssues?: boolean;
 }
 
 // GitHub Projects v2 types
@@ -125,12 +127,14 @@ export interface GlobalDefaults {
 	issueFolder: string;
 	issueNoteTemplate: string;
 	issueContentTemplate: string;
+	useCustomIssueContentTemplate: boolean;
 	includeIssueComments: boolean;
 	pullRequestUpdateMode: "none" | "update" | "append";
 	allowDeletePullRequest: boolean;
 	pullRequestFolder: string;
 	pullRequestNoteTemplate: string;
 	pullRequestContentTemplate: string;
+	useCustomPullRequestContentTemplate: boolean;
 	includePullRequestComments: boolean;
 	includeClosedIssues: boolean;
 	includeClosedPullRequests: boolean;
@@ -138,6 +142,8 @@ export interface GlobalDefaults {
 
 export interface GitHubTrackerSettings {
 	githubToken: string;
+	useSecretStorage: boolean;
+	secretTokenName: string;
 	repositories: RepositoryTracking[];
 	dateFormat: string;
 	syncOnStartup: boolean;
@@ -160,12 +166,14 @@ export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
 	issueFolder: "GitHub",
 	issueNoteTemplate: "Issue - {number}",
 	issueContentTemplate: "",
+	useCustomIssueContentTemplate: false,
 	includeIssueComments: true,
 	pullRequestUpdateMode: "none",
 	allowDeletePullRequest: true,
 	pullRequestFolder: "GitHub Pull Requests",
 	pullRequestNoteTemplate: "PR - {number}",
 	pullRequestContentTemplate: "",
+	useCustomPullRequestContentTemplate: false,
 	includePullRequestComments: true,
 	includeClosedIssues: false,
 	includeClosedPullRequests: false,
@@ -173,6 +181,8 @@ export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
 
 export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	githubToken: "",
+	useSecretStorage: false,
+	secretTokenName: "",
 	repositories: [],
 	dateFormat: "",
 	syncOnStartup: true,
@@ -227,4 +237,5 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	includeClosedIssues: false,
 	includeClosedPullRequests: false,
 	escapeHashTags: false,
+	includeSubIssues: false,
 };

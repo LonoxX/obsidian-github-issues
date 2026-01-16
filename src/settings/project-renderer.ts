@@ -35,7 +35,7 @@ export class ProjectRenderer {
 
 		const issueFolderSetting = new Setting(standardIssueFolderContainer)
 			.setName("Issues folder template")
-			.setDesc("Folder path template. Variables: {project}, {owner}, {project_number}")
+			.setDesc("Folder path template for issue storage")
 			.addText((text) => {
 				text
 					.setPlaceholder("GitHub/{project}")
@@ -89,12 +89,10 @@ export class ProjectRenderer {
 				new FolderSuggest(this.app, text.inputEl);
 			});
 
-		// Issue filename template with FULL variable list
+		// Issue filename template
 		new Setting(issueStorageContainer)
 			.setName("Issue filename template")
-			.setDesc(
-				"Variables: {number}, {title}, {author}, {status}, {project}, {type}, {labels}, {assignees}, {owner}, {repoName}, {labels_hash}, {created}, {updated}"
-			)
+			.setDesc("Template for issue filenames")
 			.addText((text) =>
 				text
 					.setPlaceholder("Issue - {number}")
@@ -108,7 +106,7 @@ export class ProjectRenderer {
 		// Issue Content Template Settings
 		new Setting(issueStorageContainer)
 			.setName("Use custom issue content template")
-			.setDesc("Enable custom template file for issue content instead of the default format")
+			.setDesc("Use custom template for issue content")
 			.addToggle((toggle) => {
 				toggle
 					.setValue(project.useCustomIssueContentTemplate ?? false)
@@ -156,6 +154,18 @@ export class ProjectRenderer {
 					});
 			});
 
+		new Setting(issueStorageContainer)
+			.setName("Include sub-issues")
+			.setDesc("Include sub-issues in generated files")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(project.includeSubIssues ?? false)
+					.onChange(async (value) => {
+						project.includeSubIssues = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
 		// ===== PULL REQUESTS STORAGE SECTION =====
 		new Setting(container).setName("Pull Requests Storage").setHeading();
 
@@ -172,7 +182,7 @@ export class ProjectRenderer {
 
 		new Setting(standardPrFolderContainer)
 			.setName("Pull requests folder template")
-			.setDesc("Folder path template. Variables: {project}, {owner}, {project_number}")
+			.setDesc("Folder path template for PR storage")
 			.addText((text) => {
 				text
 					.setPlaceholder("GitHub/{project}")
@@ -226,12 +236,10 @@ export class ProjectRenderer {
 				new FolderSuggest(this.app, text.inputEl);
 			});
 
-		// PR filename template with FULL variable list
+		// PR filename template
 		new Setting(prStorageContainer)
 			.setName("PR filename template")
-			.setDesc(
-				"Variables: {number}, {title}, {author}, {status}, {project}, {type}, {labels}, {assignees}, {owner}, {repoName}, {labels_hash}, {created}, {updated}"
-			)
+			.setDesc("Template for pull request filenames")
 			.addText((text) =>
 				text
 					.setPlaceholder("PR - {number}")
@@ -245,7 +253,7 @@ export class ProjectRenderer {
 		// PR Content Template Settings
 		new Setting(prStorageContainer)
 			.setName("Use custom PR content template")
-			.setDesc("Enable custom template file for PR content instead of the default format")
+			.setDesc("Use custom template for PR content")
 			.addToggle((toggle) => {
 				toggle
 					.setValue(project.useCustomPullRequestContentTemplate ?? false)

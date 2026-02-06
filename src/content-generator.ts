@@ -25,8 +25,8 @@ export class ContentGenerator {
 		subIssues?: any[],
 		parentIssue?: any,
 	): Promise<string> {
-		// Determine whether to escape hash tags (repo setting takes precedence if ignoreGlobalSettings is true)
-		const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : settings.escapeHashTags;
+		// Determine whether to escape hash tags (repo setting takes precedence if using a custom profile)
+		const shouldEscapeHashTags = repo.profileId !== "default" ? repo.escapeHashTags : settings.escapeHashTags;
 
 		// Check if custom template is enabled and load template content
 		if (repo.useCustomIssueContentTemplate && repo.issueContentTemplate) {
@@ -152,8 +152,8 @@ ${subIssues.map((si: any) => {
 		settings: GitHubTrackerSettings,
 		projectData?: ProjectData[],
 	): Promise<string> {
-		// Determine whether to escape hash tags (repo setting takes precedence if ignoreGlobalSettings is true)
-		const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : settings.escapeHashTags;
+		// Determine whether to escape hash tags (repo setting takes precedence if using a custom profile)
+		const shouldEscapeHashTags = repo.profileId !== "default" ? repo.escapeHashTags : settings.escapeHashTags;
 
 		// Check if custom template is enabled and load template content
 		if (repo.useCustomPullRequestContentTemplate && repo.pullRequestContentTemplate) {

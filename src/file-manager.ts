@@ -17,6 +17,7 @@ import {
 	formatComments
 } from "./util/templateUtils";
 import { extractPersistBlocks, mergePersistBlocks } from "./util/persistUtils";
+import { getEffectiveProjectSettings } from "./util/settingsUtils";
 
 export class FileManager {
 	private issueFileManager: IssueFileManager;
@@ -104,8 +105,11 @@ export class FileManager {
 		project: TrackedProject,
 		items: any[],
 	): Promise<void> {
-		const issueFolderPath = this.folderPathManager.getProjectIssueFolderPath(project);
-		const prFolderPath = this.folderPathManager.getProjectPullRequestFolderPath(project);
+		// Apply profile settings to get effective project configuration
+		const effectiveProject = getEffectiveProjectSettings(project, this.settings);
+
+		const issueFolderPath = this.folderPathManager.getProjectIssueFolderPath(effectiveProject);
+		const prFolderPath = this.folderPathManager.getProjectPullRequestFolderPath(effectiveProject);
 
 		if (!issueFolderPath && !prFolderPath) {
 			this.noticeManager.debug(`No folder configured for project ${project.title}`);
@@ -118,7 +122,7 @@ export class FileManager {
 		let skippedHiddenStatus = 0;
 
 		const hiddenStatuses = new Set(project.hiddenStatuses || []);
-		const skipHidden = project.skipHiddenStatusesOnSync && hiddenStatuses.size > 0;
+		const skipHidden = effectiveProject.skipHiddenStatusesOnSync && hiddenStatuses.size > 0;
 
 		for (const item of items) {
 			const content = item.content;
@@ -163,14 +167,14 @@ export class FileManager {
 			let subIssues: any[] = [];
 			let parentIssue: any = null;
 
-			if (isIssue && project.includeSubIssues) {
+			if (isIssue && effectiveProject.includeSubIssues) {
 				const [owner, repoName] = repository.split("/");
 				if (owner && repoName) {
 					subIssues = await this.gitHubClient.fetchSubIssues(owner, repoName, content.number);
 					parentIssue = await this.gitHubClient.fetchParentIssue(owner, repoName, content.number);
 
 					// Enrich sub-issues with vault paths if they exist
-					const noteTemplate = project.issueNoteTemplate || "Issue - {number} - {title}";
+					const noteTemplate = effectiveProject.issueNoteTemplate || "Issue - {number} - {title}";
 					subIssues = await this.fileHelpers.enrichSubIssuesWithVaultPaths(
 						subIssues,
 						folderPath,
@@ -205,8 +209,8 @@ export class FileManager {
 				);
 
 			const filenameTemplate = isIssue
-				? (project.issueNoteTemplate || "Issue - {number} - {title}")
-				: (project.pullRequestNoteTemplate || "PR - {number} - {title}");
+				? (effectiveProject.issueNoteTemplate || "Issue - {number} - {title}")
+				: (effectiveProject.pullRequestNoteTemplate || "PR - {number} - {title}");
 
 			const baseFileName = processFilenameTemplate(filenameTemplate, templateData, this.settings.dateFormat);
 			const fileName = `${baseFileName}.md`;
@@ -215,7 +219,7 @@ export class FileManager {
 			const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 			let fileContent = await this.generateProjectItemContent(
 				content,
-				project,
+				effectiveProject,
 				status,
 				isIssue,
 				item.fieldValues?.nodes || [],

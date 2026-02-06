@@ -1,6 +1,48 @@
+// Profile types
+export type ProfileType = "repository" | "project";
+
+export interface SettingsProfile {
+	id: string;
+	name: string;
+	type: ProfileType;
+
+	// Repository-type profile fields
+	issueUpdateMode?: "none" | "update" | "append";
+	allowDeleteIssue?: boolean;
+	issueFolder?: string;
+	issueNoteTemplate?: string;
+	issueContentTemplate?: string;
+	useCustomIssueContentTemplate?: boolean;
+	includeIssueComments?: boolean;
+	pullRequestUpdateMode?: "none" | "update" | "append";
+	allowDeletePullRequest?: boolean;
+	pullRequestFolder?: string;
+	pullRequestNoteTemplate?: string;
+	pullRequestContentTemplate?: string;
+	useCustomPullRequestContentTemplate?: boolean;
+	includePullRequestComments?: boolean;
+	includeClosedIssues?: boolean;
+	includeClosedPullRequests?: boolean;
+	includeSubIssues?: boolean;
+
+	// Project-type profile fields
+	projectIssueFolder?: string;
+	projectPullRequestFolder?: string;
+	projectIssueNoteTemplate?: string;
+	projectPullRequestNoteTemplate?: string;
+	projectUseCustomIssueContentTemplate?: boolean;
+	projectIssueContentTemplate?: string;
+	projectUseCustomPullRequestContentTemplate?: boolean;
+	projectPullRequestContentTemplate?: string;
+	skipHiddenStatusesOnSync?: boolean;
+	showEmptyColumns?: boolean;
+	projectIncludeSubIssues?: boolean;
+}
+
 export interface RepositoryTracking {
 	repository: string;
-	ignoreGlobalSettings: boolean; // If true, use only repository-specific settings
+	profileId: string; // ID of the SettingsProfile to use
+	ignoreGlobalSettings?: boolean; // @deprecated - kept for migration only
 	trackIssues: boolean;
 	issueUpdateMode: "none" | "update" | "append";
 	allowDeleteIssue: boolean;
@@ -64,6 +106,7 @@ export interface TrackedProject {
 	url: string;
 	owner: string;
 	enabled: boolean;
+	profileId?: string; // ID of a "project" type SettingsProfile
 	issueFolder?: string;
 	useCustomIssueFolder?: boolean;
 	customIssueFolder?: string;
@@ -155,7 +198,7 @@ export interface GitHubTrackerSettings {
 	backgroundSyncInterval: number; // in minutes
 	cleanupClosedIssuesDays: number;
 	globalDefaults: GlobalDefaults;
-	// GitHub Projects settings
+	profiles: SettingsProfile[];
 	enableProjectTracking: boolean;
 	trackedProjects: TrackedProject[];
 }
@@ -179,6 +222,46 @@ export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
 	includeClosedPullRequests: false,
 };
 
+export const DEFAULT_REPOSITORY_PROFILE: SettingsProfile = {
+	id: "default",
+	name: "Default Profile",
+	type: "repository",
+	issueUpdateMode: "none",
+	allowDeleteIssue: true,
+	issueFolder: "GitHub",
+	issueNoteTemplate: "Issue - {number}",
+	issueContentTemplate: "",
+	useCustomIssueContentTemplate: false,
+	includeIssueComments: true,
+	pullRequestUpdateMode: "none",
+	allowDeletePullRequest: true,
+	pullRequestFolder: "GitHub Pull Requests",
+	pullRequestNoteTemplate: "PR - {number}",
+	pullRequestContentTemplate: "",
+	useCustomPullRequestContentTemplate: false,
+	includePullRequestComments: true,
+	includeClosedIssues: false,
+	includeClosedPullRequests: false,
+	includeSubIssues: false,
+};
+
+export const DEFAULT_PROJECT_PROFILE: SettingsProfile = {
+	id: "default-project",
+	name: "Default Project Profile",
+	type: "project",
+	projectIssueFolder: "GitHub/{project}",
+	projectPullRequestFolder: "GitHub/{project}",
+	projectIssueNoteTemplate: "Issue - {number}",
+	projectPullRequestNoteTemplate: "PR - {number}",
+	projectUseCustomIssueContentTemplate: false,
+	projectIssueContentTemplate: "",
+	projectUseCustomPullRequestContentTemplate: false,
+	projectPullRequestContentTemplate: "",
+	skipHiddenStatusesOnSync: false,
+	showEmptyColumns: true,
+	projectIncludeSubIssues: false,
+};
+
 export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	githubToken: "",
 	useSecretStorage: false,
@@ -194,6 +277,10 @@ export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	backgroundSyncInterval: 30,
 	cleanupClosedIssuesDays: 30,
 	globalDefaults: DEFAULT_GLOBAL_DEFAULTS,
+	profiles: [
+		{ ...DEFAULT_REPOSITORY_PROFILE },
+		{ ...DEFAULT_PROJECT_PROFILE },
+	],
 	enableProjectTracking: true,
 	trackedProjects: [],
 };
@@ -201,7 +288,7 @@ export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 // Default repository tracking settings
 export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	repository: "",
-	ignoreGlobalSettings: false,
+	profileId: "default",
 	trackIssues: true,
 	issueUpdateMode: "none",
 	allowDeleteIssue: true,

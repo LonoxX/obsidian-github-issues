@@ -1,36 +1,111 @@
-import { RepositoryTracking, GlobalDefaults } from "../types";
+import { RepositoryTracking, GitHubTrackerSettings, SettingsProfile, TrackedProject, DEFAULT_REPOSITORY_PROFILE, DEFAULT_PROJECT_PROFILE } from "../types";
 
 /**
- * Merges global defaults with repository-specific settings
- * @param repo Repository tracking settings
- * @param globalDefaults Global default settings
- * @returns Effective repository settings with global defaults applied (if not ignored)
+ * Find a profile by ID from the settings
+ */
+export function getProfileById(
+	settings: GitHubTrackerSettings,
+	profileId: string
+): SettingsProfile | undefined {
+	return settings.profiles.find(p => p.id === profileId);
+}
+
+/**
+ * Get all repository-type profiles
+ */
+export function getRepositoryProfiles(settings: GitHubTrackerSettings): SettingsProfile[] {
+	return settings.profiles.filter(p => p.type === "repository");
+}
+
+/**
+ * Get all project-type profiles
+ */
+export function getProjectProfiles(settings: GitHubTrackerSettings): SettingsProfile[] {
+	return settings.profiles.filter(p => p.type === "project");
+}
+
+/**
+ * Apply profile settings to a repository. All configurable settings come from
+ * the profile exclusively — per-repo overrides are no longer used.
  */
 export function getEffectiveRepoSettings(
 	repo: RepositoryTracking,
-	globalDefaults: GlobalDefaults
+	settings: GitHubTrackerSettings
 ): RepositoryTracking {
-	// If repository ignores global settings, return as-is
-	if (repo.ignoreGlobalSettings) {
-		return repo;
+	const profile = getProfileById(settings, repo.profileId);
+
+	// If no profile found (orphaned reference), use default profile values
+	if (!profile || profile.type !== "repository") {
+		const defaultProfile = getProfileById(settings, "default") ?? DEFAULT_REPOSITORY_PROFILE;
+		return applyProfileToRepo(repo, defaultProfile);
 	}
 
-	// Create a copy and apply global defaults
+	return applyProfileToRepo(repo, profile);
+}
+
+/**
+ * Apply a profile's settings to a repository.
+ * Profile values are used directly — no per-repo overrides.
+ */
+function applyProfileToRepo(repo: RepositoryTracking, profile: SettingsProfile): RepositoryTracking {
 	return {
 		...repo,
-		issueUpdateMode: globalDefaults.issueUpdateMode,
-		allowDeleteIssue: globalDefaults.allowDeleteIssue,
-		issueFolder: repo.useCustomIssueFolder ? repo.customIssueFolder : globalDefaults.issueFolder,
-		issueNoteTemplate: globalDefaults.issueNoteTemplate,
-		issueContentTemplate: (repo.useCustomIssueContentTemplate && repo.issueContentTemplate) ? repo.issueContentTemplate : globalDefaults.issueContentTemplate,
-		useCustomIssueContentTemplate: (repo.useCustomIssueContentTemplate && repo.issueContentTemplate) ? true : !!globalDefaults.issueContentTemplate,
-		includeIssueComments: globalDefaults.includeIssueComments,
-		pullRequestUpdateMode: globalDefaults.pullRequestUpdateMode,
-		allowDeletePullRequest: globalDefaults.allowDeletePullRequest,
-		pullRequestFolder: repo.useCustomPullRequestFolder ? repo.customPullRequestFolder : globalDefaults.pullRequestFolder,
-		pullRequestNoteTemplate: globalDefaults.pullRequestNoteTemplate,
-		pullRequestContentTemplate: (repo.useCustomPullRequestContentTemplate && repo.pullRequestContentTemplate) ? repo.pullRequestContentTemplate : globalDefaults.pullRequestContentTemplate,
-		useCustomPullRequestContentTemplate: (repo.useCustomPullRequestContentTemplate && repo.pullRequestContentTemplate) ? true : !!globalDefaults.pullRequestContentTemplate,
-		includePullRequestComments: globalDefaults.includePullRequestComments,
+		issueUpdateMode: profile.issueUpdateMode ?? "none",
+		allowDeleteIssue: profile.allowDeleteIssue ?? true,
+		issueFolder: profile.issueFolder ?? "GitHub",
+		issueNoteTemplate: profile.issueNoteTemplate ?? "Issue - {number}",
+		issueContentTemplate: profile.issueContentTemplate ?? "",
+		useCustomIssueContentTemplate: !!profile.issueContentTemplate,
+		includeIssueComments: profile.includeIssueComments ?? true,
+		includeClosedIssues: profile.includeClosedIssues ?? false,
+		includeSubIssues: profile.includeSubIssues ?? false,
+		pullRequestUpdateMode: profile.pullRequestUpdateMode ?? "none",
+		allowDeletePullRequest: profile.allowDeletePullRequest ?? true,
+		pullRequestFolder: profile.pullRequestFolder ?? "GitHub Pull Requests",
+		pullRequestNoteTemplate: profile.pullRequestNoteTemplate ?? "PR - {number}",
+		pullRequestContentTemplate: profile.pullRequestContentTemplate ?? "",
+		useCustomPullRequestContentTemplate: !!profile.pullRequestContentTemplate,
+		includePullRequestComments: profile.includePullRequestComments ?? true,
+		includeClosedPullRequests: profile.includeClosedPullRequests ?? false,
+	};
+}
+
+/**
+ * Effective project settings: merges profile defaults onto TrackedProject.
+ * All configurable settings (folders, templates, sync toggles) come from
+ * the profile — per-project overrides are no longer used.
+ */
+export function getEffectiveProjectSettings(
+	project: TrackedProject,
+	settings: GitHubTrackerSettings
+): TrackedProject {
+	const profile = getProfileById(settings, project.profileId ?? "default-project");
+
+	if (!profile || profile.type !== "project") {
+		const defaultProfile = getProfileById(settings, "default-project") ?? DEFAULT_PROJECT_PROFILE;
+		return applyProfileToProject(project, defaultProfile);
+	}
+
+	return applyProfileToProject(project, profile);
+}
+
+/**
+ * Apply a project profile's settings to a tracked project.
+ * Profile values are used directly — no per-project overrides.
+ */
+function applyProfileToProject(project: TrackedProject, profile: SettingsProfile): TrackedProject {
+	return {
+		...project,
+		issueFolder: profile.projectIssueFolder ?? "GitHub/{project}",
+		pullRequestFolder: profile.projectPullRequestFolder ?? "GitHub/{project}",
+		issueNoteTemplate: profile.projectIssueNoteTemplate ?? "Issue - {number}",
+		pullRequestNoteTemplate: profile.projectPullRequestNoteTemplate ?? "PR - {number}",
+		useCustomIssueContentTemplate: !!profile.projectIssueContentTemplate,
+		issueContentTemplate: profile.projectIssueContentTemplate ?? "",
+		useCustomPullRequestContentTemplate: !!profile.projectPullRequestContentTemplate,
+		pullRequestContentTemplate: profile.projectPullRequestContentTemplate ?? "",
+		skipHiddenStatusesOnSync: profile.skipHiddenStatusesOnSync ?? false,
+		showEmptyColumns: profile.showEmptyColumns ?? true,
+		includeSubIssues: profile.projectIncludeSubIssues ?? false,
 	};
 }

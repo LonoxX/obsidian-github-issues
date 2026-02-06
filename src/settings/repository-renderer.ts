@@ -1,8 +1,6 @@
-import { App, Notice, Setting, setIcon } from "obsidian";
+import { App, Setting } from "obsidian";
 import { RepositoryTracking } from "../types";
 import GitHubTrackerPlugin from "../main";
-import { FolderSuggest } from "./folder-suggest";
-import { FileSuggest } from "./file-suggest";
 
 export class RepositoryRenderer {
 	constructor(
@@ -20,19 +18,13 @@ export class RepositoryRenderer {
 
 		container
 			.createEl("p", {
-				text: "Configure how issues are tracked and stored",
+				text: "Configure issue tracking for this repository. Folders, templates, and other settings are managed via the assigned profile.",
 			})
 			.addClass("setting-item-description");
 
 		const issuesSettingsContainer = container.createDiv(
 			"github-issues-settings-group",
 		);
-
-		// Container for the standard issues folder setting
-		const standardIssuesFolderContainer = issuesSettingsContainer.createDiv();
-
-		// Container for the custom issues folder setting
-		const customIssuesFolderContainer = issuesSettingsContainer.createDiv();
 
 		new Setting(container)
 			.setName("Track issues")
@@ -52,258 +44,11 @@ export class RepositoryRenderer {
 			!repo.trackIssues,
 		);
 
-		// Update container visibility based on custom folder setting
-		const updateContainerVisibility = () => {
-			standardIssuesFolderContainer.classList.toggle(
-				"github-issues-settings-hidden",
-				repo.useCustomIssueFolder,
-			);
-			customIssuesFolderContainer.classList.toggle(
-				"github-issues-settings-hidden",
-				!repo.useCustomIssueFolder,
-			);
-		};
-
-		const issuesFolderSetting = new Setting(standardIssuesFolderContainer)
-			.setName("Issues folder")
-			.setDesc("The folder where issue files will be stored")
-			.addText((text) => {
-				text
-					.setPlaceholder("GitHub Issues")
-					.setValue(repo.issueFolder)
-					.onChange(async (value) => {
-						repo.issueFolder = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add folder suggestion functionality
-				new FolderSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📁")
-					.setTooltip("Browse folders")
-					.onClick(() => {
-						// The folder suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		new Setting(issuesSettingsContainer)
-			.setName("Use custom folder")
-			.setDesc("Use custom folder instead of Owner/Repository structure")
-			.addToggle((toggle) => {
-				toggle
-					.setValue(repo.useCustomIssueFolder)
-					.onChange(async (value) => {
-						repo.useCustomIssueFolder = value;
-						updateContainerVisibility();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// Create the custom folder container first
-		const customIssueFolderContainer = issuesSettingsContainer.createDiv(
-			"github-issues-settings-group",
-		);
-		customIssueFolderContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.useCustomIssueFolder,
-		);
-
-		new Setting(customIssuesFolderContainer)
-			.setName("Custom issues folder")
-			.setDesc("Custom folder path for all issues")
-			.addText((text) => {
-				text
-					.setPlaceholder("e.g., Issues, GitHub/All Issues")
-					.setValue(repo.customIssueFolder)
-					.onChange(async (value) => {
-						repo.customIssueFolder = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add folder suggestion functionality
-				new FolderSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📁")
-					.setTooltip("Browse folders")
-					.onClick(() => {
-						// The folder suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		// Set initial visibility
-		updateContainerVisibility();
-
-		new Setting(issuesSettingsContainer)
-			.setName("Issue update mode")
-			.setDesc("How to handle updates to existing issues")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("none", "None - Don't update existing issues")
-					.addOption("update", "Update - Overwrite existing content")
-					.addOption("append", "Append - Add new content at the end")
-					.setValue(repo.issueUpdateMode)
-					.onChange(async (value) => {
-						repo.issueUpdateMode = value as
-							| "none"
-							| "update"
-							| "append";
-						await this.plugin.saveSettings();
-					}),
-			);
-
 		// Label filtering settings
 		this.renderLabelFilter(issuesSettingsContainer, repo, 'issue');
 
 		// Assignee filtering settings
 		this.renderAssigneeFilter(issuesSettingsContainer, repo, 'issue');
-
-		// Store reference to allow issue deletion toggle for updating
-		let allowDeleteIssueToggle: any;
-		new Setting(issuesSettingsContainer)
-			.setName("Default: Allow issue deletion")
-			.setDesc(
-				"Delete issue files when closed or filtered out",
-			)
-			.addToggle((toggle) => {
-				allowDeleteIssueToggle = toggle;
-				return toggle
-					.setValue(repo.allowDeleteIssue)
-					.setDisabled(repo.includeClosedIssues)
-					.onChange(async (value) => {
-							repo.allowDeleteIssue = value;
-							await this.plugin.saveSettings();
-						});
-			});
-
-		new Setting(issuesSettingsContainer)
-			.setName("Issue note template")
-			.setDesc("Template for issue filenames")
-			.addText((text) =>
-				text
-					.setPlaceholder("Issue - {number}")
-					.setValue(repo.issueNoteTemplate || "Issue - {number}")
-					.onChange(async (value) => {
-						repo.issueNoteTemplate = value || "Issue - {number}";
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(issuesSettingsContainer)
-			.setName("Use custom issue content template")
-			.setDesc("Use custom template for issue content")
-			.addToggle((toggle) => {
-				toggle
-					.setValue(repo.useCustomIssueContentTemplate)
-					.onChange(async (value) => {
-						repo.useCustomIssueContentTemplate = value;
-						customIssueTemplateContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value
-						);
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// Create the custom template container
-		const customIssueTemplateContainer = issuesSettingsContainer.createDiv(
-			"github-issues-settings-group",
-		);
-		customIssueTemplateContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.useCustomIssueContentTemplate,
-		);
-
-		new Setting(customIssueTemplateContainer)
-			.setName("Issue content template file")
-			.setDesc("Path to a markdown file that will be used as template for issue content. See /templates folder for examples.")
-			.addText((text) => {
-				text
-					.setPlaceholder("templates/default-issue-template.md")
-					.setValue(repo.issueContentTemplate || "")
-					.onChange(async (value) => {
-						repo.issueContentTemplate = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add file suggestion functionality
-				new FileSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📄")
-					.setTooltip("Browse template files")
-					.onClick(() => {
-						// The file suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		new Setting(issuesSettingsContainer)
-			.setName("Include issue comments")
-			.setDesc(
-				"Include comments in generated files",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.includeIssueComments)
-					.onChange(async (value) => {
-						repo.includeIssueComments = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(issuesSettingsContainer)
-			.setName("Include closed issues")
-			.setDesc(
-				"Include closed issues in tracking",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.includeClosedIssues)
-					.onChange(async (value) => {
-						repo.includeClosedIssues = value;
-						// If including closed issues, disable deletion to prevent conflicts
-						if (value) {
-							repo.allowDeleteIssue = false;
-							// Update the allow deletion toggle directly
-							if (allowDeleteIssueToggle) {
-								allowDeleteIssueToggle.setValue(false);
-							}
-						}
-						// Update the disabled state of the allow deletion toggle
-						if (allowDeleteIssueToggle) {
-							allowDeleteIssueToggle.setDisabled(value);
-						}
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(issuesSettingsContainer)
-			.setName("Include sub-issues")
-			.setDesc("Include sub-issues in generated files")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.includeSubIssues ?? false)
-					.onChange(async (value) => {
-						repo.includeSubIssues = value;
-						await this.plugin.saveSettings();
-					}),
-			);
 	}
 
 	renderPullRequestSettings(
@@ -314,19 +59,13 @@ export class RepositoryRenderer {
 
 		container
 			.createEl("p", {
-				text: "Configure how pull requests are tracked and stored",
+				text: "Configure pull request tracking for this repository. Folders, templates, and other settings are managed via the assigned profile.",
 			})
 			.addClass("setting-item-description");
 
 		const pullRequestsSettingsContainer = container.createDiv(
 			"github-issues-settings-group",
 		);
-
-		// Container for the standard pull requests folder setting
-		const standardPRFolderContainer = pullRequestsSettingsContainer.createDiv();
-
-		// Container for the custom pull requests folder setting
-		const customPRFolderContainer = pullRequestsSettingsContainer.createDiv();
 
 		new Setting(container)
 			.setName("Track pull requests")
@@ -350,240 +89,11 @@ export class RepositoryRenderer {
 			!repo.trackPullRequest,
 		);
 
-		// Update container visibility based on custom folder setting
-		const updatePRContainerVisibility = () => {
-			standardPRFolderContainer.classList.toggle(
-				"github-issues-settings-hidden",
-				repo.useCustomPullRequestFolder,
-			);
-			customPRFolderContainer.classList.toggle(
-				"github-issues-settings-hidden",
-				!repo.useCustomPullRequestFolder,
-			);
-		};
-
-		const pullRequestsFolderSetting = new Setting(standardPRFolderContainer)
-			.setName("Pull requests folder")
-			.setDesc("The folder where pull request files will be stored")
-			.addText((text) => {
-				text
-					.setPlaceholder("GitHub Pull Requests")
-					.setValue(repo.pullRequestFolder)
-					.onChange(async (value) => {
-						repo.pullRequestFolder = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add folder suggestion functionality
-				new FolderSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📁")
-					.setTooltip("Browse folders")
-					.onClick(() => {
-						// The folder suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Use custom folder")
-			.setDesc("Use custom folder instead of Owner/Repository structure")
-			.addToggle((toggle) => {
-				toggle
-					.setValue(repo.useCustomPullRequestFolder)
-					.onChange(async (value) => {
-						repo.useCustomPullRequestFolder = value;
-						updatePRContainerVisibility();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(customPRFolderContainer)
-			.setName("Custom pull requests folder")
-			.setDesc("Custom folder path for all pull requests")
-			.addText((text) => {
-				text
-					.setPlaceholder("e.g., Pull Requests, GitHub/All PRs")
-					.setValue(repo.customPullRequestFolder)
-					.onChange(async (value) => {
-						repo.customPullRequestFolder = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add folder suggestion functionality
-				new FolderSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📁")
-					.setTooltip("Browse folders")
-					.onClick(() => {
-						// The folder suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Pull request update mode")
-			.setDesc("How to handle updates to existing pull requests")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption(
-						"none",
-						"None - Don't update existing pull requests",
-					)
-					.addOption("update", "Update - Overwrite existing content")
-					.addOption("append", "Append - Add new content at the end")
-					.setValue(repo.pullRequestUpdateMode)
-					.onChange(async (value) => {
-						repo.pullRequestUpdateMode = value as
-							| "none"
-							| "update"
-							| "append";
-						await this.plugin.saveSettings();
-					}),
-			);
-
 		// Label filtering settings for pull requests
 		this.renderLabelFilter(pullRequestsSettingsContainer, repo, 'pr');
 
 		// Assignee filtering settings for pull requests
 		this.renderAssigneeFilter(pullRequestsSettingsContainer, repo, 'pr');
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Pull request note template")
-			.setDesc("Template for pull request filenames")
-			.addText((text) =>
-				text
-					.setPlaceholder("PR - {number}")
-					.setValue(repo.pullRequestNoteTemplate || "PR - {number}")
-					.onChange(async (value) => {
-						repo.pullRequestNoteTemplate = value || "PR - {number}";
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Use custom pull request content template")
-			.setDesc("Use custom template for PR content")
-			.addToggle((toggle) => {
-				toggle
-					.setValue(repo.useCustomPullRequestContentTemplate)
-					.onChange(async (value) => {
-						repo.useCustomPullRequestContentTemplate = value;
-						customPRTemplateContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value
-						);
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// Create the custom template container
-		const customPRTemplateContainer = pullRequestsSettingsContainer.createDiv(
-			"github-issues-settings-group",
-		);
-		customPRTemplateContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.useCustomPullRequestContentTemplate,
-		);
-
-		new Setting(customPRTemplateContainer)
-			.setName("Pull request content template file")
-			.setDesc("Path to a markdown file that will be used as template for pull request content. See /templates folder for examples.")
-			.addText((text) => {
-				text
-					.setPlaceholder("templates/default-pr-template.md")
-					.setValue(repo.pullRequestContentTemplate || "")
-					.onChange(async (value) => {
-						repo.pullRequestContentTemplate = value;
-						await this.plugin.saveSettings();
-					});
-
-				// Add file suggestion functionality
-				new FileSuggest(this.app, text.inputEl);
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("📄")
-					.setTooltip("Browse template files")
-					.onClick(() => {
-						// The file suggest will be triggered when user types
-						const inputEl = button.buttonEl.parentElement?.querySelector('input');
-						if (inputEl) {
-							inputEl.focus();
-						}
-					});
-			});
-
-		// Store reference to allow PR deletion toggle for updating
-		let allowDeletePRToggle: any;
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Default: Allow pull request deletion")
-			.setDesc(
-				"Delete PR files when closed or filtered out",
-			)
-			.addToggle((toggle) => {
-				allowDeletePRToggle = toggle;
-				return toggle
-					.setValue(repo.allowDeletePullRequest)
-					.setDisabled(repo.includeClosedPullRequests)
-					.onChange(async (value) => {
-							repo.allowDeletePullRequest = value;
-							await this.plugin.saveSettings();
-						});
-			});
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Include pull request comments")
-			.setDesc(
-				"Include comments in generated files",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.includePullRequestComments)
-					.onChange(async (value) => {
-						repo.includePullRequestComments = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(pullRequestsSettingsContainer)
-			.setName("Include closed pull requests")
-			.setDesc(
-				"Include closed PRs in tracking",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.includeClosedPullRequests)
-					.onChange(async (value) => {
-						repo.includeClosedPullRequests = value;
-						// If including closed PRs, disable deletion to prevent conflicts
-						if (value) {
-							repo.allowDeletePullRequest = false;
-							// Update the allow deletion toggle directly
-							if (allowDeletePRToggle) {
-								allowDeletePRToggle.setValue(false);
-							}
-						}
-						// Update the disabled state of the allow deletion toggle
-						if (allowDeletePRToggle) {
-							allowDeletePRToggle.setDisabled(value);
-						}
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		// Set initial visibility
-		updatePRContainerVisibility();
 	}
 
 	private renderLabelFilter(

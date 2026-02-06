@@ -1,6 +1,7 @@
-import { App, Notice, setIcon } from "obsidian";
+import { App, Notice, Setting, setIcon } from "obsidian";
 import { RepositoryTracking, DEFAULT_REPOSITORY_TRACKING } from "../types";
 import GitHubTrackerPlugin from "../main";
+import { getRepositoryProfiles } from "../util/settingsUtils";
 
 export class RepositoryListManager {
 	private selectedRepositories: Set<string> = new Set();
@@ -10,7 +11,7 @@ export class RepositoryListManager {
 		private plugin: GitHubTrackerPlugin,
 	) {}
 
-	async addRepository(repoName: string): Promise<void> {
+	async addRepository(repoName: string, profileId?: string): Promise<void> {
 		if (
 			this.plugin.settings.repositories.some(
 				(r) => r.repository === repoName,
@@ -23,13 +24,14 @@ export class RepositoryListManager {
 		const newRepo = {
 			...DEFAULT_REPOSITORY_TRACKING,
 			repository: repoName,
+			profileId: profileId || "default",
 		};
 		this.plugin.settings.repositories.push(newRepo);
 		await this.plugin.saveSettings();
 		new Notice(`Added repository: ${repoName}`);
 	}
 
-	async addMultipleRepositories(repoNames: string[]): Promise<void> {
+	async addMultipleRepositories(repoNames: string[], profileIds?: Map<string, string>): Promise<void> {
 		const newRepos: string[] = [];
 		const existingRepos: string[] = [];
 		for (const repoName of repoNames) {
@@ -48,6 +50,7 @@ export class RepositoryListManager {
 			const newRepo = {
 				...DEFAULT_REPOSITORY_TRACKING,
 				repository: repoName,
+				profileId: profileIds?.get(repoName) || "default",
 			};
 			this.plugin.settings.repositories.push(newRepo);
 		}
@@ -358,17 +361,21 @@ export class RepositoryListManager {
 				});
 				description.addClass("github-issues-repo-description");
 
-				// Add "Ignore global defaults" toggle at the top
-				const { Setting } = require("obsidian");
+				// Profile selector dropdown
+				const repoProfiles = getRepositoryProfiles(this.plugin.settings);
 				new Setting(detailsContainer)
-					.setName("Ignore global defaults")
-					.setDesc("Use repository-specific settings instead of global defaults")
-					.addToggle((toggle: any) =>
-						toggle.setValue(repo.ignoreGlobalSettings).onChange(async (value: boolean) => {
-							repo.ignoreGlobalSettings = value;
+					.setName("Settings profile")
+					.setDesc("Select which profile provides default settings for this repository")
+					.addDropdown((dropdown: any) => {
+						for (const profile of repoProfiles) {
+							dropdown.addOption(profile.id, profile.name);
+						}
+						dropdown.setValue(repo.profileId || "default");
+						dropdown.onChange(async (value: string) => {
+							repo.profileId = value;
 							await this.plugin.saveSettings();
-						}),
-					);
+						});
+					});
 
 				new Setting(detailsContainer)
 					.setName("Escape hash tags")

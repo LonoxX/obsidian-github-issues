@@ -353,6 +353,29 @@ github-issues-confirmation-modal .warning-text {
 	width: 100%;
 }
 
+.github-issues-available-repos-list .github-issues-item {
+	flex-direction: row;
+	align-items: center;
+	padding: 6px 12px;
+	gap: 8px;
+}
+.github-issues-available-repos-list .github-issues-repo-action {
+	flex-shrink: 0;
+	margin-left: auto;
+}
+
+.github-issues-sticky-add-footer {
+	position: sticky;
+	bottom: 0;
+	z-index: 10;
+	display: flex;
+	justify-content: center;
+	padding: 10px 16px;
+	background-color: var(--background-secondary);
+	border-top: 1px solid var(--background-modifier-border);
+	box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+}
+
 .github-issues-repo-owner-group {
 	border-bottom: 1px solid var(--background-modifier-border);
 }
@@ -424,6 +447,29 @@ github-issues-confirmation-modal .warning-text {
 	display: flex;
 	align-items: center;
 	margin-left: auto;
+	gap: 6px;
+}
+
+.github-issues-inline-profile-select {
+	font-size: var(--font-ui-smaller);
+	padding: 3px 8px;
+	max-width: 180px;
+	height: 28px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.github-issues-inline-profile-select:hover {
+	border-color: var(--background-modifier-border-hover);
+	color: var(--text-normal);
+}
+
+.github-issues-inline-profile-select:focus {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
 }
 
 .github-issues-repo-text-container {
@@ -1041,10 +1087,11 @@ button:disabled {
 	max-width: 100%;
 }
 
-.github-issues-search-icon {
+.github-issues-search-wrapper .github-issues-search-icon {
 	position: absolute;
 	left: 10px;
 	color: var(--text-muted);
+	margin-right: 0;
 }
 
 .github-issues-search-input-modern {
@@ -1094,6 +1141,23 @@ button:disabled {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 4px;
 	overflow: hidden;
+}
+
+.github-issues-repo-list-modern .github-issues-item {
+	flex-direction: row !important;
+	align-items: center;
+	padding: 6px 12px;
+	gap: 0;
+}
+
+.github-issues-repo-list-modern .github-issues-item .github-issues-repo-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.github-issues-repo-list-modern .github-issues-item .github-issues-repo-action {
+	flex-shrink: 0;
+	margin-left: 12px;
 }
 
 .github-issues-repo-list-modern .github-issues-item .github-issues-add-button {
@@ -2260,3 +2324,167 @@ button:disabled {
 .github-issues-sub-issue-closed {
 	color: #ef4444;
 }
+
+/* Profile toolbar - Dropdown + Buttons in one compact row */
+.github-issues-profile-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 12px;
+}
+
+/* Custom dropdown wrapper */
+.github-issues-profile-dropdown-wrapper {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.github-issues-profile-dropdown-button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	transition: border-color 0.2s ease;
+}
+
+.github-issues-profile-dropdown-button:hover {
+	border-color: var(--background-modifier-border-hover);
+}
+
+.github-issues-profile-dropdown-name {
+	flex: 1 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.github-issues-profile-dropdown-chevron {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+.github-issues-profile-dropdown-chevron svg {
+	width: 14px;
+	height: 14px;
+}
+
+.github-issues-profile-dropdown-list {
+	position: absolute;
+	top: calc(100% + 2px);
+	left: 0;
+	right: 0;
+	z-index: var(--layer-popover);
+	border-radius: 6px;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-primary);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	padding: 4px;
+	max-height: 260px;
+	overflow-y: auto;
+}
+
+.github-issues-profile-dropdown-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	transition: background-color 0.1s ease;
+}
+
+.github-issues-profile-dropdown-item:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.github-issues-profile-dropdown-item.is-selected {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.github-issues-profile-dropdown-item.is-selected .github-issues-profile-type-tag {
+	opacity: 0.85;
+}
+
+/* Type tags (used in dropdown button + items) */
+.github-issues-profile-type-tag {
+	flex-shrink: 0;
+	display: inline-block;
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 10px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.github-issues-profile-tag-repository {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.github-issues-profile-tag-project {
+	background-color: #28a745;
+	color: white;
+}
+
+.github-issues-profile-rename-input {
+	flex: 0 1 auto;
+	width: 140px;
+	padding: 6px 10px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	transition: border-color 0.2s ease;
+}
+
+.github-issues-profile-rename-input:hover {
+	border-color: var(--background-modifier-border-hover);
+}
+
+.github-issues-profile-rename-input:focus {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+	outline: none;
+}
+
+.github-issues-profile-toolbar-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--interactive-normal);
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: all 0.15s ease;
+	flex-shrink: 0;
+}
+
+.github-issues-profile-toolbar-btn:hover {
+	background-color: var(--interactive-hover);
+	color: var(--text-normal);
+	border-color: var(--background-modifier-border-hover);
+}
+
+.github-issues-profile-delete-btn:hover {
+	background-color: var(--background-modifier-error);
+	color: var(--text-on-accent);
+	border-color: var(--background-modifier-error);
+}
+

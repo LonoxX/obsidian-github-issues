@@ -43,7 +43,7 @@ export class IssueFileManager {
 		_currentIssueNumbers: Set<string>,
 	): Promise<void> {
 		// Apply global defaults to repository settings
-		const effectiveRepo = getEffectiveRepoSettings(repo, this.settings.globalDefaults);
+		const effectiveRepo = getEffectiveRepoSettings(repo, this.settings);
 
 		const [owner, repoName] = effectiveRepo.repository.split("/");
 		if (!owner || !repoName) return;
@@ -195,7 +195,7 @@ export class IssueFileManager {
 						this.noticeManager.debug(`Updated issue ${issue.number}`);
 					}
 				} else if (updateMode === "append") {
-					const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : this.settings.escapeHashTags;
+					const shouldEscapeHashTags = repo.profileId !== "default" ? repo.escapeHashTags : this.settings.escapeHashTags;
 					content = `---\n### New status: "${
 						issue.state
 					}"\n\n# ${escapeBody(

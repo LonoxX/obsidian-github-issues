@@ -1,5 +1,6 @@
 import { ItemView, WorkspaceLeaf, TFile, Notice, setIcon } from "obsidian";
 import { GitHubTrackerSettings, ProjectData, TrackedProject } from "./types";
+import { getEffectiveProjectSettings } from "./util/settingsUtils";
 
 export const KANBAN_VIEW_TYPE = "github-kanban-view";
 
@@ -279,11 +280,14 @@ export class GitHubKanbanView extends ItemView {
 			return this.defaultStatusSort(statusesWithItems);
 		}
 
+		// Get effective settings from profile
+		const effectiveProject = getEffectiveProjectSettings(trackedProject, this.settings);
+
 		// Determine the order to use (includes ALL statuses, even empty ones)
 		let statusOrder: string[] = [];
 
 		if (trackedProject.useCustomStatusOrder && trackedProject.customStatusOrder?.length) {
-			// Use custom order
+			// Use custom order (project-specific)
 			statusOrder = trackedProject.customStatusOrder;
 		} else if (trackedProject.statusOptions?.length) {
 			// Use GitHub API order
@@ -295,8 +299,8 @@ export class GitHubKanbanView extends ItemView {
 			return this.defaultStatusSort(statusesWithItems);
 		}
 
-		// Check settings
-		const showEmptyColumns = trackedProject.showEmptyColumns ?? true;
+		// Check settings - showEmptyColumns from profile
+		const showEmptyColumns = effectiveProject.showEmptyColumns ?? true;
 		const hiddenStatuses = new Set(trackedProject.hiddenStatuses || []);
 
 		const orderedStatuses: string[] = [];
@@ -342,6 +346,11 @@ export class GitHubKanbanView extends ItemView {
 
 		const trackedProject = this.settings.trackedProjects?.find(p => p.id === project.id);
 
+		// Get effective settings from profile
+		const effectiveProject = trackedProject
+			? getEffectiveProjectSettings(trackedProject, this.settings)
+			: null;
+
 		const processFolder = (folder: string | undefined): string | undefined => {
 			if (!folder) return undefined;
 			const sanitize = (str: string) => str.replace(/[<>:"|?*\\]/g, "-").replace(/\.\./g, ".").trim();
@@ -351,16 +360,8 @@ export class GitHubKanbanView extends ItemView {
 				.replace(/\{project_number\}/g, (project.number || "").toString());
 		};
 
-		const issueFolder = processFolder(
-			trackedProject?.useCustomIssueFolder
-				? trackedProject?.customIssueFolder
-				: trackedProject?.issueFolder
-		);
-		const prFolder = processFolder(
-			trackedProject?.useCustomPullRequestFolder
-				? trackedProject?.customPullRequestFolder
-				: trackedProject?.pullRequestFolder
-		);
+		const issueFolder = processFolder(effectiveProject?.issueFolder);
+		const prFolder = processFolder(effectiveProject?.pullRequestFolder);
 
 		const files = this.app.vault.getMarkdownFiles();
 		const matchedNumbers = new Set<number>();

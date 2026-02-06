@@ -3,6 +3,9 @@ import {
 	GitHubTrackerSettings,
 	DEFAULT_SETTINGS,
 	DEFAULT_REPOSITORY_TRACKING,
+	SettingsProfile,
+	DEFAULT_REPOSITORY_PROFILE,
+	DEFAULT_PROJECT_PROFILE,
 } from "./types";
 import { GitHubClient } from "./github-client";
 import { FileManager } from "./file-manager";
@@ -505,6 +508,151 @@ export default class GitHubTrackerPlugin extends Plugin {
 			this.settings.globalDefaults = Object.assign({}, DEFAULT_SETTINGS.globalDefaults);
 		}
 
+		// === Profile Migration ===
+		if (!this.settings.profiles || this.settings.profiles.length === 0) {
+			this.settings.profiles = [];
+
+			// Create "Default Profile" from existing globalDefaults
+			const defaultProfile: SettingsProfile = {
+				id: "default",
+				name: "Default Profile",
+				type: "repository",
+				issueUpdateMode: this.settings.globalDefaults.issueUpdateMode,
+				allowDeleteIssue: this.settings.globalDefaults.allowDeleteIssue,
+				issueFolder: this.settings.globalDefaults.issueFolder,
+				issueNoteTemplate: this.settings.globalDefaults.issueNoteTemplate,
+				issueContentTemplate: this.settings.globalDefaults.issueContentTemplate,
+				useCustomIssueContentTemplate: this.settings.globalDefaults.useCustomIssueContentTemplate,
+				includeIssueComments: this.settings.globalDefaults.includeIssueComments,
+				pullRequestUpdateMode: this.settings.globalDefaults.pullRequestUpdateMode,
+				allowDeletePullRequest: this.settings.globalDefaults.allowDeletePullRequest,
+				pullRequestFolder: this.settings.globalDefaults.pullRequestFolder,
+				pullRequestNoteTemplate: this.settings.globalDefaults.pullRequestNoteTemplate,
+				pullRequestContentTemplate: this.settings.globalDefaults.pullRequestContentTemplate,
+				useCustomPullRequestContentTemplate: this.settings.globalDefaults.useCustomPullRequestContentTemplate,
+				includePullRequestComments: this.settings.globalDefaults.includePullRequestComments,
+				includeClosedIssues: this.settings.globalDefaults.includeClosedIssues,
+				includeClosedPullRequests: this.settings.globalDefaults.includeClosedPullRequests,
+			};
+			this.settings.profiles.push(defaultProfile);
+
+			// Create "Default Project Profile"
+			this.settings.profiles.push({ ...DEFAULT_PROJECT_PROFILE });
+
+			// Migrate repositories
+			this.settings.repositories = this.settings.repositories.map(repo => {
+				const merged = Object.assign({}, DEFAULT_REPOSITORY_TRACKING, repo);
+
+				if ((repo as any).ignoreGlobalSettings) {
+					// Repo had custom settings - create a dedicated profile
+					const customProfileId = `migrated-${repo.repository.replace(/\//g, '-')}-${Date.now()}`;
+					const customProfile: SettingsProfile = {
+						id: customProfileId,
+						name: `${repo.repository} (migrated)`,
+						type: "repository",
+						issueUpdateMode: merged.issueUpdateMode,
+						allowDeleteIssue: merged.allowDeleteIssue,
+						issueFolder: merged.issueFolder,
+						issueNoteTemplate: merged.issueNoteTemplate,
+						issueContentTemplate: merged.issueContentTemplate,
+						useCustomIssueContentTemplate: merged.useCustomIssueContentTemplate,
+						includeIssueComments: merged.includeIssueComments,
+						pullRequestUpdateMode: merged.pullRequestUpdateMode,
+						allowDeletePullRequest: merged.allowDeletePullRequest,
+						pullRequestFolder: merged.pullRequestFolder,
+						pullRequestNoteTemplate: merged.pullRequestNoteTemplate,
+						pullRequestContentTemplate: merged.pullRequestContentTemplate,
+						useCustomPullRequestContentTemplate: merged.useCustomPullRequestContentTemplate,
+						includePullRequestComments: merged.includePullRequestComments,
+						includeClosedIssues: merged.includeClosedIssues,
+						includeClosedPullRequests: merged.includeClosedPullRequests,
+					};
+					this.settings.profiles.push(customProfile);
+					merged.profileId = customProfileId;
+				} else {
+					merged.profileId = "default";
+				}
+
+				// Clean up deprecated field
+				delete (merged as any).ignoreGlobalSettings;
+
+				return merged;
+			});
+
+			// Save migrated settings
+			await this.saveData(this.settings);
+		}
+
+		// Migrate repos that still have old per-repo settings into their own profiles
+		const defaultProfile = this.settings.profiles.find(p => p.id === "default") ?? DEFAULT_REPOSITORY_PROFILE;
+		let needsSave = false;
+		this.settings.repositories = this.settings.repositories.map(repo => {
+			// Skip repos that already have a non-default profile assigned
+			if (repo.profileId && repo.profileId !== "default") {
+				delete (repo as any).ignoreGlobalSettings;
+				return repo;
+			}
+
+			const merged = Object.assign({}, DEFAULT_REPOSITORY_TRACKING, repo);
+
+			// Check if repo has values that differ from the default profile
+			const hasDiff = (
+				merged.issueUpdateMode !== (defaultProfile.issueUpdateMode ?? "none") ||
+				merged.allowDeleteIssue !== (defaultProfile.allowDeleteIssue ?? true) ||
+				merged.issueFolder !== (defaultProfile.issueFolder ?? "GitHub") ||
+				merged.issueNoteTemplate !== (defaultProfile.issueNoteTemplate ?? "Issue - {number}") ||
+				(merged.issueContentTemplate || "") !== (defaultProfile.issueContentTemplate ?? "") ||
+				merged.includeIssueComments !== (defaultProfile.includeIssueComments ?? true) ||
+				merged.includeClosedIssues !== (defaultProfile.includeClosedIssues ?? false) ||
+				merged.pullRequestUpdateMode !== (defaultProfile.pullRequestUpdateMode ?? "none") ||
+				merged.allowDeletePullRequest !== (defaultProfile.allowDeletePullRequest ?? true) ||
+				merged.pullRequestFolder !== (defaultProfile.pullRequestFolder ?? "GitHub Pull Requests") ||
+				merged.pullRequestNoteTemplate !== (defaultProfile.pullRequestNoteTemplate ?? "PR - {number}") ||
+				(merged.pullRequestContentTemplate || "") !== (defaultProfile.pullRequestContentTemplate ?? "") ||
+				merged.includePullRequestComments !== (defaultProfile.includePullRequestComments ?? true) ||
+				merged.includeClosedPullRequests !== (defaultProfile.includeClosedPullRequests ?? false) ||
+				(merged.includeSubIssues ?? false) !== (defaultProfile.includeSubIssues ?? false)
+			);
+
+			if (hasDiff) {
+				// Repo has custom values - create a dedicated profile
+				const customProfileId = `migrated-${repo.repository.replace(/\//g, '-')}-${Date.now()}`;
+				const customProfile: SettingsProfile = {
+					id: customProfileId,
+					name: `${repo.repository}`,
+					type: "repository",
+					issueUpdateMode: merged.issueUpdateMode,
+					allowDeleteIssue: merged.allowDeleteIssue,
+					issueFolder: merged.issueFolder,
+					issueNoteTemplate: merged.issueNoteTemplate,
+					issueContentTemplate: merged.issueContentTemplate,
+					useCustomIssueContentTemplate: merged.useCustomIssueContentTemplate,
+					includeIssueComments: merged.includeIssueComments,
+					pullRequestUpdateMode: merged.pullRequestUpdateMode,
+					allowDeletePullRequest: merged.allowDeletePullRequest,
+					pullRequestFolder: merged.pullRequestFolder,
+					pullRequestNoteTemplate: merged.pullRequestNoteTemplate,
+					pullRequestContentTemplate: merged.pullRequestContentTemplate,
+					useCustomPullRequestContentTemplate: merged.useCustomPullRequestContentTemplate,
+					includePullRequestComments: merged.includePullRequestComments,
+					includeClosedIssues: merged.includeClosedIssues,
+					includeClosedPullRequests: merged.includeClosedPullRequests,
+					includeSubIssues: merged.includeSubIssues ?? false,
+				};
+				this.settings.profiles.push(customProfile);
+				repo.profileId = customProfileId;
+				needsSave = true;
+			} else {
+				repo.profileId = "default";
+			}
+
+			delete (repo as any).ignoreGlobalSettings;
+			return repo;
+		});
+		if (needsSave) {
+			await this.saveData(this.settings);
+		}
+
 		// Migrate existing repositories to include new custom folder properties
 		// Defaults first, then override with saved values
 		this.settings.repositories = this.settings.repositories.map(repo => {
@@ -512,12 +660,36 @@ export default class GitHubTrackerPlugin extends Plugin {
 			// Ensure critical fields are never undefined
 			if (!merged.issueFolder) merged.issueFolder = DEFAULT_REPOSITORY_TRACKING.issueFolder;
 			if (!merged.pullRequestFolder) merged.pullRequestFolder = DEFAULT_REPOSITORY_TRACKING.pullRequestFolder;
+			if (!merged.profileId) merged.profileId = "default";
 			return merged;
 		});
 
 	}
 
 	async saveSettings() {
+		// Sync "default" profile back to globalDefaults for backward compatibility
+		const defaultProfile = this.settings.profiles.find(p => p.id === "default");
+		if (defaultProfile) {
+			this.settings.globalDefaults = {
+				issueUpdateMode: defaultProfile.issueUpdateMode ?? "none",
+				allowDeleteIssue: defaultProfile.allowDeleteIssue ?? true,
+				issueFolder: defaultProfile.issueFolder ?? "GitHub",
+				issueNoteTemplate: defaultProfile.issueNoteTemplate ?? "Issue - {number}",
+				issueContentTemplate: defaultProfile.issueContentTemplate ?? "",
+				useCustomIssueContentTemplate: defaultProfile.useCustomIssueContentTemplate ?? false,
+				includeIssueComments: defaultProfile.includeIssueComments ?? true,
+				pullRequestUpdateMode: defaultProfile.pullRequestUpdateMode ?? "none",
+				allowDeletePullRequest: defaultProfile.allowDeletePullRequest ?? true,
+				pullRequestFolder: defaultProfile.pullRequestFolder ?? "GitHub Pull Requests",
+				pullRequestNoteTemplate: defaultProfile.pullRequestNoteTemplate ?? "PR - {number}",
+				pullRequestContentTemplate: defaultProfile.pullRequestContentTemplate ?? "",
+				useCustomPullRequestContentTemplate: defaultProfile.useCustomPullRequestContentTemplate ?? false,
+				includePullRequestComments: defaultProfile.includePullRequestComments ?? true,
+				includeClosedIssues: defaultProfile.includeClosedIssues ?? false,
+				includeClosedPullRequests: defaultProfile.includeClosedPullRequests ?? false,
+			};
+		}
+
 		await this.saveData(this.settings);
 		const token = this.getGitHubToken();
 		if (token) {

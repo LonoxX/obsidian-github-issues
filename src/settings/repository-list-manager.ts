@@ -101,7 +101,7 @@ export class RepositoryListManager {
 
 		const deselectAllButton = bulkActionButtons.createEl("button", {
 			text: "Deselect all",
-			cls: "github-issues-deselect-all-button"
+			cls: "github-issues-select-none-button"
 		});
 
 		const removeSelectedButton = bulkActionButtons.createEl("button", {

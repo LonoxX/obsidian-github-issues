@@ -91,9 +91,10 @@ export class PullRequestFileManager {
 			await this.fileHelpers.ensureFolderExists(repo.customPullRequestFolder.trim());
 		} else {
 			// For default structure, ensure nested path exists
-			await this.fileHelpers.ensureFolderExists(repo.pullRequestFolder);
-			await this.fileHelpers.ensureFolderExists(`${repo.pullRequestFolder}/${ownerCleaned}`);
-			await this.fileHelpers.ensureFolderExists(`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`);
+			const pullRequestFolder = repo.pullRequestFolder ?? "GitHub Pull Requests";
+			await this.fileHelpers.ensureFolderExists(pullRequestFolder);
+			await this.fileHelpers.ensureFolderExists(`${pullRequestFolder}/${ownerCleaned}`);
+			await this.fileHelpers.ensureFolderExists(`${pullRequestFolder}/${ownerCleaned}/${repoCleaned}`);
 		}
 
 		const file = this.app.vault.getAbstractFileByPath(`${pullRequestFolderPath}/${fileName}`);

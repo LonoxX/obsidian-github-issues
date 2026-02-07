@@ -12,6 +12,7 @@ import { FileManager } from "./file-manager";
 import { GitHubTrackerSettingTab } from "./settings-tab";
 import { NoticeManager } from "./notice-manager";
 import { GitHubKanbanView, KANBAN_VIEW_TYPE } from "./kanban-view";
+import { getEffectiveRepoSettings, stripProfileFieldsFromRepo } from "./util/settingsUtils";
 
 export default class GitHubTrackerPlugin extends Plugin {
 	settings: GitHubTrackerSettings = DEFAULT_SETTINGS;
@@ -215,6 +216,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 
 		this.isSyncing = true;
 		try {
+			const effectiveRepo = getEffectiveRepoSettings(repo, this.settings);
 			this.noticeManager.info(`Syncing repository: ${repositoryName}`);
 			const [owner, repoName] = repo.repository.split("/");
 			if (!owner || !repoName) {
@@ -225,9 +227,9 @@ export default class GitHubTrackerPlugin extends Plugin {
 			}
 
 			// Sync Issues
-			if (repo.trackIssues) {
+			if (effectiveRepo.trackIssues) {
 				this.noticeManager.debug(
-					`Fetching issues for ${repo.repository}`,
+					`Fetching issues for ${effectiveRepo.repository}`,
 				);
 				const allIssuesIncludingRecentlyClosed =
 					await this.gitHubClient.fetchRepositoryIssues(
@@ -242,17 +244,17 @@ export default class GitHubTrackerPlugin extends Plugin {
 				);
 
 				// Decide which issues to filter based on settings
-				const issuesToFilter = repo.includeClosedIssues
+				const issuesToFilter = effectiveRepo.includeClosedIssues
 					? allIssuesIncludingRecentlyClosed
 					: openIssues;
 
 				const filteredIssues = this.fileManager.filterIssues(
-					repo,
+					effectiveRepo,
 					issuesToFilter,
 				);
 
 				this.noticeManager.debug(
-					`Processing ${filteredIssues.length} issues (from ${openIssues.length} open issues) for ${repo.repository}`,
+					`Processing ${filteredIssues.length} issues (from ${openIssues.length} open issues) for ${effectiveRepo.repository}`,
 				);
 
 				const currentIssueNumbers = new Set(
@@ -260,7 +262,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 				);
 
 				await this.fileManager.createIssueFiles(
-					repo,
+					effectiveRepo,
 					filteredIssues,
 					allIssuesIncludingRecentlyClosed,
 					currentIssueNumbers,
@@ -268,9 +270,9 @@ export default class GitHubTrackerPlugin extends Plugin {
 			}
 
 			// Sync Pull Requests
-			if (repo.trackPullRequest) {
+			if (effectiveRepo.trackPullRequest) {
 				this.noticeManager.debug(
-					`Fetching pull requests for ${repo.repository}`,
+					`Fetching pull requests for ${effectiveRepo.repository}`,
 				);
 
 				const allPullRequestsIncludingRecentlyClosed =
@@ -287,17 +289,17 @@ export default class GitHubTrackerPlugin extends Plugin {
 					);
 
 				// Decide which pull requests to filter based on settings
-				const pullRequestsToFilter = repo.includeClosedPullRequests
+				const pullRequestsToFilter = effectiveRepo.includeClosedPullRequests
 					? allPullRequestsIncludingRecentlyClosed
 					: openPullRequests;
 
 				const filteredPRs = this.fileManager.filterPullRequests(
-					repo,
+					effectiveRepo,
 					pullRequestsToFilter,
 				);
 
 				this.noticeManager.debug(
-					`Processing ${filteredPRs.length} pull requests (from ${openPullRequests.length} open PRs) for ${repo.repository}`,
+					`Processing ${filteredPRs.length} pull requests (from ${openPullRequests.length} open PRs) for ${effectiveRepo.repository}`,
 				);
 
 				const currentPRNumbers = new Set(
@@ -305,7 +307,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 				);
 
 				await this.fileManager.createPullRequestFiles(
-					repo,
+					effectiveRepo,
 					filteredPRs,
 					allPullRequestsIncludingRecentlyClosed,
 					currentPRNumbers,
@@ -583,12 +585,72 @@ export default class GitHubTrackerPlugin extends Plugin {
 			await this.saveData(this.settings);
 		}
 
+		// Cleanup: Remove empty migrated profiles and reassign repos to default
+		let needsCleanup = false;
+		for (const repo of this.settings.repositories) {
+			if (repo.profileId && repo.profileId.startsWith("migrated-")) {
+				const profile = this.settings.profiles.find(p => p.id === repo.profileId);
+				if (profile) {
+					const hasCustomValues = (
+						profile.issueUpdateMode !== undefined ||
+						profile.allowDeleteIssue !== undefined ||
+						profile.issueFolder !== undefined ||
+						profile.issueNoteTemplate !== undefined ||
+						profile.issueContentTemplate !== undefined ||
+						profile.useCustomIssueContentTemplate !== undefined ||
+						profile.includeIssueComments !== undefined ||
+						profile.pullRequestUpdateMode !== undefined ||
+						profile.allowDeletePullRequest !== undefined ||
+						profile.pullRequestFolder !== undefined ||
+						profile.pullRequestNoteTemplate !== undefined ||
+						profile.pullRequestContentTemplate !== undefined ||
+						profile.useCustomPullRequestContentTemplate !== undefined ||
+						profile.includePullRequestComments !== undefined ||
+						profile.includeClosedIssues !== undefined ||
+						profile.includeClosedPullRequests !== undefined ||
+						profile.trackIssues !== undefined ||
+						profile.trackPullRequest !== undefined
+					);
+					if (!hasCustomValues) {
+						repo.profileId = "default";
+						needsCleanup = true;
+					}
+				}
+			}
+		}
+		if (needsCleanup) {
+			// Remove orphaned profiles (no repo references them)
+			const usedProfileIds = new Set(this.settings.repositories.map(r => r.profileId));
+			this.settings.profiles = this.settings.profiles.filter(
+				p => p.id === "default" || p.id === "default-project" || usedProfileIds.has(p.id)
+			);
+			await this.saveData(this.settings);
+		}
+
 		// Migrate repos that still have old per-repo settings into their own profiles
 		const defaultProfile = this.settings.profiles.find(p => p.id === "default") ?? DEFAULT_REPOSITORY_PROFILE;
 		let needsSave = false;
 		this.settings.repositories = this.settings.repositories.map(repo => {
 			// Skip repos that already have a non-default profile assigned
 			if (repo.profileId && repo.profileId !== "default") {
+				delete (repo as any).ignoreGlobalSettings;
+				return repo;
+			}
+
+			// Check if repo actually has any profile-managed fields to migrate
+			// (after stripProfileFieldsFromRepo they won't exist anymore)
+			const hasProfileFields = (
+				(repo as any).issueUpdateMode !== undefined ||
+				(repo as any).issueFolder !== undefined ||
+				(repo as any).issueNoteTemplate !== undefined ||
+				(repo as any).pullRequestUpdateMode !== undefined ||
+				(repo as any).pullRequestFolder !== undefined ||
+				(repo as any).pullRequestNoteTemplate !== undefined
+			);
+
+			if (!hasProfileFields) {
+				// No profile-managed fields on repo — nothing to migrate
+				if (!repo.profileId) repo.profileId = "default";
 				delete (repo as any).ignoreGlobalSettings;
 				return repo;
 			}
@@ -657,11 +719,42 @@ export default class GitHubTrackerPlugin extends Plugin {
 		// Defaults first, then override with saved values
 		this.settings.repositories = this.settings.repositories.map(repo => {
 			const merged = Object.assign({}, DEFAULT_REPOSITORY_TRACKING, repo);
-			// Ensure critical fields are never undefined
-			if (!merged.issueFolder) merged.issueFolder = DEFAULT_REPOSITORY_TRACKING.issueFolder;
-			if (!merged.pullRequestFolder) merged.pullRequestFolder = DEFAULT_REPOSITORY_TRACKING.pullRequestFolder;
 			if (!merged.profileId) merged.profileId = "default";
 			return merged;
+		});
+
+		// Migrate trackIssues/trackPullRequest from repos into their profiles
+		let needsTrackMigration = false;
+		for (const repo of this.settings.repositories) {
+			// Check if repo still has trackIssues/trackPullRequest explicitly set
+			// (they are now optional and profile-managed)
+			if ((repo as any).trackIssues !== undefined || (repo as any).trackPullRequest !== undefined) {
+				const profileId = repo.profileId || "default";
+				// Only migrate into non-default profiles (default profile would affect all repos)
+				if (profileId !== "default") {
+					const profile = this.settings.profiles.find(p => p.id === profileId);
+					if (profile && profile.type === "repository") {
+						if (profile.trackIssues === undefined && (repo as any).trackIssues !== undefined) {
+							profile.trackIssues = (repo as any).trackIssues;
+						}
+						if (profile.trackPullRequest === undefined && (repo as any).trackPullRequest !== undefined) {
+							profile.trackPullRequest = (repo as any).trackPullRequest;
+						}
+					}
+				}
+				// Remove migrated fields from repo so migration doesn't re-trigger
+				delete (repo as any).trackIssues;
+				delete (repo as any).trackPullRequest;
+				needsTrackMigration = true;
+			}
+		}
+		if (needsTrackMigration) {
+			await this.saveData(this.settings);
+		}
+
+		// Hydrate profile-managed fields onto each repo from its profile
+		this.settings.repositories = this.settings.repositories.map(repo => {
+			return getEffectiveRepoSettings(repo, this.settings);
 		});
 
 	}
@@ -690,7 +783,22 @@ export default class GitHubTrackerPlugin extends Plugin {
 			};
 		}
 
-		await this.saveData(this.settings);
+		// Strip profile-managed fields from repos before persisting
+		const dataToSave = {
+			...this.settings,
+			repositories: this.settings.repositories.map(repo =>
+				stripProfileFieldsFromRepo(repo)
+			),
+		};
+		await this.saveData(dataToSave);
+
+		// Re-hydrate in-memory repos so profile changes take effect immediately
+		// Mutate existing objects in place to preserve closure references in the UI
+		for (const repo of this.settings.repositories) {
+			const effective = getEffectiveRepoSettings(repo, this.settings);
+			Object.assign(repo, effective);
+		}
+
 		const token = this.getGitHubToken();
 		if (token) {
 			this.gitHubClient?.initializeClient();
@@ -749,14 +857,14 @@ export default class GitHubTrackerPlugin extends Plugin {
 
 		try {
 			for (const repo of this.settings.repositories) {
-				if (!repo.trackIssues) continue;
-
 				const [owner, repoName] = repo.repository.split("/");
 				if (!owner || !repoName) continue;
 
 				try {
+					const effectiveRepo = getEffectiveRepoSettings(repo, this.settings);
+					if (!effectiveRepo.trackIssues) continue;
 					this.noticeManager.debug(
-						`Fetching issues for ${repo.repository}`,
+						`Fetching issues for ${effectiveRepo.repository}`,
 					);
 					const allIssuesIncludingRecentlyClosed =
 						await this.gitHubClient.fetchRepositoryIssues(
@@ -771,12 +879,12 @@ export default class GitHubTrackerPlugin extends Plugin {
 					);
 
 					// Decide which issues to filter based on settings
-					const issuesToFilter = repo.includeClosedIssues
+					const issuesToFilter = effectiveRepo.includeClosedIssues
 						? allIssuesIncludingRecentlyClosed
 						: openIssues;
 
 					const filteredIssues = this.fileManager.filterIssues(
-						repo,
+						effectiveRepo,
 						issuesToFilter,
 					);
 
@@ -790,14 +898,14 @@ export default class GitHubTrackerPlugin extends Plugin {
 					);
 
 					await this.fileManager.createIssueFiles(
-						repo,
+						effectiveRepo,
 						filteredIssues,
 						allIssuesIncludingRecentlyClosed,
 						currentIssueNumbers,
 					);
 
 					this.noticeManager.debug(
-						`Processed ${filteredIssues.length} open issues for ${repo.repository}`,
+						`Processed ${filteredIssues.length} open issues for ${effectiveRepo.repository}`,
 					);
 				} catch (repoError: unknown) {
 					this.noticeManager.error(
@@ -825,14 +933,14 @@ export default class GitHubTrackerPlugin extends Plugin {
 
 		try {
 			for (const repo of this.settings.repositories) {
-				if (!repo.trackPullRequest) continue;
-
 				const [owner, repoName] = repo.repository.split("/");
 				if (!owner || !repoName) continue;
 
 				try {
+					const effectiveRepo = getEffectiveRepoSettings(repo, this.settings);
+					if (!effectiveRepo.trackPullRequest) continue;
 					this.noticeManager.debug(
-						`Fetching pull requests for ${repo.repository}`,
+						`Fetching pull requests for ${effectiveRepo.repository}`,
 					);
 
 					const allPullRequestsIncludingRecentlyClosed =
@@ -849,12 +957,12 @@ export default class GitHubTrackerPlugin extends Plugin {
 						);
 
 					// Decide which pull requests to filter based on settings
-					const pullRequestsToFilter = repo.includeClosedPullRequests
+					const pullRequestsToFilter = effectiveRepo.includeClosedPullRequests
 						? allPullRequestsIncludingRecentlyClosed
 						: openPullRequests;
 
 					const filteredPRs = this.fileManager.filterPullRequests(
-						repo,
+						effectiveRepo,
 						pullRequestsToFilter,
 					);
 
@@ -869,14 +977,14 @@ export default class GitHubTrackerPlugin extends Plugin {
 					);
 
 					await this.fileManager.createPullRequestFiles(
-						repo,
+						effectiveRepo,
 						filteredPRs,
 						allPullRequestsIncludingRecentlyClosed,
 						currentPRNumbers,
 					);
 
 					this.noticeManager.debug(
-						`Processed ${filteredPRs.length} open pull requests for ${repo.repository}`,
+						`Processed ${filteredPRs.length} open pull requests for ${effectiveRepo.repository}`,
 					);
 				} catch (repoError: unknown) {
 					this.noticeManager.error(

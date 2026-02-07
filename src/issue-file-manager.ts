@@ -90,9 +90,10 @@ export class IssueFileManager {
 			await this.fileHelpers.ensureFolderExists(repo.customIssueFolder.trim());
 		} else {
 			// For default structure, ensure nested path exists
-			await this.fileHelpers.ensureFolderExists(repo.issueFolder);
-			await this.fileHelpers.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}`);
-			await this.fileHelpers.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`);
+			const issueFolder = repo.issueFolder ?? "GitHub";
+			await this.fileHelpers.ensureFolderExists(issueFolder);
+			await this.fileHelpers.ensureFolderExists(`${issueFolder}/${ownerCleaned}`);
+			await this.fileHelpers.ensureFolderExists(`${issueFolder}/${ownerCleaned}/${repoCleaned}`);
 		}
 
 		const file = this.app.vault.getAbstractFileByPath(`${issueFolderPath}/${fileName}`);

@@ -107,7 +107,7 @@ export class ProjectListManager {
 
 		const deselectAllButton = bulkActionButtons.createEl("button", {
 			text: "Deselect all",
-			cls: "github-issues-deselect-all-button"
+			cls: "github-issues-select-none-button"
 		});
 
 		const removeSelectedButton = bulkActionButtons.createEl("button", {
@@ -268,6 +268,8 @@ export class ProjectListManager {
 				);
 				projectItem.setAttribute("data-project-id", project.id);
 				projectItem.setAttribute("data-owner-name", owner.toLowerCase());
+				projectItem.setAttribute("data-repo-name", project.title.toLowerCase());
+				projectItem.setAttribute("data-full-name", `${owner}/${project.title}`.toLowerCase());
 
 				const headerContainer = projectItem.createDiv(
 					"github-issues-repo-header-container",

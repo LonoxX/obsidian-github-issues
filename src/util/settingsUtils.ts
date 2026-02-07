@@ -1,6 +1,33 @@
 import { RepositoryTracking, GitHubTrackerSettings, SettingsProfile, TrackedProject, DEFAULT_REPOSITORY_PROFILE, DEFAULT_PROJECT_PROFILE } from "../types";
 
 /**
+ * Fields managed exclusively by profiles. These are stripped from repo objects
+ * before persisting to data.json and hydrated back from the profile on load.
+ */
+const PROFILE_MANAGED_FIELDS: (keyof RepositoryTracking)[] = [
+	'trackIssues', 'trackPullRequest',
+	'issueUpdateMode', 'allowDeleteIssue', 'issueFolder', 'issueNoteTemplate',
+	'issueContentTemplate', 'useCustomIssueContentTemplate',
+	'includeIssueComments', 'includeClosedIssues', 'includeSubIssues',
+	'pullRequestUpdateMode', 'allowDeletePullRequest', 'pullRequestFolder',
+	'pullRequestNoteTemplate', 'pullRequestContentTemplate',
+	'useCustomPullRequestContentTemplate', 'includePullRequestComments',
+	'includeClosedPullRequests',
+];
+
+/**
+ * Strip profile-managed fields from a repo object for persistence.
+ * Returns a new object with only repo-specific fields.
+ */
+export function stripProfileFieldsFromRepo(repo: RepositoryTracking): Partial<RepositoryTracking> {
+	const stripped: any = { ...repo };
+	for (const field of PROFILE_MANAGED_FIELDS) {
+		delete stripped[field];
+	}
+	return stripped;
+}
+
+/**
  * Find a profile by ID from the settings
  */
 export function getProfileById(
@@ -50,6 +77,8 @@ export function getEffectiveRepoSettings(
 function applyProfileToRepo(repo: RepositoryTracking, profile: SettingsProfile): RepositoryTracking {
 	return {
 		...repo,
+		trackIssues: profile.trackIssues ?? true,
+		trackPullRequest: profile.trackPullRequest ?? false,
 		issueUpdateMode: profile.issueUpdateMode ?? "none",
 		allowDeleteIssue: profile.allowDeleteIssue ?? true,
 		issueFolder: profile.issueFolder ?? "GitHub",

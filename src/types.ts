@@ -23,6 +23,8 @@ export interface SettingsProfile {
 	includePullRequestComments?: boolean;
 	includeClosedIssues?: boolean;
 	includeClosedPullRequests?: boolean;
+	trackIssues?: boolean;
+	trackPullRequest?: boolean;
 	includeSubIssues?: boolean;
 
 	// Project-type profile fields
@@ -43,24 +45,12 @@ export interface RepositoryTracking {
 	repository: string;
 	profileId: string; // ID of the SettingsProfile to use
 	ignoreGlobalSettings?: boolean; // @deprecated - kept for migration only
-	trackIssues: boolean;
-	issueUpdateMode: "none" | "update" | "append";
-	allowDeleteIssue: boolean;
-	issueFolder: string;
+	trackIssues?: boolean;
+	trackPullRequest?: boolean;
 	useCustomIssueFolder: boolean;
 	customIssueFolder: string;
-	issueNoteTemplate: string;
-	issueContentTemplate: string;
-	useCustomIssueContentTemplate: boolean;
-	trackPullRequest: boolean;
-	pullRequestFolder: string;
 	useCustomPullRequestFolder: boolean;
 	customPullRequestFolder: string;
-	pullRequestNoteTemplate: string;
-	pullRequestContentTemplate: string;
-	useCustomPullRequestContentTemplate: boolean;
-	pullRequestUpdateMode: "none" | "update" | "append";
-	allowDeletePullRequest: boolean;
 	enableLabelFilter: boolean;
 	labelFilterMode: "include" | "exclude";
 	labelFilters: string[];
@@ -73,12 +63,26 @@ export interface RepositoryTracking {
 	enablePrAssigneeFilter: boolean;
 	prAssigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
 	prAssigneeFilters: string[];
-	includeIssueComments: boolean;
-	includePullRequestComments: boolean;
-	includeClosedIssues: boolean;
-	includeClosedPullRequests: boolean;
 	escapeHashTags: boolean;
-	includeSubIssues: boolean;
+
+	// Profile-managed fields (optional - hydrated from profile at runtime)
+	issueUpdateMode?: "none" | "update" | "append";
+	allowDeleteIssue?: boolean;
+	issueFolder?: string;
+	issueNoteTemplate?: string;
+	issueContentTemplate?: string;
+	useCustomIssueContentTemplate?: boolean;
+	includeIssueComments?: boolean;
+	includeClosedIssues?: boolean;
+	includeSubIssues?: boolean;
+	pullRequestUpdateMode?: "none" | "update" | "append";
+	allowDeletePullRequest?: boolean;
+	pullRequestFolder?: string;
+	pullRequestNoteTemplate?: string;
+	pullRequestContentTemplate?: string;
+	useCustomPullRequestContentTemplate?: boolean;
+	includePullRequestComments?: boolean;
+	includeClosedPullRequests?: boolean;
 }
 
 // Basic project info for selection UI
@@ -241,6 +245,8 @@ export const DEFAULT_REPOSITORY_PROFILE: SettingsProfile = {
 	useCustomPullRequestContentTemplate: false,
 	includePullRequestComments: true,
 	includeClosedIssues: false,
+	trackIssues: true,
+	trackPullRequest: false,
 	includeClosedPullRequests: false,
 	includeSubIssues: false,
 };
@@ -285,28 +291,14 @@ export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	trackedProjects: [],
 };
 
-// Default repository tracking settings
+// Default repository tracking settings (repo-specific fields only; profile fields come from the profile)
 export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	repository: "",
 	profileId: "default",
-	trackIssues: true,
-	issueUpdateMode: "none",
-	allowDeleteIssue: true,
-	issueFolder: "GitHub",
 	useCustomIssueFolder: false,
 	customIssueFolder: "",
-	issueNoteTemplate: "Issue - {number}",
-	issueContentTemplate: "",
-	useCustomIssueContentTemplate: false,
-	trackPullRequest: false,
-	pullRequestFolder: "GitHub Pull Requests",
 	useCustomPullRequestFolder: false,
 	customPullRequestFolder: "",
-	pullRequestNoteTemplate: "PR - {number}",
-	pullRequestContentTemplate: "",
-	useCustomPullRequestContentTemplate: false,
-	pullRequestUpdateMode: "none",
-	allowDeletePullRequest: true,
 	enableLabelFilter: false,
 	labelFilterMode: "include",
 	labelFilters: [],
@@ -319,10 +311,5 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	enablePrAssigneeFilter: false,
 	prAssigneeFilterMode: "assigned-to-me",
 	prAssigneeFilters: [],
-	includeIssueComments: true,
-	includePullRequestComments: true,
-	includeClosedIssues: false,
-	includeClosedPullRequests: false,
 	escapeHashTags: false,
-	includeSubIssues: false,
 };

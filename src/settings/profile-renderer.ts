@@ -106,9 +106,56 @@ export class ProfileRenderer {
 
 		const isCustomProfile = selectedProfile && selectedProfile.id !== "default" && selectedProfile.id !== "default-project";
 
-		// Rename input - inline in toolbar, only for custom profiles
+		// Helper to create the new/copy/delete buttons
+		const addNewButton = (parent: HTMLElement) => {
+			const btn = parent.createEl("button", {
+				cls: "github-issues-profile-toolbar-btn",
+				attr: { "aria-label": "New Profile" },
+			});
+			setIcon(btn, "plus");
+			btn.onclick = () => {
+				this.showCreateProfileModal(onRefreshNeeded);
+			};
+		};
+
+		const addCopyButton = (parent: HTMLElement) => {
+			if (!selectedProfile) return;
+			const btn = parent.createEl("button", {
+				cls: "github-issues-profile-toolbar-btn",
+				attr: { "aria-label": "Duplicate Profile" },
+			});
+			setIcon(btn, "copy");
+			btn.onclick = async () => {
+				const newProfile: SettingsProfile = {
+					...selectedProfile,
+					id: `profile-${Date.now()}`,
+					name: `${selectedProfile.name} (Copy)`,
+				};
+				this.plugin.settings.profiles.push(newProfile);
+				await this.plugin.saveSettings();
+				this.selectedProfileId = newProfile.id;
+				new Notice(`Profile "${newProfile.name}" created`);
+				onRefreshNeeded();
+			};
+		};
+
+		const addDeleteButton = (parent: HTMLElement) => {
+			if (!isCustomProfile) return;
+			const btn = parent.createEl("button", {
+				cls: "github-issues-profile-toolbar-btn github-issues-profile-delete-btn",
+				attr: { "aria-label": "Delete Profile" },
+			});
+			setIcon(btn, "trash-2");
+			btn.onclick = () => {
+				this.showDeleteProfileModal(selectedProfile!, onRefreshNeeded);
+			};
+		};
+
 		if (isCustomProfile) {
-			const renameInput = toolbarContainer.createEl("input", {
+			// Custom profile: actions row below with rename + buttons
+			const actionsRow = container.createDiv("github-issues-profile-actions-row");
+
+			const renameInput = actionsRow.createEl("input", {
 				cls: "github-issues-profile-rename-input",
 				type: "text",
 				value: selectedProfile.name,
@@ -121,26 +168,14 @@ export class ProfileRenderer {
 					updateButtonLabel(selectedProfile);
 				}
 			});
-		}
 
-		const newButton = toolbarContainer.createEl("button", {
-			cls: "github-issues-profile-toolbar-btn",
-			attr: { "aria-label": "New Profile" },
-		});
-		setIcon(newButton, "plus");
-		newButton.onclick = () => {
-			this.showCreateProfileModal(onRefreshNeeded);
-		};
-
-		if (isCustomProfile) {
-			const deleteButton = toolbarContainer.createEl("button", {
-				cls: "github-issues-profile-toolbar-btn github-issues-profile-delete-btn",
-				attr: { "aria-label": "Delete Profile" },
-			});
-			setIcon(deleteButton, "trash-2");
-			deleteButton.onclick = () => {
-				this.showDeleteProfileModal(selectedProfile, onRefreshNeeded);
-			};
+			addNewButton(actionsRow);
+			addCopyButton(actionsRow);
+			addDeleteButton(actionsRow);
+		} else {
+			// Default profile: buttons inline next to dropdown
+			addNewButton(toolbarContainer);
+			addCopyButton(toolbarContainer);
 		}
 
 		// Profile settings form
@@ -164,6 +199,28 @@ export class ProfileRenderer {
 		new Setting(issuesContainer).setName("Issues").setHeading();
 
 		new Setting(issuesContainer)
+			.setName("Track issues")
+			.setDesc("Enable or disable issue tracking for repositories using this profile")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(profile.trackIssues ?? true)
+					.onChange(async (value) => {
+						profile.trackIssues = value;
+						issuesSettingsContainer.classList.toggle(
+							"github-issues-hidden",
+							!value,
+						);
+						await this.plugin.saveSettings();
+					})
+			);
+
+		const issuesSettingsContainer = issuesContainer.createDiv("github-issues-settings-group");
+		issuesSettingsContainer.classList.toggle(
+			"github-issues-hidden",
+			!(profile.trackIssues ?? true),
+		);
+
+		new Setting(issuesSettingsContainer)
 			.setName("Update mode")
 			.setDesc("How to handle updates to existing issue files")
 			.addDropdown((dropdown) =>
@@ -178,7 +235,7 @@ export class ProfileRenderer {
 					})
 			);
 
-		new Setting(issuesContainer)
+		new Setting(issuesSettingsContainer)
 			.setName("Allow deletion")
 			.setDesc("Allow deletion of local issue files when closed on GitHub")
 			.addToggle((toggle) =>
@@ -190,7 +247,7 @@ export class ProfileRenderer {
 					})
 			);
 
-		new Setting(issuesContainer)
+		new Setting(issuesSettingsContainer)
 			.setName("Folder")
 			.setDesc("Default folder where issue files will be stored")
 			.addText((text) => {
@@ -204,7 +261,7 @@ export class ProfileRenderer {
 				new FolderSuggest(this.app, text.inputEl);
 			});
 
-		new Setting(issuesContainer)
+		new Setting(issuesSettingsContainer)
 			.setName("Filename template")
 			.setDesc("Template for issue filenames")
 			.addText((text) =>
@@ -217,7 +274,7 @@ export class ProfileRenderer {
 					})
 			);
 
-		new Setting(issuesContainer)
+		new Setting(issuesSettingsContainer)
 			.setName("Content template")
 			.setDesc("Template file for issue content (optional)")
 			.addText((text) => {
@@ -232,7 +289,7 @@ export class ProfileRenderer {
 				new FileSuggest(this.app, text.inputEl);
 			});
 
-		new Setting(issuesContainer)
+		new Setting(issuesSettingsContainer)
 			.setName("Include comments")
 			.setDesc("Include comments in issue files")
 			.addToggle((toggle) =>
@@ -244,7 +301,7 @@ export class ProfileRenderer {
 					})
 			);
 
-		new Setting(issuesContainer)
+		new Setting(issuesSettingsContainer)
 			.setName("Include closed issues")
 			.setDesc("Also track closed issues")
 			.addToggle((toggle) =>
@@ -256,11 +313,45 @@ export class ProfileRenderer {
 					})
 			);
 
+		new Setting(issuesSettingsContainer)
+			.setName("Include sub-issues")
+			.setDesc("Include sub-issues in generated issue files")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(profile.includeSubIssues ?? false)
+					.onChange(async (value) => {
+						profile.includeSubIssues = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Pull Requests subsection
 		const prContainer = container.createDiv("github-issues-nested");
 		new Setting(prContainer).setName("Pull Requests").setHeading();
 
 		new Setting(prContainer)
+			.setName("Track pull requests")
+			.setDesc("Enable or disable pull request tracking for repositories using this profile")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(profile.trackPullRequest ?? false)
+					.onChange(async (value) => {
+						profile.trackPullRequest = value;
+						prSettingsContainer.classList.toggle(
+							"github-issues-hidden",
+							!value,
+						);
+						await this.plugin.saveSettings();
+					})
+			);
+
+		const prSettingsContainer = prContainer.createDiv("github-issues-settings-group");
+		prSettingsContainer.classList.toggle(
+			"github-issues-hidden",
+			!(profile.trackPullRequest ?? false),
+		);
+
+		new Setting(prSettingsContainer)
 			.setName("Update mode")
 			.setDesc("How to handle updates to existing pull request files")
 			.addDropdown((dropdown) =>
@@ -275,7 +366,7 @@ export class ProfileRenderer {
 					})
 			);
 
-		new Setting(prContainer)
+		new Setting(prSettingsContainer)
 			.setName("Allow deletion")
 			.setDesc("Allow deletion of local PR files when closed on GitHub")
 			.addToggle((toggle) =>
@@ -287,7 +378,7 @@ export class ProfileRenderer {
 					})
 			);
 
-		new Setting(prContainer)
+		new Setting(prSettingsContainer)
 			.setName("Folder")
 			.setDesc("Default folder where pull request files will be stored")
 			.addText((text) => {
@@ -301,7 +392,7 @@ export class ProfileRenderer {
 				new FolderSuggest(this.app, text.inputEl);
 			});
 
-		new Setting(prContainer)
+		new Setting(prSettingsContainer)
 			.setName("Filename template")
 			.setDesc("Template for pull request filenames")
 			.addText((text) =>
@@ -314,7 +405,7 @@ export class ProfileRenderer {
 					})
 			);
 
-		new Setting(prContainer)
+		new Setting(prSettingsContainer)
 			.setName("Content template")
 			.setDesc("Template file for pull request content (optional)")
 			.addText((text) => {
@@ -329,7 +420,7 @@ export class ProfileRenderer {
 				new FileSuggest(this.app, text.inputEl);
 			});
 
-		new Setting(prContainer)
+		new Setting(prSettingsContainer)
 			.setName("Include comments")
 			.setDesc("Include comments in pull request files")
 			.addToggle((toggle) =>
@@ -341,7 +432,7 @@ export class ProfileRenderer {
 					})
 			);
 
-		new Setting(prContainer)
+		new Setting(prSettingsContainer)
 			.setName("Include closed pull requests")
 			.setDesc("Also track closed pull requests")
 			.addToggle((toggle) =>
@@ -353,21 +444,6 @@ export class ProfileRenderer {
 					})
 			);
 
-		// General subsection
-		const generalContainer = container.createDiv("github-issues-nested");
-		new Setting(generalContainer).setName("General").setHeading();
-
-		new Setting(generalContainer)
-			.setName("Include sub-issues")
-			.setDesc("Include sub-issues in generated issue files")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(profile.includeSubIssues ?? false)
-					.onChange(async (value) => {
-						profile.includeSubIssues = value;
-						await this.plugin.saveSettings();
-					})
-			);
 	}
 
 	/**

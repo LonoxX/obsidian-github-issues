@@ -33,7 +33,7 @@ export class ProjectRenderer {
 					.onChange(async (value) => {
 						project.useCustomStatusOrder = value;
 						statusOrderContainer.classList.toggle(
-							"github-issues-settings-hidden",
+							"github-issues-hidden",
 							!value,
 						);
 						await this.plugin.saveSettings();
@@ -45,7 +45,7 @@ export class ProjectRenderer {
 			"github-issues-settings-group github-issues-nested",
 		);
 		statusOrderContainer.classList.toggle(
-			"github-issues-settings-hidden",
+			"github-issues-hidden",
 			!(project.useCustomStatusOrder ?? false),
 		);
 

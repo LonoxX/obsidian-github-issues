@@ -14,86 +14,38 @@ export class RepositoryRenderer {
 		container: HTMLElement,
 		repo: RepositoryTracking,
 	): void {
-		new Setting(container).setName("Issues").setHeading();
+		new Setting(container).setName("Issue filters").setHeading();
 
 		container
 			.createEl("p", {
-				text: "Configure issue tracking for this repository. Folders, templates, and other settings are managed via the assigned profile.",
+				text: "Filter which issues are synced for this repository. Tracking, folders, templates, and other settings are managed via the assigned profile.",
 			})
 			.addClass("setting-item-description");
 
-		const issuesSettingsContainer = container.createDiv(
-			"github-issues-settings-group",
-		);
-
-		new Setting(container)
-			.setName("Track issues")
-			.setDesc("Enable or disable issue tracking for this repository")
-			.addToggle((toggle) =>
-				toggle.setValue(repo.trackIssues).onChange(async (value) => {
-					repo.trackIssues = value;
-					issuesSettingsContainer.classList.toggle(
-						"github-issues-settings-hidden",
-						!value,
-					);
-					await this.plugin.saveSettings();
-				}),
-			);
-		issuesSettingsContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.trackIssues,
-		);
-
 		// Label filtering settings
-		this.renderLabelFilter(issuesSettingsContainer, repo, 'issue');
+		this.renderLabelFilter(container, repo, 'issue');
 
 		// Assignee filtering settings
-		this.renderAssigneeFilter(issuesSettingsContainer, repo, 'issue');
+		this.renderAssigneeFilter(container, repo, 'issue');
 	}
 
 	renderPullRequestSettings(
 		container: HTMLElement,
 		repo: RepositoryTracking,
 	): void {
-		new Setting(container).setName("Pull requests").setHeading();
+		new Setting(container).setName("Pull request filters").setHeading();
 
 		container
 			.createEl("p", {
-				text: "Configure pull request tracking for this repository. Folders, templates, and other settings are managed via the assigned profile.",
+				text: "Filter which pull requests are synced for this repository. Tracking, folders, templates, and other settings are managed via the assigned profile.",
 			})
 			.addClass("setting-item-description");
 
-		const pullRequestsSettingsContainer = container.createDiv(
-			"github-issues-settings-group",
-		);
-
-		new Setting(container)
-			.setName("Track pull requests")
-			.setDesc(
-				"Enable or disable pull request tracking for this repository",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(repo.trackPullRequest)
-					.onChange(async (value) => {
-						repo.trackPullRequest = value;
-						pullRequestsSettingsContainer.classList.toggle(
-							"github-issues-settings-hidden",
-							!value,
-						);
-						await this.plugin.saveSettings();
-					}),
-			);
-		pullRequestsSettingsContainer.classList.toggle(
-			"github-issues-settings-hidden",
-			!repo.trackPullRequest,
-		);
-
 		// Label filtering settings for pull requests
-		this.renderLabelFilter(pullRequestsSettingsContainer, repo, 'pr');
+		this.renderLabelFilter(container, repo, 'pr');
 
 		// Assignee filtering settings for pull requests
-		this.renderAssigneeFilter(pullRequestsSettingsContainer, repo, 'pr');
+		this.renderAssigneeFilter(container, repo, 'pr');
 	}
 
 	private renderLabelFilter(
@@ -115,7 +67,7 @@ export class RepositoryRenderer {
 					.onChange(async (value) => {
 						repo[enableFilterProp] = value;
 						labelFilterContainer.classList.toggle(
-							"github-issues-settings-hidden",
+							"github-issues-hidden",
 							!value,
 						);
 						await this.plugin.saveSettings();
@@ -126,7 +78,7 @@ export class RepositoryRenderer {
 			"github-issues-settings-group github-issues-nested",
 		);
 		labelFilterContainer.classList.toggle(
-			"github-issues-settings-hidden",
+			"github-issues-hidden",
 			!(repo[enableFilterProp] ?? false),
 		);
 
@@ -194,7 +146,7 @@ export class RepositoryRenderer {
 					.onChange(async (value) => {
 						repo[enableFilterProp] = value;
 						assigneeFilterContainer.classList.toggle(
-							"github-issues-settings-hidden",
+							"github-issues-hidden",
 							!value,
 						);
 						await this.plugin.saveSettings();
@@ -205,7 +157,7 @@ export class RepositoryRenderer {
 			"github-issues-settings-group github-issues-nested",
 		);
 		assigneeFilterContainer.classList.toggle(
-			"github-issues-settings-hidden",
+			"github-issues-hidden",
 			!(repo[enableFilterProp] ?? false),
 		);
 
@@ -222,7 +174,7 @@ export class RepositoryRenderer {
 					.onChange(async (value) => {
 						repo[filterModeProp] = value as "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
 						assigneeSpecificContainer.classList.toggle(
-							"github-issues-settings-hidden",
+							"github-issues-hidden",
 							value !== "assigned-to-specific",
 						);
 						await this.plugin.saveSettings();
@@ -233,7 +185,7 @@ export class RepositoryRenderer {
 			"github-issues-settings-group github-issues-nested",
 		);
 		assigneeSpecificContainer.classList.toggle(
-			"github-issues-settings-hidden",
+			"github-issues-hidden",
 			(repo[filterModeProp] ?? "assigned-to-me") !== "assigned-to-specific",
 		);
 

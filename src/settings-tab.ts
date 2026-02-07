@@ -505,12 +505,8 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			})
 			.addClass("setting-item-description");
 
-		const projectSettingsContainer = projectsContainer.createDiv(
-			"github-issues-settings-group",
-		);
-
 		// Tabs for Projects (like Repositories)
-		const projectTabsContainer = projectSettingsContainer.createDiv(
+		const projectTabsContainer = projectsContainer.createDiv(
 			"github-issues-repos-tabs-container",
 		);
 
@@ -525,14 +521,152 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		});
 		availableProjectsTab.addClass("github-issues-tab");
 
-		const trackedProjectsContent = projectSettingsContainer.createDiv(
+		const trackedProjectsContent = projectsContainer.createDiv(
 			"github-issues-tab-content",
 		);
 		trackedProjectsContent.addClass("active");
 
-		const availableProjectsContent = projectSettingsContainer.createDiv(
+		const availableProjectsContent = projectsContainer.createDiv(
 			"github-issues-tab-content",
 		);
+
+		// Tracked Projects search bar
+		const trackedProjectsSearchContainer = trackedProjectsContent.createDiv(
+			"github-issues-search-container",
+		);
+		trackedProjectsSearchContainer.addClass("github-issues-tracked-search");
+		const projectSearchHeaderContainer = trackedProjectsSearchContainer.createDiv(
+			"github-issues-search-header",
+		);
+		const projectSearchIconContainer = projectSearchHeaderContainer.createDiv(
+			"github-issues-search-icon",
+		);
+		setIcon(projectSearchIconContainer, "search");
+
+		const projectSearchLabel = projectSearchHeaderContainer.createEl("label", {
+			text: "Search tracked projects",
+		});
+		projectSearchLabel.addClass("github-issues-search-label");
+
+		const projectSearchInputContainer = trackedProjectsSearchContainer.createDiv(
+			"github-issues-search-input-container",
+		);
+		const projectSearchInput = projectSearchInputContainer.createEl("input");
+		projectSearchInput.type = "text";
+		projectSearchInput.placeholder = "Filter by name or owner...";
+		projectSearchInput.addClass("github-issues-search-input");
+		const projectClearButton = projectSearchInputContainer.createDiv(
+			"github-issues-search-clear-button github-issues-hidden",
+		);
+		setIcon(projectClearButton, "x");
+		projectClearButton.addEventListener("click", () => {
+			projectSearchInput.value = "";
+			projectClearButton.classList.add("github-issues-hidden");
+			projectSearchInput.dispatchEvent(new Event("input"));
+			projectSearchInput.focus();
+		});
+
+		const projectStatsCounter = trackedProjectsSearchContainer.createDiv(
+			"github-issues-stats-counter",
+		);
+		projectStatsCounter.setText(
+			`Showing all ${this.plugin.settings.trackedProjects.length} projects`,
+		);
+		projectSearchInput.addEventListener("input", () => {
+			const searchTerm = projectSearchInput.value.toLowerCase();
+
+			if (searchTerm.length > 0) {
+				projectClearButton.classList.remove("github-issues-hidden");
+			} else {
+				projectClearButton.classList.add("github-issues-hidden");
+			}
+
+			const projectItems = trackedProjectsContent.querySelectorAll(
+				".github-issues-repo-settings",
+			);
+			let visibleProjects = 0;
+
+			const visibleProjectsByOwner: Record<string, number> = {};
+
+			projectItems.forEach((item) => {
+				const repoName =
+					item.getAttribute("data-repo-name")?.toLowerCase() || "";
+				const ownerName =
+					item.getAttribute("data-owner-name")?.toLowerCase() || "";
+				const fullName =
+					item.getAttribute("data-full-name")?.toLowerCase() || "";
+
+				if (
+					fullName.includes(searchTerm) ||
+					repoName.includes(searchTerm) ||
+					ownerName.includes(searchTerm)
+				) {
+					(item as HTMLElement).classList.remove(
+						"github-issues-hidden",
+					);
+					visibleProjects++;
+
+					if (!visibleProjectsByOwner[ownerName]) {
+						visibleProjectsByOwner[ownerName] = 0;
+					}
+					visibleProjectsByOwner[ownerName]++;
+				} else {
+					(item as HTMLElement).classList.add("github-issues-hidden");
+				}
+			});
+
+			const ownerGroups = trackedProjectsContent.querySelectorAll(
+				".github-issues-repo-owner-group",
+			);
+			ownerGroups.forEach((group) => {
+				const ownerName =
+					group.getAttribute("data-owner")?.toLowerCase() || "";
+
+				if (
+					visibleProjectsByOwner[ownerName] &&
+					visibleProjectsByOwner[ownerName] > 0
+				) {
+					(group as HTMLElement).classList.remove(
+						"github-issues-hidden",
+					);
+				} else {
+					(group as HTMLElement).classList.add(
+						"github-issues-hidden",
+					);
+				}
+			});
+
+			if (searchTerm.length > 0) {
+				projectStatsCounter.setText(
+					`Showing ${visibleProjects} of ${this.plugin.settings.trackedProjects.length} projects`,
+				);
+			} else {
+				projectStatsCounter.setText(
+					`Showing all ${this.plugin.settings.trackedProjects.length} projects`,
+				);
+			}
+
+			const noProjects = trackedProjectsContent.querySelector(
+				".github-issues-no-repos",
+			);
+			if (noProjects) {
+				noProjects.classList.toggle(
+					"github-issues-hidden",
+					visibleProjects > 0,
+				);
+			}
+
+			const noResults = trackedProjectsContent.querySelector(
+				".github-issues-no-results",
+			);
+			if (noResults) {
+				noResults.classList.toggle(
+					"github-issues-hidden",
+					visibleProjects > 0 ||
+						this.plugin.settings.trackedProjects.length === 0,
+				);
+			}
+		});
 
 		// Tracked Projects content
 		const projectListContainer = trackedProjectsContent.createDiv(
@@ -609,19 +743,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		};
 
 		// Tab switching
-		trackedProjectsTab.onclick = () => {
-			trackedProjectsTab.addClass("mod-cta");
-			availableProjectsTab.removeClass("mod-cta");
-			trackedProjectsContent.addClass("active");
-			availableProjectsContent.removeClass("active");
-		};
-
-		availableProjectsTab.onclick = () => {
-			availableProjectsTab.addClass("mod-cta");
-			trackedProjectsTab.removeClass("mod-cta");
-			availableProjectsContent.addClass("active");
-			trackedProjectsContent.removeClass("active");
-		};
+		UIHelpers.setupTabSwitching(trackedProjectsTab, availableProjectsTab, trackedProjectsContent, availableProjectsContent);
 
 		// Repositories Section
 		const repoContainer = containerEl.createDiv("github-issues-settings-group github-issues-section-margin");
@@ -900,19 +1022,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			(repos) => this.modalManager.showBulkDeleteRepositoriesModal(repos, () => this.display())
 		);
 
-		trackedReposTab.onclick = () => {
-			trackedReposTab.addClass("mod-cta");
-			availableReposTab.removeClass("mod-cta");
-			trackedReposContent.addClass("active");
-			availableReposContent.removeClass("active");
-		};
-
-		availableReposTab.onclick = () => {
-			availableReposTab.addClass("mod-cta");
-			trackedReposTab.removeClass("mod-cta");
-			availableReposContent.addClass("active");
-			trackedReposContent.removeClass("active");
-		};
+		UIHelpers.setupTabSwitching(trackedReposTab, availableReposTab, trackedReposContent, availableReposContent);
 	}
 
 	private showAddRepositoryModal(): void {
@@ -1347,17 +1457,13 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			const searchInputWrapper = searchContainer.createDiv(
 				"github-issues-search-wrapper",
 			);
-			const searchIconContainer = searchInputWrapper.createDiv(
-				"github-issues-search-icon",
-			);
-			setIcon(searchIconContainer, "search");
 
 			const searchInput = searchInputWrapper.createEl("input");
 			searchInput.type = "text";
 			searchInput.placeholder = "Search repositories...";
 			searchInput.addClass("github-issues-search-input-modern");
 			const clearButton = searchInputWrapper.createDiv(
-				"github-issues-clear-button github-issues-hidden",
+				"github-issues-search-clear-button github-issues-hidden",
 			);
 			setIcon(clearButton, "x");
 			clearButton.addEventListener("click", () => {
@@ -2045,13 +2151,47 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 			container.empty();
 
-			// Actions bar
-			const actionsBar = container.createDiv("github-issues-actions-bar");
+			// Per-project profile selections
+			const projectProfileSelections = new Map<string, string>();
 
-			const bulkActionsContainer = actionsBar.createDiv(
+			// Search container (full width, rendered first)
+			const searchContainer = container.createDiv(
+				"github-issues-search-container",
+			);
+			searchContainer.addClass("github-issues-search-modern");
+
+			const searchInputWrapper = searchContainer.createDiv(
+				"github-issues-search-wrapper",
+			);
+
+			const searchInput = searchInputWrapper.createEl("input");
+			searchInput.type = "text";
+			searchInput.placeholder = "Search projects...";
+			searchInput.addClass("github-issues-search-input-modern");
+
+			const clearButton = searchInputWrapper.createDiv(
+				"github-issues-search-clear-button github-issues-hidden",
+			);
+			setIcon(clearButton, "x");
+			clearButton.addEventListener("click", () => {
+				searchInput.value = "";
+				clearButton.classList.add("github-issues-hidden");
+				searchInput.dispatchEvent(new Event("input"));
+				searchInput.focus();
+			});
+
+			const statsCounter = searchContainer.createDiv(
+				"github-issues-stats-counter",
+			);
+			statsCounter.setText(`Showing all ${projects.length} projects`);
+
+			// Bulk actions container (rendered after search)
+			const bulkActionsContainer = container.createDiv(
 				"github-issues-bulk-actions",
 			);
-			bulkActionsContainer.addClass("github-issues-bulk-actions-container");
+			bulkActionsContainer.addClass(
+				"github-issues-bulk-actions-container",
+			);
 
 			const selectionControls = bulkActionsContainer.createDiv(
 				"github-issues-selection-controls",
@@ -2066,7 +2206,6 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				text: "Select all",
 			});
 			selectAllButton.addClass("github-issues-select-all-button");
-
 			const selectNoneButton = selectionControls.createEl("button");
 			const selectNoneIcon = selectNoneButton.createEl("span", {
 				cls: "github-issues-button-icon",
@@ -2095,48 +2234,11 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			addSelectedButton.addClass("github-issues-add-selected-button");
 			addSelectedButton.disabled = true;
 
-			// Per-project profile selections
-			const projectProfileSelections = new Map<string, string>();
-
-			// Search container
-			const searchContainer = actionsBar.createDiv(
-				"github-issues-search-container",
-			);
-			searchContainer.addClass("github-issues-search-modern");
-
-			const searchInputWrapper = searchContainer.createDiv(
-				"github-issues-search-wrapper",
-			);
-			const searchIconContainer = searchInputWrapper.createDiv(
-				"github-issues-search-icon",
-			);
-			setIcon(searchIconContainer, "search");
-
-			const searchInput = searchInputWrapper.createEl("input");
-			searchInput.type = "text";
-			searchInput.placeholder = "Search projects...";
-			searchInput.addClass("github-issues-search-input-modern");
-
-			const clearButton = searchInputWrapper.createDiv(
-				"github-issues-clear-button github-issues-hidden",
-			);
-			setIcon(clearButton, "x");
-			clearButton.addEventListener("click", () => {
-				searchInput.value = "";
-				clearButton.classList.add("github-issues-hidden");
-				searchInput.dispatchEvent(new Event("input"));
-				searchInput.focus();
-			});
-
-			const statsCounter = searchContainer.createDiv(
-				"github-issues-stats-counter",
-			);
-			statsCounter.setText(`Showing all ${projects.length} projects`);
-
 			// Project list container
 			const projectListContainer = container.createDiv(
 				"github-issues-repo-list",
 			);
+			projectListContainer.addClass("github-issues-available-repos-list");
 
 			const noResultsMessage = container.createDiv(
 				"github-issues-no-results",
@@ -2174,6 +2276,17 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					selectedCountSpan.textContent = selectedCount.toString();
 				}
 				addSelectedButton.disabled = selectedCount === 0;
+
+				// Update sticky footer
+				const stickyCountSpan = stickyFooter?.querySelector(
+					".selected-count",
+				) as HTMLElement;
+				if (stickyCountSpan) {
+					stickyCountSpan.textContent = selectedCount.toString();
+				}
+				if (stickyFooter) {
+					stickyFooter.classList.toggle("github-issues-hidden", selectedCount === 0);
+				}
 			};
 
 			for (const ownerName of sortedOwners) {
@@ -2234,6 +2347,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					projectItem.setAttribute("data-project-id", project.id);
 					projectItem.setAttribute("data-project-title", project.title.toLowerCase());
 					projectItem.setAttribute("data-owner-name", project.owner.toLowerCase());
+					projectItem.setAttribute("data-full-name", `${project.owner}/${project.title}`.toLowerCase());
 
 					const projectInfoContainer = projectItem.createDiv(
 						"github-issues-repo-info",
@@ -2294,17 +2408,13 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						// Per-project profile selector
 						const projProfileSelect = actionContainer.createEl("select");
 						projProfileSelect.addClasses(["dropdown", "github-issues-inline-profile-select"]);
-						const noneOpt = projProfileSelect.createEl("option", {
-							text: "No profile",
-							value: "",
-						});
-						noneOpt.selected = true;
 						const availProjectProfiles = getProjectProfiles(this.plugin.settings);
 						for (const profile of availProjectProfiles) {
-							projProfileSelect.createEl("option", {
+							const opt = projProfileSelect.createEl("option", {
 								text: profile.name,
 								value: profile.id,
 							});
+							if (profile.id === "default") opt.selected = true;
 						}
 						projProfileSelect.onchange = () => {
 							projectProfileSelections.set(project.id, projProfileSelect.value);
@@ -2312,6 +2422,64 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					}
 				}
 			}
+
+			// Sticky "Add Selected" footer inside scrollable list
+			const stickyFooter = projectListContainer.createDiv(
+				"github-issues-sticky-add-footer",
+			);
+			stickyFooter.addClass("github-issues-hidden");
+			const stickyAddButton = stickyFooter.createEl("button");
+			stickyAddButton.createEl("span", {
+				cls: "github-issues-button-icon",
+				text: "+",
+			});
+			const stickyButtonText = stickyAddButton.createEl("span", {
+				cls: "github-issues-button-text",
+			});
+			stickyButtonText.setText("Add Selected (");
+			stickyButtonText.createEl("span", {
+				cls: "selected-count",
+				text: "0",
+			});
+			stickyButtonText.appendText(")");
+			stickyAddButton.addClass("github-issues-add-selected-button");
+			stickyAddButton.onclick = async () => {
+				if (selectedProjects.size > 0) {
+					const existingProjects = new Map(
+						this.plugin.settings.trackedProjects.map(p => [p.id, p])
+					);
+
+					for (const projectId of selectedProjects) {
+						if (!existingProjects.has(projectId)) {
+							const project = projects.find(p => p.id === projectId);
+							if (project) {
+								let statusOptions: any[] = [];
+								try {
+									statusOptions = await this.plugin.gitHubClient!.fetchProjectStatusOptions(project.id);
+								} catch {
+									// Ignore errors
+								}
+
+								this.plugin.settings.trackedProjects.push({
+									id: project.id,
+									title: project.title,
+									number: project.number,
+									url: project.url,
+									owner: project.owner,
+									enabled: true,
+									issueFolder: "GitHub/{project}",
+									statusOptions: statusOptions,
+									profileId: projectProfileSelections.get(project.id) || undefined,
+								});
+							}
+						}
+					}
+
+					await this.plugin.saveSettings();
+					new Notice(`Added ${selectedProjects.size} projects`);
+					this.display();
+				}
+			};
 
 			// Select all button
 			selectAllButton.onclick = () => {
@@ -2405,8 +2573,10 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				projectItems.forEach((item) => {
 					const projectTitle = item.getAttribute("data-project-title") || "";
 					const ownerName = item.getAttribute("data-owner-name") || "";
+					const fullName = item.getAttribute("data-full-name") || "";
 
 					if (
+						fullName.includes(searchTerm) ||
 						projectTitle.includes(searchTerm) ||
 						ownerName.includes(searchTerm)
 					) {
@@ -2426,16 +2596,31 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				);
 				ownerGroups.forEach((group) => {
 					const ownerName = group.getAttribute("data-owner") || "";
+					const chevron = group.querySelector(".github-issues-repo-owner-chevron");
 
 					if (
 						visibleProjectsByOwner[ownerName] &&
 						visibleProjectsByOwner[ownerName] > 0
 					) {
 						(group as HTMLElement).classList.remove("github-issues-hidden");
+						// Auto-expand groups with matches when searching
+						if (searchTerm.length > 0) {
+							(group as HTMLElement).classList.add("github-issues-owner-expanded");
+							if (chevron) setIcon(chevron as HTMLElement, "chevron-down");
+						}
 					} else {
 						(group as HTMLElement).classList.add("github-issues-hidden");
 					}
 				});
+
+				// When search is cleared, collapse all groups back to default
+				if (searchTerm.length === 0) {
+					ownerGroups.forEach((group) => {
+						const chevron = group.querySelector(".github-issues-repo-owner-chevron");
+						(group as HTMLElement).classList.remove("github-issues-owner-expanded");
+						if (chevron) setIcon(chevron as HTMLElement, "chevron-right");
+					});
+				}
 
 				if (searchTerm.length > 0) {
 					statsCounter.setText(

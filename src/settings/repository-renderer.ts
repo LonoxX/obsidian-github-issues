@@ -7,7 +7,7 @@ export class RepositoryRenderer {
 		private app: App,
 		private plugin: GitHubTrackerPlugin,
 		private fetchLabels?: (repo: string, repoObj: RepositoryTracking, filterType: 'labelFilters' | 'prLabelFilters', textArea: HTMLTextAreaElement) => Promise<void>,
-		private fetchCollaborators?: (repo: string, repoObj: RepositoryTracking, filterType: 'assigneeFilters' | 'prAssigneeFilters', textArea: HTMLTextAreaElement) => Promise<void>,
+		private fetchCollaborators?: (repo: string, repoObj: RepositoryTracking, filterType: 'assigneeFilters' | 'prAssigneeFilters' | 'prReviewerFilters', textArea: HTMLTextAreaElement) => Promise<void>,
 	) {}
 
 	renderIssueSettings(
@@ -46,6 +46,9 @@ export class RepositoryRenderer {
 
 		// Assignee filtering settings for pull requests
 		this.renderAssigneeFilter(container, repo, 'pr');
+
+		// Reviewer filtering settings for pull requests
+		this.renderReviewerFilter(container, repo);
 	}
 
 	private renderLabelFilter(
@@ -121,6 +124,92 @@ export class RepositoryRenderer {
 						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
 						if (textArea && this.fetchLabels) {
 							await this.fetchLabels(repo.repository, repo, filtersProp, textArea as HTMLTextAreaElement);
+						}
+					}),
+			);
+	}
+
+	private renderReviewerFilter(
+		container: HTMLElement,
+		repo: RepositoryTracking,
+	): void {
+		new Setting(container)
+			.setName("Filter pull requests by reviewers")
+			.setDesc("Enable filtering pull requests based on requested reviewers")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.enablePrReviewerFilter ?? false)
+					.onChange(async (value) => {
+						repo.enablePrReviewerFilter = value;
+						reviewerFilterContainer.classList.toggle(
+							"github-issues-hidden",
+							!value,
+						);
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		const reviewerFilterContainer = container.createDiv(
+			"github-issues-settings-group github-issues-nested",
+		);
+		reviewerFilterContainer.classList.toggle(
+			"github-issues-hidden",
+			!(repo.enablePrReviewerFilter ?? false),
+		);
+
+		new Setting(reviewerFilterContainer)
+			.setName("Reviewer filter mode")
+			.setDesc("Choose how to filter pull requests by reviewers")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("review-requested-from-me", "Review requested from me")
+					.addOption("review-requested-from-specific", "Review requested from specific users")
+					.addOption("no-review-requested", "No review requested")
+					.addOption("any-review-requested", "Any review requested")
+					.setValue(repo.prReviewerFilterMode ?? "review-requested-from-me")
+					.onChange(async (value) => {
+						repo.prReviewerFilterMode = value as "review-requested-from-me" | "review-requested-from-specific" | "no-review-requested" | "any-review-requested";
+						reviewerSpecificContainer.classList.toggle(
+							"github-issues-hidden",
+							value !== "review-requested-from-specific",
+						);
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		const reviewerSpecificContainer = reviewerFilterContainer.createDiv(
+			"github-issues-settings-group github-issues-nested",
+		);
+		reviewerSpecificContainer.classList.toggle(
+			"github-issues-hidden",
+			(repo.prReviewerFilterMode ?? "review-requested-from-me") !== "review-requested-from-specific",
+		);
+
+		new Setting(reviewerSpecificContainer)
+			.setName("Specific reviewers")
+			.setDesc("Comma-separated list of GitHub usernames to filter by")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("username1, username2, username3")
+					.setValue((repo.prReviewerFilters || []).join(", "))
+					.onChange(async (value) => {
+						repo.prReviewerFilters = value
+							.split(",")
+							.map(username => username.trim())
+							.filter(username => username.length > 0);
+						await this.plugin.saveSettings();
+					});
+
+				return text;
+			})
+			.addButton((button) =>
+				button
+					.setButtonText("Fetch collaborators")
+					.setTooltip("Load collaborators from this repository to help with configuration")
+					.onClick(async () => {
+						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
+						if (textArea && this.fetchCollaborators) {
+							await this.fetchCollaborators(repo.repository, repo, 'prReviewerFilters', textArea as HTMLTextAreaElement);
 						}
 					}),
 			);

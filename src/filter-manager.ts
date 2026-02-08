@@ -38,6 +38,11 @@ export class FilterManager {
 			filteredPullRequests = this.applyAssigneeFilter(filteredPullRequests, repo.prAssigneeFilterMode ?? "assigned-to-me", repo.prAssigneeFilters ?? []);
 		}
 
+		// Apply reviewer filtering
+		if ((repo.enablePrReviewerFilter ?? false)) {
+			filteredPullRequests = this.applyReviewerFilter(filteredPullRequests, repo.prReviewerFilterMode ?? "review-requested-from-me", repo.prReviewerFilters ?? []);
+		}
+
 		return filteredPullRequests;
 	}
 
@@ -84,6 +89,31 @@ export class FilterManager {
 				case "any-assigned":
 					// Only include items that have at least one assignee
 					return assigneeUsernames.length > 0;
+
+				default:
+					return true;
+			}
+		});
+	}
+
+	private applyReviewerFilter(items: any[], filterMode: "review-requested-from-me" | "review-requested-from-specific" | "no-review-requested" | "any-review-requested", reviewerFilters: string[]): any[] {
+		return items.filter((item) => {
+			const reviewers = item.requested_reviewers || [];
+			const reviewerUsernames = reviewers.map((reviewer: any) => reviewer.login || reviewer);
+
+			switch (filterMode) {
+				case "review-requested-from-me":
+					const currentUser = this.getCurrentUser();
+					return reviewerUsernames.includes(currentUser);
+
+				case "review-requested-from-specific":
+					return reviewerFilters.some(filterUser => reviewerUsernames.includes(filterUser));
+
+				case "no-review-requested":
+					return reviewerUsernames.length === 0;
+
+				case "any-review-requested":
+					return reviewerUsernames.length > 0;
 
 				default:
 					return true;

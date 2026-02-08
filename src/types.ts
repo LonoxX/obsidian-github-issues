@@ -63,6 +63,9 @@ export interface RepositoryTracking {
 	enablePrAssigneeFilter: boolean;
 	prAssigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
 	prAssigneeFilters: string[];
+	enablePrReviewerFilter: boolean;
+	prReviewerFilterMode: "review-requested-from-me" | "review-requested-from-specific" | "no-review-requested" | "any-review-requested";
+	prReviewerFilters: string[];
 	escapeHashTags: boolean;
 
 	// Profile-managed fields (optional - hydrated from profile at runtime)
@@ -311,5 +314,8 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	enablePrAssigneeFilter: false,
 	prAssigneeFilterMode: "assigned-to-me",
 	prAssigneeFilters: [],
+	enablePrReviewerFilter: false,
+	prReviewerFilterMode: "review-requested-from-me",
+	prReviewerFilters: [],
 	escapeHashTags: false,
 };

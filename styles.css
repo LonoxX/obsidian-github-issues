@@ -1133,6 +1133,13 @@ button:disabled {
 	font-size: 14px;
 }
 
+.github-issues-no-repos {
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 20px;
+    color: var(--text-muted);
+}
+
 .github-issues-bulk-actions-container {
 	display: flex;
 	gap: 12px;
@@ -2415,4 +2422,3 @@ button:disabled {
 	color: var(--text-on-accent);
 	border-color: var(--background-modifier-error);
 }
-

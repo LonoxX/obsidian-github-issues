@@ -4,8 +4,16 @@ export class FolderPathManager {
 	/**
 	 * Get the issue folder path for a repository
 	 */
-	public getIssueFolderPath(repo: RepositoryTracking, ownerCleaned: string, repoCleaned: string): string {
-		if (repo.useCustomIssueFolder && repo.customIssueFolder && repo.customIssueFolder.trim()) {
+	public getIssueFolderPath(
+		repo: RepositoryTracking,
+		ownerCleaned: string,
+		repoCleaned: string,
+	): string {
+		if (
+			repo.useCustomIssueFolder &&
+			repo.customIssueFolder &&
+			repo.customIssueFolder.trim()
+		) {
 			return repo.customIssueFolder.trim();
 		}
 		return `${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`;
@@ -14,8 +22,16 @@ export class FolderPathManager {
 	/**
 	 * Get the pull request folder path for a repository
 	 */
-	public getPullRequestFolderPath(repo: RepositoryTracking, ownerCleaned: string, repoCleaned: string): string {
-		if (repo.useCustomPullRequestFolder && repo.customPullRequestFolder && repo.customPullRequestFolder.trim()) {
+	public getPullRequestFolderPath(
+		repo: RepositoryTracking,
+		ownerCleaned: string,
+		repoCleaned: string,
+	): string {
+		if (
+			repo.useCustomPullRequestFolder &&
+			repo.customPullRequestFolder &&
+			repo.customPullRequestFolder.trim()
+		) {
 			return repo.customPullRequestFolder.trim();
 		}
 		return `${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`;
@@ -23,27 +39,45 @@ export class FolderPathManager {
 
 	public getProjectIssueFolderPath(project: TrackedProject): string {
 		if (project.useCustomIssueFolder && project.customIssueFolder?.trim()) {
-			return this.processProjectFolderTemplate(project.customIssueFolder.trim(), project);
+			return this.processProjectFolderTemplate(
+				project.customIssueFolder.trim(),
+				project,
+			);
 		}
 		const folder = project.issueFolder?.trim() || "GitHub/{project}";
 		return this.processProjectFolderTemplate(folder, project);
 	}
 
-	public getProjectPullRequestFolderPath(project: TrackedProject): string | null {
-		if (project.useCustomPullRequestFolder && project.customPullRequestFolder?.trim()) {
-			return this.processProjectFolderTemplate(project.customPullRequestFolder.trim(), project);
+	public getProjectPullRequestFolderPath(
+		project: TrackedProject,
+	): string | null {
+		if (
+			project.useCustomPullRequestFolder &&
+			project.customPullRequestFolder?.trim()
+		) {
+			return this.processProjectFolderTemplate(
+				project.customPullRequestFolder.trim(),
+				project,
+			);
 		}
 		if (project.pullRequestFolder?.trim()) {
-			return this.processProjectFolderTemplate(project.pullRequestFolder, project);
+			return this.processProjectFolderTemplate(
+				project.pullRequestFolder,
+				project,
+			);
 		}
 		return null;
 	}
 
-	public processProjectFolderTemplate(folderTemplate: string, project: TrackedProject): string {
+	public processProjectFolderTemplate(
+		folderTemplate: string,
+		project: TrackedProject,
+	): string {
 		return folderTemplate
 			.replace(/\{project\}/g, this.sanitizeFolderPart(project.title))
 			.replace(/\{owner\}/g, this.sanitizeFolderPart(project.owner))
-			.replace(/\{project_number\}/g, project.number.toString());
+			.replace(/\{project_number\}/g, project.number.toString())
+			.replace(/\/+/g, "/"); // Normalize multiple slashes
 	}
 
 	private sanitizeFolderPart(str: string): string {

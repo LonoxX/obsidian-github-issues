@@ -2239,11 +2239,11 @@ button:disabled {
 }
 
 .github-issues-sub-issue-open {
-	color: var(--github-color-success);
+	color: #28a745;
 }
 
 .github-issues-sub-issue-closed {
-	color: var(--github-color-error);
+	color: #dc3545;
 }
 
 /* Profile toolbar - Dropdown row */

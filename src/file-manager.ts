@@ -1,5 +1,10 @@
 import { App, TFile } from "obsidian";
-import { GitHubTrackerSettings, RepositoryTracking, TrackedProject, ProjectData } from "./types";
+import {
+	GitHubTrackerSettings,
+	RepositoryTracking,
+	TrackedProject,
+	ProjectData,
+} from "./types";
 import { NoticeManager } from "./notice-manager";
 import { GitHubClient } from "./github-client";
 import { IssueFileManager } from "./issue-file-manager";
@@ -14,7 +19,7 @@ import {
 	createPullRequestTemplateData,
 	processContentTemplate,
 	processFilenameTemplate,
-	formatComments
+	formatComments,
 } from "./util/templateUtils";
 import { extractPersistBlocks, mergePersistBlocks } from "./util/persistUtils";
 import { getEffectiveProjectSettings } from "./util/settingsUtils";
@@ -32,8 +37,18 @@ export class FileManager {
 		private noticeManager: NoticeManager,
 		private gitHubClient: GitHubClient,
 	) {
-		this.issueFileManager = new IssueFileManager(app, settings, noticeManager, gitHubClient);
-		this.prFileManager = new PullRequestFileManager(app, settings, noticeManager, gitHubClient);
+		this.issueFileManager = new IssueFileManager(
+			app,
+			settings,
+			noticeManager,
+			gitHubClient,
+		);
+		this.prFileManager = new PullRequestFileManager(
+			app,
+			settings,
+			noticeManager,
+			gitHubClient,
+		);
 		this.filterManager = new FilterManager(gitHubClient);
 		this.folderPathManager = new FolderPathManager();
 		this.fileHelpers = new FileHelpers(app, noticeManager);
@@ -48,7 +63,12 @@ export class FileManager {
 		allIssuesIncludingRecentlyClosed: any[],
 		currentIssueNumbers: Set<string>,
 	): Promise<void> {
-		return this.issueFileManager.createIssueFiles(repo, openIssues, allIssuesIncludingRecentlyClosed, currentIssueNumbers);
+		return this.issueFileManager.createIssueFiles(
+			repo,
+			openIssues,
+			allIssuesIncludingRecentlyClosed,
+			currentIssueNumbers,
+		);
 	}
 
 	/**
@@ -60,14 +80,22 @@ export class FileManager {
 		allPullRequestsIncludingRecentlyClosed: any[],
 		currentPRNumbers: Set<string>,
 	): Promise<void> {
-		return this.prFileManager.createPullRequestFiles(repo, openPullRequests, allPullRequestsIncludingRecentlyClosed, currentPRNumbers);
+		return this.prFileManager.createPullRequestFiles(
+			repo,
+			openPullRequests,
+			allPullRequestsIncludingRecentlyClosed,
+			currentPRNumbers,
+		);
 	}
 
 	public filterIssues(repo: RepositoryTracking, issues: any[]): any[] {
 		return this.filterManager.filterIssues(repo, issues);
 	}
 
-	public filterPullRequests(repo: RepositoryTracking, pullRequests: any[]): any[] {
+	public filterPullRequests(
+		repo: RepositoryTracking,
+		pullRequests: any[],
+	): any[] {
 		return this.filterManager.filterPullRequests(repo, pullRequests);
 	}
 
@@ -79,8 +107,17 @@ export class FileManager {
 
 				const repoCleaned = repoName.replace(/\//g, "-");
 				const ownerCleaned = owner.replace(/\//g, "-");
-				const issueFolder = this.folderPathManager.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
-				const pullRequestFolder = this.folderPathManager.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
+				const issueFolder = this.folderPathManager.getIssueFolderPath(
+					repo,
+					ownerCleaned,
+					repoCleaned,
+				);
+				const pullRequestFolder =
+					this.folderPathManager.getPullRequestFolderPath(
+						repo,
+						ownerCleaned,
+						repoCleaned,
+					);
 
 				await this.issueFileManager.cleanupEmptyIssueFolder(
 					repo,
@@ -106,13 +143,22 @@ export class FileManager {
 		items: any[],
 	): Promise<void> {
 		// Apply profile settings to get effective project configuration
-		const effectiveProject = getEffectiveProjectSettings(project, this.settings);
+		const effectiveProject = getEffectiveProjectSettings(
+			project,
+			this.settings,
+		);
 
-		const issueFolderPath = this.folderPathManager.getProjectIssueFolderPath(effectiveProject);
-		const prFolderPath = this.folderPathManager.getProjectPullRequestFolderPath(effectiveProject);
+		const issueFolderPath =
+			this.folderPathManager.getProjectIssueFolderPath(effectiveProject);
+		const prFolderPath =
+			this.folderPathManager.getProjectPullRequestFolderPath(
+				effectiveProject,
+			);
 
 		if (!issueFolderPath && !prFolderPath) {
-			this.noticeManager.debug(`No folder configured for project ${project.title}`);
+			this.noticeManager.debug(
+				`No folder configured for project ${project.title}`,
+			);
 			return;
 		}
 
@@ -120,9 +166,13 @@ export class FileManager {
 		let skippedNoContent = 0;
 		let skippedNotIssueOrPr = 0;
 		let skippedHiddenStatus = 0;
+		let deletedHiddenCount = 0;
 
 		const hiddenStatuses = new Set(project.hiddenStatuses || []);
-		const skipHidden = effectiveProject.skipHiddenStatusesOnSync && hiddenStatuses.size > 0;
+		const skipHidden =
+			effectiveProject.skipHiddenStatusesOnSync &&
+			hiddenStatuses.size > 0;
+		const hiddenItemUrls = new Set<string>();
 
 		for (const item of items) {
 			const content = item.content;
@@ -131,8 +181,8 @@ export class FileManager {
 				continue;
 			}
 
-			const isIssue = content.url?.includes('/issues/');
-			const isPullRequest = content.url?.includes('/pull/');
+			const isIssue = content.url?.includes("/issues/");
+			const isPullRequest = content.url?.includes("/pull/");
 			if (!isIssue && !isPullRequest) {
 				skippedNotIssueOrPr++;
 				continue;
@@ -142,16 +192,22 @@ export class FileManager {
 			let status = "";
 			if (item.fieldValues?.nodes) {
 				for (const fieldValue of item.fieldValues.nodes) {
-					if (fieldValue.field?.name === "Status" && fieldValue.name) {
+					if (
+						fieldValue.field?.name === "Status" &&
+						fieldValue.name
+					) {
 						status = fieldValue.name;
 						break;
 					}
 				}
 			}
 
-			// Skip items with hidden statuses if enabled
+			// Skip items with hidden statuses if enabled, and collect their URLs for cleanup
 			if (skipHidden && hiddenStatuses.has(status || "No Status")) {
 				skippedHiddenStatus++;
+				if (content.url) {
+					hiddenItemUrls.add(content.url);
+				}
 				continue;
 			}
 
@@ -160,8 +216,14 @@ export class FileManager {
 
 			await this.fileHelpers.ensureFolderExists(folderPath);
 
-			const repository = this.extractRepositoryFromUrl(content.url) || `${project.owner}/unknown`;
-			const projectData = this.convertFieldValuesToProjectData(project, status, item.fieldValues?.nodes || []);
+			const repository =
+				this.extractRepositoryFromUrl(content.url) ||
+				`${project.owner}/unknown`;
+			const projectData = this.convertFieldValuesToProjectData(
+				project,
+				status,
+				item.fieldValues?.nodes || [],
+			);
 
 			// Fetch sub-issues and parent issue for template support (only if enabled for project)
 			let subIssues: any[] = [];
@@ -170,49 +232,66 @@ export class FileManager {
 			if (isIssue && effectiveProject.includeSubIssues) {
 				const [owner, repoName] = repository.split("/");
 				if (owner && repoName) {
-					subIssues = await this.gitHubClient.fetchSubIssues(owner, repoName, content.number);
-					parentIssue = await this.gitHubClient.fetchParentIssue(owner, repoName, content.number);
+					subIssues = await this.gitHubClient.fetchSubIssues(
+						owner,
+						repoName,
+						content.number,
+					);
+					parentIssue = await this.gitHubClient.fetchParentIssue(
+						owner,
+						repoName,
+						content.number,
+					);
 
 					// Enrich sub-issues with vault paths if they exist
-					const noteTemplate = effectiveProject.issueNoteTemplate || "Issue - {number} - {title}";
-					subIssues = await this.fileHelpers.enrichSubIssuesWithVaultPaths(
-						subIssues,
-						folderPath,
-						noteTemplate,
-						repository,
-						this.settings.dateFormat,
-						this.settings.escapeMode
-					);
+					const noteTemplate =
+						effectiveProject.issueNoteTemplate ||
+						"Issue - {number} - {title}";
+					subIssues =
+						await this.fileHelpers.enrichSubIssuesWithVaultPaths(
+							subIssues,
+							folderPath,
+							noteTemplate,
+							repository,
+							this.settings.dateFormat,
+							this.settings.escapeMode,
+						);
 				}
 			}
 
 			const templateData = isIssue
 				? createIssueTemplateData(
-					this.convertToIssueFormat(content),
-					repository,
-					[],
-					this.settings.dateFormat,
-					this.settings.escapeMode,
-					this.settings.escapeHashTags,
-					[projectData],
-					subIssues,
-					parentIssue
-				)
+						this.convertToIssueFormat(content),
+						repository,
+						[],
+						this.settings.dateFormat,
+						this.settings.escapeMode,
+						this.settings.escapeHashTags,
+						[projectData],
+						subIssues,
+						parentIssue,
+					)
 				: createPullRequestTemplateData(
-					this.convertToPullRequestFormat(content),
-					repository,
-					[],
-					this.settings.dateFormat,
-					this.settings.escapeMode,
-					this.settings.escapeHashTags,
-					[projectData]
-				);
+						this.convertToPullRequestFormat(content),
+						repository,
+						[],
+						this.settings.dateFormat,
+						this.settings.escapeMode,
+						this.settings.escapeHashTags,
+						[projectData],
+					);
 
 			const filenameTemplate = isIssue
-				? (effectiveProject.issueNoteTemplate || "Issue - {number} - {title}")
-				: (effectiveProject.pullRequestNoteTemplate || "PR - {number} - {title}");
+				? effectiveProject.issueNoteTemplate ||
+					"Issue - {number} - {title}"
+				: effectiveProject.pullRequestNoteTemplate ||
+					"PR - {number} - {title}";
 
-			const baseFileName = processFilenameTemplate(filenameTemplate, templateData, this.settings.dateFormat);
+			const baseFileName = processFilenameTemplate(
+				filenameTemplate,
+				templateData,
+				this.settings.dateFormat,
+			);
 			const fileName = `${baseFileName}.md`;
 			const filePath = `${folderPath}/${fileName}`;
 
@@ -224,16 +303,20 @@ export class FileManager {
 				isIssue,
 				item.fieldValues?.nodes || [],
 				subIssues,
-				parentIssue
+				parentIssue,
 			);
 
 			if (existingFile && existingFile instanceof TFile) {
 				const existingContent = await this.app.vault.read(existingFile);
 				const persistBlocks = extractPersistBlocks(existingContent);
 				if (persistBlocks.size > 0) {
-					fileContent = mergePersistBlocks(fileContent, existingContent, persistBlocks);
+					fileContent = mergePersistBlocks(
+						fileContent,
+						existingContent,
+						persistBlocks,
+					);
 					this.noticeManager.debug(
-						`Restored ${persistBlocks.size} persist block(s) for project item #${content.number}`
+						`Restored ${persistBlocks.size} persist block(s) for project item #${content.number}`,
 					);
 				}
 				await this.app.vault.modify(existingFile, fileContent);
@@ -244,8 +327,45 @@ export class FileManager {
 		}
 
 		this.noticeManager.debug(
-			`Project ${project.title}: Created ${createdCount} files, skipped ${skippedNoContent} drafts, ${skippedNotIssueOrPr} other, ${skippedHiddenStatus} hidden`
+			`Project ${project.title}: Created ${createdCount} files, skipped ${skippedNoContent} drafts, ${skippedNotIssueOrPr} other, ${skippedHiddenStatus} hidden`,
 		);
+
+		// Clean up existing files for items that moved to a hidden status
+		if (hiddenItemUrls.size > 0) {
+			const foldersToScan = [issueFolderPath, prFolderPath].filter(
+				Boolean,
+			) as string[];
+			const allFiles = this.app.vault.getMarkdownFiles();
+
+			for (const file of allFiles) {
+				const inProjectFolder = foldersToScan.some((f) =>
+					file.path.startsWith(f + "/"),
+				);
+				if (!inProjectFolder) continue;
+
+				try {
+					const fileContent = await this.app.vault.read(file);
+					const urlMatch = fileContent.match(
+						/^url:\s*"?([^"\n]+)"?\s*$/m,
+					);
+					if (urlMatch && hiddenItemUrls.has(urlMatch[1])) {
+						await this.app.fileManager.trashFile(file);
+						deletedHiddenCount++;
+						this.noticeManager.debug(
+							`Deleted file for hidden-status item: ${file.path}`,
+						);
+					}
+				} catch (error) {
+					// File may have been deleted already, ignore
+				}
+			}
+
+			if (deletedHiddenCount > 0) {
+				this.noticeManager.debug(
+					`Project ${project.title}: Removed ${deletedHiddenCount} file(s) for items moved to hidden statuses`,
+				);
+			}
+		}
 	}
 
 	/**
@@ -271,43 +391,62 @@ export class FileManager {
 			: project.pullRequestContentTemplate;
 
 		if (useCustomTemplate && templatePath) {
-			const templateContent = await this.fileHelpers.loadTemplateContent(templatePath);
+			const templateContent =
+				await this.fileHelpers.loadTemplateContent(templatePath);
 			if (templateContent) {
 				// Convert project item data to template-compatible format
-				const projectData = this.convertFieldValuesToProjectData(project, status, fieldValues);
+				const projectData = this.convertFieldValuesToProjectData(
+					project,
+					status,
+					fieldValues,
+				);
 
 				// Create a pseudo-repository string for template compatibility
-				const repository = this.extractRepositoryFromUrl(content.url) || `${project.owner}/unknown`;
+				const repository =
+					this.extractRepositoryFromUrl(content.url) ||
+					`${project.owner}/unknown`;
 
 				// Create template data based on item type
 				const templateData = isIssue
 					? createIssueTemplateData(
-						this.convertToIssueFormat(content),
-						repository,
-						[], // No comments for project items currently
-						this.settings.dateFormat,
-						this.settings.escapeMode,
-						shouldEscapeHashTags,
-						[projectData],
-						subIssues,
-						parentIssue
-					)
+							this.convertToIssueFormat(content),
+							repository,
+							[], // No comments for project items currently
+							this.settings.dateFormat,
+							this.settings.escapeMode,
+							shouldEscapeHashTags,
+							[projectData],
+							subIssues,
+							parentIssue,
+						)
 					: createPullRequestTemplateData(
-						this.convertToPullRequestFormat(content),
-						repository,
-						[], // No comments for project items currently
-						this.settings.dateFormat,
-						this.settings.escapeMode,
-						shouldEscapeHashTags,
-						[projectData]
-					);
+							this.convertToPullRequestFormat(content),
+							repository,
+							[], // No comments for project items currently
+							this.settings.dateFormat,
+							this.settings.escapeMode,
+							shouldEscapeHashTags,
+							[projectData],
+						);
 
-				return processContentTemplate(templateContent, templateData, this.settings.dateFormat);
+				return processContentTemplate(
+					templateContent,
+					templateData,
+					this.settings.dateFormat,
+				);
 			}
 		}
 
 		// Fallback to default format
-		return this.generateDefaultProjectItemContent(content, project, status, isIssue, fieldValues, subIssues, parentIssue);
+		return this.generateDefaultProjectItemContent(
+			content,
+			project,
+			status,
+			isIssue,
+			fieldValues,
+			subIssues,
+			parentIssue,
+		);
 	}
 
 	/**
@@ -340,8 +479,10 @@ export class FileManager {
 		const createdAt = formatDate(content.createdAt);
 		const updatedAt = formatDate(content.updatedAt);
 		const author = content.author?.login || "";
-		const assignees = content.assignees?.nodes?.map((a: any) => `"${a.login}"`) || [];
-		const labels = content.labels?.nodes?.map((l: any) => `"${l.name}"`) || [];
+		const assignees =
+			content.assignees?.nodes?.map((a: any) => `"${a.login}"`) || [];
+		const labels =
+			content.labels?.nodes?.map((l: any) => `"${l.name}"`) || [];
 
 		let frontmatter = `---
 title: "${title}"
@@ -359,7 +500,10 @@ project_status: "${status}"`;
 
 		// Add PR-specific fields
 		if (!isIssue) {
-			const reviewers = content.reviewRequests?.nodes?.map((r: any) => `"${r.requestedReviewer?.login || ""}"`) || [];
+			const reviewers =
+				content.reviewRequests?.nodes?.map(
+					(r: any) => `"${r.requestedReviewer?.login || ""}"`,
+				) || [];
 			frontmatter += `
 requested_reviewers: [${reviewers.join(", ")}]`;
 		}
@@ -373,7 +517,9 @@ parent_issue_url: "${parentIssue.url}"`;
 
 		// Add sub-issues metadata if available
 		if (subIssues && subIssues.length > 0) {
-			const closedCount = subIssues.filter((si: any) => si.state === "closed").length;
+			const closedCount = subIssues.filter(
+				(si: any) => si.state === "closed",
+			).length;
 			const openCount = subIssues.length - closedCount;
 			frontmatter += `
 sub_issues: [${subIssues.map((si: any) => si.number).join(", ")}]
@@ -388,7 +534,11 @@ sub_issues_closed: ${closedCount}`;
 # ${escapeBody(content.title || "", this.settings.escapeMode, false)}
 ${
 	content.body
-		? escapeBody(content.body, this.settings.escapeMode, shouldEscapeHashTags)
+		? escapeBody(
+				content.body,
+				this.settings.escapeMode,
+				shouldEscapeHashTags,
+			)
 		: "_No description provided._"
 }`;
 
@@ -397,12 +547,15 @@ ${
 			frontmatter += `
 
 ## Sub-Issues
-${subIssues.map((si: any) => {
-	const statusIcon = si.state === "closed"
-		? '<span class="github-issues-sub-issue-closed">●</span>'
-		: '<span class="github-issues-sub-issue-open">●</span>';
-	return `- ${statusIcon} [#${si.number} ${si.title}](${si.url})`;
-}).join("\n")}`;
+${subIssues
+	.map((si: any) => {
+		const statusIcon =
+			si.state === "closed"
+				? '<span class="github-issues-sub-issue-closed">●</span>'
+				: '<span class="github-issues-sub-issue-open">●</span>';
+		return `- ${statusIcon} [#${si.number} ${si.title}](${si.url})`;
+	})
+	.join("\n")}`;
 		}
 
 		// Add parent issue link if available
@@ -426,7 +579,9 @@ ${subIssues.map((si: any) => {
 	): ProjectData {
 		const customFields: Record<string, any> = {};
 		let priority: string | undefined;
-		let iteration: { title: string; startDate: string; duration: number } | undefined;
+		let iteration:
+			| { title: string; startDate: string; duration: number }
+			| undefined;
 
 		for (const fieldValue of fieldValues) {
 			if (!fieldValue.field?.name) continue;
@@ -434,7 +589,10 @@ ${subIssues.map((si: any) => {
 
 			if (fieldName.toLowerCase() === "priority" && fieldValue.name) {
 				priority = fieldValue.name;
-			} else if (fieldValue.title !== undefined && fieldValue.startDate !== undefined) {
+			} else if (
+				fieldValue.title !== undefined &&
+				fieldValue.startDate !== undefined
+			) {
 				// Iteration field
 				iteration = {
 					title: fieldValue.title,
@@ -479,26 +637,38 @@ ${subIssues.map((si: any) => {
 	/**
 	 * Infer field type from field value structure
 	 */
-	private inferFieldType(fieldValue: any): 'text' | 'number' | 'date' | 'single_select' | 'iteration' | 'user' | 'labels' {
-		if (fieldValue.title !== undefined && fieldValue.startDate !== undefined) {
-			return 'iteration';
+	private inferFieldType(
+		fieldValue: any,
+	):
+		| "text"
+		| "number"
+		| "date"
+		| "single_select"
+		| "iteration"
+		| "user"
+		| "labels" {
+		if (
+			fieldValue.title !== undefined &&
+			fieldValue.startDate !== undefined
+		) {
+			return "iteration";
 		}
 		if (fieldValue.users?.nodes?.length > 0) {
-			return 'user';
+			return "user";
 		}
 		if (fieldValue.labels?.nodes?.length > 0) {
-			return 'labels';
+			return "labels";
 		}
 		if (fieldValue.name !== undefined) {
-			return 'single_select';
+			return "single_select";
 		}
 		if (fieldValue.number !== undefined) {
-			return 'number';
+			return "number";
 		}
 		if (fieldValue.date !== undefined) {
-			return 'date';
+			return "date";
 		}
-		return 'text';
+		return "text";
 	}
 
 	/**
@@ -529,7 +699,9 @@ ${subIssues.map((si: any) => {
 			user: content.author,
 			assignee: content.assignees?.nodes?.[0] || null,
 			assignees: content.assignees?.nodes || [],
-			labels: content.labels?.nodes?.map((l: any) => ({ name: l.name })) || [],
+			labels:
+				content.labels?.nodes?.map((l: any) => ({ name: l.name })) ||
+				[],
 			milestone: content.milestone,
 			comments: 0,
 			locked: false,
@@ -553,15 +725,24 @@ ${subIssues.map((si: any) => {
 			user: content.author,
 			assignee: content.assignees?.nodes?.[0] || null,
 			assignees: content.assignees?.nodes || [],
-			requested_reviewers: content.reviewRequests?.nodes?.map((r: any) => r.requestedReviewer) || [],
-			labels: content.labels?.nodes?.map((l: any) => ({ name: l.name })) || [],
+			requested_reviewers:
+				content.reviewRequests?.nodes?.map(
+					(r: any) => r.requestedReviewer,
+				) || [],
+			labels:
+				content.labels?.nodes?.map((l: any) => ({ name: l.name })) ||
+				[],
 			milestone: content.milestone,
 			comments: 0,
 			locked: false,
 			merged: content.merged || false,
 			mergeable: content.mergeable,
-			base: content.baseRefName ? { ref: content.baseRefName } : undefined,
-			head: content.headRefName ? { ref: content.headRefName } : undefined,
+			base: content.baseRefName
+				? { ref: content.baseRefName }
+				: undefined,
+			head: content.headRefName
+				? { ref: content.headRefName }
+				: undefined,
 		};
 	}
 }

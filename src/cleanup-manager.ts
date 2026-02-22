@@ -39,6 +39,12 @@ export class CleanupManager {
 			for (const file of files) {
 				// Try to get number from frontmatter first (most reliable)
 				const properties = extractProperties(this.app, file);
+
+				// Skip files that belong to a different type (e.g. PRs in a shared folder)
+				if (properties.type === "pr") {
+					continue;
+				}
+
 				let fileNumberString: string | null = null;
 
 				if (properties.number) {
@@ -125,6 +131,12 @@ export class CleanupManager {
 			for (const file of files) {
 				// Try to get number from frontmatter first (most reliable)
 				const properties = extractProperties(this.app, file);
+
+				// Skip files that belong to a different type (e.g. issues in a shared folder)
+				if (properties.type === "issue") {
+					continue;
+				}
+
 				let fileNumberString: string | null = null;
 
 				if (properties.number) {

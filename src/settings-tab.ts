@@ -21,6 +21,8 @@ import { RepositoryListManager } from "./settings/repository-list-manager";
 import { ModalManager } from "./settings/modal-manager";
 import { ProjectListManager } from "./settings/project-list-manager";
 import { ProjectRenderer } from "./settings/project-renderer";
+import { ProfileRenderer } from "./settings/profile-renderer";
+import { getRepositoryProfiles, getProjectProfiles } from "./util/settingsUtils";
 
 export class GitHubTrackerSettingTab extends PluginSettingTab {
 	private selectedRepositories: Set<string> = new Set();
@@ -29,6 +31,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 	private modalManager: ModalManager;
 	private projectListManager: ProjectListManager;
 	private projectRenderer: ProjectRenderer;
+	private profileRenderer: ProfileRenderer;
 	private isValidatingToken: boolean = false;
 
 	constructor(
@@ -48,6 +51,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		this.repositoryListManager = new RepositoryListManager(this.app, this.plugin);
 		this.projectListManager = new ProjectListManager(this.app, this.plugin);
 		this.projectRenderer = new ProjectRenderer(this.app, this.plugin);
+		this.profileRenderer = new ProfileRenderer(this.app, this.plugin);
 	}	async display(): Promise<void> {
 		const { containerEl } = this;
 
@@ -463,201 +467,32 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		// Global Defaults Section
-		const globalDefaultsContainer = containerEl.createDiv("github-issues-settings-group");
-		const globalDefaultsHeader = new Setting(globalDefaultsContainer)
-			.setName("Global Defaults")
-			.setDesc("Default settings applied to all repositories (can be overridden per repository)")
+		// Profiles Section
+		const profilesContainer = containerEl.createDiv("github-issues-settings-group");
+		const profilesHeader = new Setting(profilesContainer)
+			.setName("Profiles")
+			.setDesc("Manage reusable settings profiles for repositories and projects")
 			.setHeading();
 
-		const globalDefaultsContent = globalDefaultsContainer.createDiv("github-issues-collapsible-content");
+		const profilesContent = profilesContainer.createDiv("github-issues-collapsible-content");
 
 		// Add collapse toggle
-		globalDefaultsHeader.addButton((button) => {
+		profilesHeader.addButton((button) => {
 			button.setIcon("chevron-up");
 			button.setClass("github-issues-collapse-toggle");
 			button.onClick(() => {
-				const isCollapsed = globalDefaultsContent.hasClass("github-issues-collapsed");
+				const isCollapsed = profilesContent.hasClass("github-issues-collapsed");
 				if (isCollapsed) {
-					globalDefaultsContent.removeClass("github-issues-collapsed");
+					profilesContent.removeClass("github-issues-collapsed");
 					button.setIcon("chevron-up");
 				} else {
-					globalDefaultsContent.addClass("github-issues-collapsed");
+					profilesContent.addClass("github-issues-collapsed");
 					button.setIcon("chevron-down");
 				}
 			});
 		});
 
-
-		// Issues Subsection
-		const issuesGlobalContainer = globalDefaultsContent.createDiv("github-issues-nested");
-		new Setting(issuesGlobalContainer).setName("Issues").setHeading();
-
-		new Setting(issuesGlobalContainer)
-			.setName("Update mode")
-			.setDesc("How to handle updates to existing issue files")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("none", "None - Don't update existing files")
-					.addOption("update", "Update - Replace entire content")
-					.addOption("append", "Append - Add new content")
-					.setValue(this.plugin.settings.globalDefaults.issueUpdateMode)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.issueUpdateMode = value as "none" | "update" | "append";
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(issuesGlobalContainer)
-			.setName("Allow deletion")
-			.setDesc("Allow deletion of local issue files when closed on GitHub")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.globalDefaults.allowDeleteIssue)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.allowDeleteIssue = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(issuesGlobalContainer)
-			.setName("Folder")
-			.setDesc("Default folder where issue files will be stored")
-			.addText((text) => {
-				text
-					.setPlaceholder("GitHub")
-					.setValue(this.plugin.settings.globalDefaults.issueFolder)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.issueFolder = value;
-						await this.plugin.saveSettings();
-					});
-				new FolderSuggest(this.app, text.inputEl);
-			});
-
-		new Setting(issuesGlobalContainer)
-			.setName("Filename template")
-			.setDesc("Template for issue filenames")
-			.addText((text) =>
-				text
-					.setPlaceholder("Issue - {number}")
-					.setValue(this.plugin.settings.globalDefaults.issueNoteTemplate)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.issueNoteTemplate = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-
-		new Setting(issuesGlobalContainer)
-			.setName("Content template")
-			.setDesc("Template file for issue content (optional)")
-			.addText((text) => {
-				text
-					.setPlaceholder("")
-					.setValue(this.plugin.settings.globalDefaults.issueContentTemplate)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.issueContentTemplate = value;
-						await this.plugin.saveSettings();
-					});
-				new FileSuggest(this.app, text.inputEl);
-			});
-
-		new Setting(issuesGlobalContainer)
-			.setName("Include comments")
-			.setDesc("Include comments in issue files")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.globalDefaults.includeIssueComments)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.includeIssueComments = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		// Pull Requests Subsection
-		const prGlobalContainer = globalDefaultsContent.createDiv("github-issues-nested");
-		new Setting(prGlobalContainer).setName("Pull Requests").setHeading();
-
-		new Setting(prGlobalContainer)
-			.setName("Update mode")
-			.setDesc("How to handle updates to existing pull request files")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("none", "None - Don't update existing files")
-					.addOption("update", "Update - Replace entire content")
-					.addOption("append", "Append - Add new content")
-					.setValue(this.plugin.settings.globalDefaults.pullRequestUpdateMode)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.pullRequestUpdateMode = value as "none" | "update" | "append";
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(prGlobalContainer)
-			.setName("Allow deletion")
-			.setDesc("Allow deletion of local PR files when closed on GitHub")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.globalDefaults.allowDeletePullRequest)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.allowDeletePullRequest = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(prGlobalContainer)
-			.setName("Folder")
-			.setDesc("Default folder where pull request files will be stored")
-			.addText((text) => {
-				text
-					.setPlaceholder("GitHub Pull Requests")
-					.setValue(this.plugin.settings.globalDefaults.pullRequestFolder)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.pullRequestFolder = value;
-						await this.plugin.saveSettings();
-					});
-				new FolderSuggest(this.app, text.inputEl);
-			});
-
-		new Setting(prGlobalContainer)
-			.setName("Filename template")
-			.setDesc("Template for pull request filenames")
-			.addText((text) =>
-				text
-					.setPlaceholder("PR - {number}")
-					.setValue(this.plugin.settings.globalDefaults.pullRequestNoteTemplate)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.pullRequestNoteTemplate = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-
-		new Setting(prGlobalContainer)
-			.setName("Content template")
-			.setDesc("Template file for pull request content (optional)")
-			.addText((text) => {
-				text
-					.setPlaceholder("")
-					.setValue(this.plugin.settings.globalDefaults.pullRequestContentTemplate)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.pullRequestContentTemplate = value;
-						await this.plugin.saveSettings();
-					});
-				new FileSuggest(this.app, text.inputEl);
-			});
-
-		new Setting(prGlobalContainer)
-			.setName("Include comments")
-			.setDesc("Include comments in pull request files")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.globalDefaults.includePullRequestComments)
-					.onChange(async (value) => {
-						this.plugin.settings.globalDefaults.includePullRequestComments = value;
-						await this.plugin.saveSettings();
-					})
-			);
+		this.profileRenderer.renderProfileSection(profilesContent, () => this.display());
 
 		// GitHub Projects Section
 		const projectsContainer = containerEl.createDiv("github-issues-settings-group github-issues-section-margin");
@@ -670,12 +505,8 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			})
 			.addClass("setting-item-description");
 
-		const projectSettingsContainer = projectsContainer.createDiv(
-			"github-issues-settings-group",
-		);
-
 		// Tabs for Projects (like Repositories)
-		const projectTabsContainer = projectSettingsContainer.createDiv(
+		const projectTabsContainer = projectsContainer.createDiv(
 			"github-issues-repos-tabs-container",
 		);
 
@@ -690,14 +521,152 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		});
 		availableProjectsTab.addClass("github-issues-tab");
 
-		const trackedProjectsContent = projectSettingsContainer.createDiv(
+		const trackedProjectsContent = projectsContainer.createDiv(
 			"github-issues-tab-content",
 		);
 		trackedProjectsContent.addClass("active");
 
-		const availableProjectsContent = projectSettingsContainer.createDiv(
+		const availableProjectsContent = projectsContainer.createDiv(
 			"github-issues-tab-content",
 		);
+
+		// Tracked Projects search bar
+		const trackedProjectsSearchContainer = trackedProjectsContent.createDiv(
+			"github-issues-search-container",
+		);
+		trackedProjectsSearchContainer.addClass("github-issues-tracked-search");
+		const projectSearchHeaderContainer = trackedProjectsSearchContainer.createDiv(
+			"github-issues-search-header",
+		);
+		const projectSearchIconContainer = projectSearchHeaderContainer.createDiv(
+			"github-issues-search-icon",
+		);
+		setIcon(projectSearchIconContainer, "search");
+
+		const projectSearchLabel = projectSearchHeaderContainer.createEl("label", {
+			text: "Search tracked projects",
+		});
+		projectSearchLabel.addClass("github-issues-search-label");
+
+		const projectSearchInputContainer = trackedProjectsSearchContainer.createDiv(
+			"github-issues-search-input-container",
+		);
+		const projectSearchInput = projectSearchInputContainer.createEl("input");
+		projectSearchInput.type = "text";
+		projectSearchInput.placeholder = "Filter by name or owner...";
+		projectSearchInput.addClass("github-issues-search-input");
+		const projectClearButton = projectSearchInputContainer.createDiv(
+			"github-issues-search-clear-button github-issues-hidden",
+		);
+		setIcon(projectClearButton, "x");
+		projectClearButton.addEventListener("click", () => {
+			projectSearchInput.value = "";
+			projectClearButton.classList.add("github-issues-hidden");
+			projectSearchInput.dispatchEvent(new Event("input"));
+			projectSearchInput.focus();
+		});
+
+		const projectStatsCounter = trackedProjectsSearchContainer.createDiv(
+			"github-issues-stats-counter",
+		);
+		projectStatsCounter.setText(
+			`Showing all ${this.plugin.settings.trackedProjects.length} projects`,
+		);
+		projectSearchInput.addEventListener("input", () => {
+			const searchTerm = projectSearchInput.value.toLowerCase();
+
+			if (searchTerm.length > 0) {
+				projectClearButton.classList.remove("github-issues-hidden");
+			} else {
+				projectClearButton.classList.add("github-issues-hidden");
+			}
+
+			const projectItems = trackedProjectsContent.querySelectorAll(
+				".github-issues-repo-settings",
+			);
+			let visibleProjects = 0;
+
+			const visibleProjectsByOwner: Record<string, number> = {};
+
+			projectItems.forEach((item) => {
+				const repoName =
+					item.getAttribute("data-repo-name")?.toLowerCase() || "";
+				const ownerName =
+					item.getAttribute("data-owner-name")?.toLowerCase() || "";
+				const fullName =
+					item.getAttribute("data-full-name")?.toLowerCase() || "";
+
+				if (
+					fullName.includes(searchTerm) ||
+					repoName.includes(searchTerm) ||
+					ownerName.includes(searchTerm)
+				) {
+					(item as HTMLElement).classList.remove(
+						"github-issues-hidden",
+					);
+					visibleProjects++;
+
+					if (!visibleProjectsByOwner[ownerName]) {
+						visibleProjectsByOwner[ownerName] = 0;
+					}
+					visibleProjectsByOwner[ownerName]++;
+				} else {
+					(item as HTMLElement).classList.add("github-issues-hidden");
+				}
+			});
+
+			const ownerGroups = trackedProjectsContent.querySelectorAll(
+				".github-issues-repo-owner-group",
+			);
+			ownerGroups.forEach((group) => {
+				const ownerName =
+					group.getAttribute("data-owner")?.toLowerCase() || "";
+
+				if (
+					visibleProjectsByOwner[ownerName] &&
+					visibleProjectsByOwner[ownerName] > 0
+				) {
+					(group as HTMLElement).classList.remove(
+						"github-issues-hidden",
+					);
+				} else {
+					(group as HTMLElement).classList.add(
+						"github-issues-hidden",
+					);
+				}
+			});
+
+			if (searchTerm.length > 0) {
+				projectStatsCounter.setText(
+					`Showing ${visibleProjects} of ${this.plugin.settings.trackedProjects.length} projects`,
+				);
+			} else {
+				projectStatsCounter.setText(
+					`Showing all ${this.plugin.settings.trackedProjects.length} projects`,
+				);
+			}
+
+			const noProjects = trackedProjectsContent.querySelector(
+				".github-issues-no-repos",
+			);
+			if (noProjects) {
+				noProjects.classList.toggle(
+					"github-issues-hidden",
+					visibleProjects > 0,
+				);
+			}
+
+			const noResults = trackedProjectsContent.querySelector(
+				".github-issues-no-results",
+			);
+			if (noResults) {
+				noResults.classList.toggle(
+					"github-issues-hidden",
+					visibleProjects > 0 ||
+						this.plugin.settings.trackedProjects.length === 0,
+				);
+			}
+		});
 
 		// Tracked Projects content
 		const projectListContainer = trackedProjectsContent.createDiv(
@@ -774,19 +743,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		};
 
 		// Tab switching
-		trackedProjectsTab.onclick = () => {
-			trackedProjectsTab.addClass("mod-cta");
-			availableProjectsTab.removeClass("mod-cta");
-			trackedProjectsContent.addClass("active");
-			availableProjectsContent.removeClass("active");
-		};
-
-		availableProjectsTab.onclick = () => {
-			availableProjectsTab.addClass("mod-cta");
-			trackedProjectsTab.removeClass("mod-cta");
-			availableProjectsContent.addClass("active");
-			trackedProjectsContent.removeClass("active");
-		};
+		UIHelpers.setupTabSwitching(trackedProjectsTab, availableProjectsTab, trackedProjectsContent, availableProjectsContent);
 
 		// Repositories Section
 		const repoContainer = containerEl.createDiv("github-issues-settings-group github-issues-section-margin");
@@ -848,6 +805,27 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		repoInput.placeholder = "e.g., owner/repo-name";
 		repoInput.addClass("github-issues-repo-input");
 
+		// Profile selector for manual add
+		let manualAddProfileId = "default";
+		const profileSelectContainer = addForm.createDiv("github-issues-profile-select-container");
+		const profileLabel = profileSelectContainer.createEl("label", {
+			text: "Profile: ",
+			cls: "github-issues-profile-select-label",
+		});
+		const profileSelect = profileSelectContainer.createEl("select");
+		profileSelect.addClass("dropdown");
+		const repoProfiles = getRepositoryProfiles(this.plugin.settings);
+		for (const profile of repoProfiles) {
+			const option = profileSelect.createEl("option", {
+				text: profile.name,
+				value: profile.id,
+			});
+			if (profile.id === "default") option.selected = true;
+		}
+		profileSelect.onchange = () => {
+			manualAddProfileId = profileSelect.value;
+		};
+
 		const addButton = inputContainer.createEl("button", {
 			text: "Add Repository",
 		});
@@ -861,7 +839,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			return;
 		}
 
-		await this.repositoryListManager.addRepository(repo);
+		await this.repositoryListManager.addRepository(repo, manualAddProfileId);
 		this.display();
 		repoInput.value = "";
 	};		const trackedSearchContainer = trackedReposContent.createDiv(
@@ -1044,19 +1022,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			(repos) => this.modalManager.showBulkDeleteRepositoriesModal(repos, () => this.display())
 		);
 
-		trackedReposTab.onclick = () => {
-			trackedReposTab.addClass("mod-cta");
-			availableReposTab.removeClass("mod-cta");
-			trackedReposContent.addClass("active");
-			availableReposContent.removeClass("active");
-		};
-
-		availableReposTab.onclick = () => {
-			availableReposTab.addClass("mod-cta");
-			trackedReposTab.removeClass("mod-cta");
-			availableReposContent.addClass("active");
-			trackedReposContent.removeClass("active");
-		};
+		UIHelpers.setupTabSwitching(trackedReposTab, availableReposTab, trackedReposContent, availableReposContent);
 	}
 
 	private showAddRepositoryModal(): void {
@@ -1094,6 +1060,25 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		repoInput.type = "text";
 		repoInput.placeholder = "e.g., owner/repo-name";
 
+		// Profile selector for modal
+		let modalProfileId = "default";
+		const profileContainer = manualForm.createDiv();
+		profileContainer.addClass("github-issues-container");
+		profileContainer.createEl("label", { text: "Settings profile" });
+		const modalProfileSelect = profileContainer.createEl("select");
+		modalProfileSelect.addClass("dropdown");
+		const repoProfiles = getRepositoryProfiles(this.plugin.settings);
+		for (const profile of repoProfiles) {
+			const option = modalProfileSelect.createEl("option", {
+				text: profile.name,
+				value: profile.id,
+			});
+			if (profile.id === "default") option.selected = true;
+		}
+		modalProfileSelect.onchange = () => {
+			modalProfileId = modalProfileSelect.value;
+		};
+
 		const githubList = githubContent.createDiv();
 		githubList.addClass("github-issues-list");
 
@@ -1114,7 +1099,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			githubContent.addClass("active");
 			buttonContainer.addClass("github-issues-hidden");
 			buttonContainer.removeClass("github-issues-visible-flex");
-			await this.renderGitHubRepositories(githubList, modal);
+			await this.renderGitHubRepositories(githubList, modal, () => modalProfileId);
 		};
 
 		const buttonContainer = formContainer.createDiv();
@@ -1134,7 +1119,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			return;
 		}
 
-		await this.repositoryListManager.addRepository(repo);
+		await this.repositoryListManager.addRepository(repo, modalProfileId);
 		this.display();
 		modal.close();
 	};		modal.open();
@@ -1143,6 +1128,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 	private async renderGitHubRepositories(
 		container: HTMLElement,
 		modal?: Modal,
+		getProfileId?: () => string,
 	): Promise<void> {
 		container.empty();
 		container.createEl("p", { text: "Loading repositories..." });
@@ -1323,7 +1309,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						});
 						addButton.addClass("github-issues-add-button");
 						addButton.onclick = async () => {
-							await this.repositoryListManager.addRepository(repoName);
+							await this.repositoryListManager.addRepository(repoName, getProfileId?.() || "default");
 						this.display();
 							new Notice(`Added repository: ${repoName}`);
 							addButton.remove();
@@ -1459,9 +1445,42 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 			container.empty();
 
-			const actionsBar = container.createDiv("github-issues-actions-bar");
+			// Per-repo profile selections
+			const repoProfileSelections = new Map<string, string>();
 
-			const bulkActionsContainer = actionsBar.createDiv(
+			// Search container (full width, rendered first)
+			const searchContainer = container.createDiv(
+				"github-issues-search-container",
+			);
+			searchContainer.addClass("github-issues-search-modern");
+
+			const searchInputWrapper = searchContainer.createDiv(
+				"github-issues-search-wrapper",
+			);
+
+			const searchInput = searchInputWrapper.createEl("input");
+			searchInput.type = "text";
+			searchInput.placeholder = "Search repositories...";
+			searchInput.addClass("github-issues-search-input-modern");
+			const clearButton = searchInputWrapper.createDiv(
+				"github-issues-search-clear-button github-issues-hidden",
+			);
+			setIcon(clearButton, "x");
+			clearButton.addEventListener("click", () => {
+				searchInput.value = "";
+				clearButton.classList.add("github-issues-hidden");
+				searchInput.dispatchEvent(new Event("input"));
+				searchInput.focus();
+			});
+
+			const statsCounter = searchContainer.createDiv(
+				"github-issues-stats-counter",
+			);
+
+			statsCounter.setText(`Showing all ${repos.length} repositories`);
+
+			// Bulk actions container (rendered after search)
+			const bulkActionsContainer = container.createDiv(
 				"github-issues-bulk-actions",
 			);
 			bulkActionsContainer.addClass(
@@ -1508,42 +1527,10 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			addSelectedButton.addClass("github-issues-add-selected-button");
 			addSelectedButton.disabled = true;
 
-			const searchContainer = actionsBar.createDiv(
-				"github-issues-search-container",
-			);
-			searchContainer.addClass("github-issues-search-modern");
-
-			const searchInputWrapper = searchContainer.createDiv(
-				"github-issues-search-wrapper",
-			);
-			const searchIconContainer = searchInputWrapper.createDiv(
-				"github-issues-search-icon",
-			);
-			setIcon(searchIconContainer, "search");
-
-			const searchInput = searchInputWrapper.createEl("input");
-			searchInput.type = "text";
-			searchInput.placeholder = "Search repositories...";
-			searchInput.addClass("github-issues-search-input-modern");
-			const clearButton = searchInputWrapper.createDiv(
-				"github-issues-clear-button github-issues-hidden",
-			);
-			setIcon(clearButton, "x");
-			clearButton.addEventListener("click", () => {
-				searchInput.value = "";
-				clearButton.classList.add("github-issues-hidden");
-				searchInput.dispatchEvent(new Event("input"));
-				searchInput.focus();
-			});
-
-			const statsCounter = searchContainer.createDiv(
-				"github-issues-stats-counter",
-			);
-
-			statsCounter.setText(`Showing all ${repos.length} repositories`);
 			const repoListContainer = container.createDiv(
 				"github-issues-repo-list",
 			);
+			repoListContainer.addClass("github-issues-available-repos-list");
 			const noResultsMessage = container.createDiv(
 				"github-issues-no-results",
 			);
@@ -1583,6 +1570,17 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					selectedCountSpan.textContent = selectedCount.toString();
 				}
 				addSelectedButton.disabled = selectedCount === 0;
+
+				// Update sticky footer
+				const stickyCountSpan = stickyFooter?.querySelector(
+					".selected-count",
+				) as HTMLElement;
+				if (stickyCountSpan) {
+					stickyCountSpan.textContent = selectedCount.toString();
+				}
+				if (stickyFooter) {
+					stickyFooter.classList.toggle("github-issues-hidden", selectedCount === 0);
+				}
 			};
 
 			for (const ownerName of sortedOwners) {
@@ -1699,9 +1697,52 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						const trackedText = trackedContainer.createEl("span");
 						trackedText.setText("Tracked");
 						trackedText.addClass("github-issues-info-text");
+					} else {
+						// Per-repo profile selector
+						const repoProfileSelect = actionContainer.createEl("select");
+						repoProfileSelect.addClasses(["dropdown", "github-issues-inline-profile-select"]);
+						const availableRepoProfiles = getRepositoryProfiles(this.plugin.settings);
+						for (const profile of availableRepoProfiles) {
+							const opt = repoProfileSelect.createEl("option", {
+								text: profile.name,
+								value: profile.id,
+							});
+							if (profile.id === "default") opt.selected = true;
+						}
+						repoProfileSelect.onchange = () => {
+							repoProfileSelections.set(repoName, repoProfileSelect.value);
+						};
 					}
 				}
 			}
+
+			// Sticky "Add Selected" footer inside scrollable list
+			const stickyFooter = repoListContainer.createDiv(
+				"github-issues-sticky-add-footer",
+			);
+			stickyFooter.addClass("github-issues-hidden");
+			const stickyAddButton = stickyFooter.createEl("button");
+			stickyAddButton.createEl("span", {
+				cls: "github-issues-button-icon",
+				text: "+",
+			});
+			const stickyButtonText = stickyAddButton.createEl("span", {
+				cls: "github-issues-button-text",
+			});
+			stickyButtonText.setText("Add Selected (");
+			stickyButtonText.createEl("span", {
+				cls: "selected-count",
+				text: "0",
+			});
+			stickyButtonText.appendText(")");
+			stickyAddButton.addClass("github-issues-add-selected-button");
+			stickyAddButton.onclick = async () => {
+				if (this.selectedRepositories.size > 0) {
+					const selectedRepos = Array.from(this.selectedRepositories);
+					await this.repositoryListManager.addMultipleRepositories(selectedRepos, repoProfileSelections);
+					await this.renderAvailableRepositories(container);
+				}
+			};
 
 			selectAllButton.onclick = () => {
 				const checkboxes = repoListContainer.querySelectorAll(
@@ -1746,7 +1787,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			addSelectedButton.onclick = async () => {
 				if (this.selectedRepositories.size > 0) {
 					const selectedRepos = Array.from(this.selectedRepositories);
-					await this.repositoryListManager.addMultipleRepositories(selectedRepos);
+					await this.repositoryListManager.addMultipleRepositories(selectedRepos, repoProfileSelections);
 					await this.renderAvailableRepositories(container);
 				}
 			};
@@ -1797,6 +1838,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				);
 				ownerGroups.forEach((group) => {
 					const ownerName = group.getAttribute("data-owner") || "";
+					const chevron = group.querySelector(".github-issues-repo-owner-chevron");
 
 					if (
 						visibleReposByOwner[ownerName] &&
@@ -1805,12 +1847,26 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						(group as HTMLElement).classList.remove(
 							"github-issues-hidden",
 						);
+						// Auto-expand groups with matches when searching
+						if (searchTerm.length > 0) {
+							(group as HTMLElement).classList.add("github-issues-owner-expanded");
+							if (chevron) setIcon(chevron as HTMLElement, "chevron-down");
+						}
 					} else {
 						(group as HTMLElement).classList.add(
 							"github-issues-hidden",
 						);
 					}
 				});
+
+				// When search is cleared, collapse all groups back to default
+				if (searchTerm.length === 0) {
+					ownerGroups.forEach((group) => {
+						const chevron = group.querySelector(".github-issues-repo-owner-chevron");
+						(group as HTMLElement).classList.remove("github-issues-owner-expanded");
+						if (chevron) setIcon(chevron as HTMLElement, "chevron-right");
+					});
+				}
 
 				if (searchTerm.length > 0) {
 					statsCounter.setText(
@@ -2095,13 +2151,47 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 
 			container.empty();
 
-			// Actions bar
-			const actionsBar = container.createDiv("github-issues-actions-bar");
+			// Per-project profile selections
+			const projectProfileSelections = new Map<string, string>();
 
-			const bulkActionsContainer = actionsBar.createDiv(
+			// Search container (full width, rendered first)
+			const searchContainer = container.createDiv(
+				"github-issues-search-container",
+			);
+			searchContainer.addClass("github-issues-search-modern");
+
+			const searchInputWrapper = searchContainer.createDiv(
+				"github-issues-search-wrapper",
+			);
+
+			const searchInput = searchInputWrapper.createEl("input");
+			searchInput.type = "text";
+			searchInput.placeholder = "Search projects...";
+			searchInput.addClass("github-issues-search-input-modern");
+
+			const clearButton = searchInputWrapper.createDiv(
+				"github-issues-search-clear-button github-issues-hidden",
+			);
+			setIcon(clearButton, "x");
+			clearButton.addEventListener("click", () => {
+				searchInput.value = "";
+				clearButton.classList.add("github-issues-hidden");
+				searchInput.dispatchEvent(new Event("input"));
+				searchInput.focus();
+			});
+
+			const statsCounter = searchContainer.createDiv(
+				"github-issues-stats-counter",
+			);
+			statsCounter.setText(`Showing all ${projects.length} projects`);
+
+			// Bulk actions container (rendered after search)
+			const bulkActionsContainer = container.createDiv(
 				"github-issues-bulk-actions",
 			);
-			bulkActionsContainer.addClass("github-issues-bulk-actions-container");
+			bulkActionsContainer.addClass(
+				"github-issues-bulk-actions-container",
+			);
 
 			const selectionControls = bulkActionsContainer.createDiv(
 				"github-issues-selection-controls",
@@ -2116,7 +2206,6 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				text: "Select all",
 			});
 			selectAllButton.addClass("github-issues-select-all-button");
-
 			const selectNoneButton = selectionControls.createEl("button");
 			const selectNoneIcon = selectNoneButton.createEl("span", {
 				cls: "github-issues-button-icon",
@@ -2145,45 +2234,11 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			addSelectedButton.addClass("github-issues-add-selected-button");
 			addSelectedButton.disabled = true;
 
-			// Search container
-			const searchContainer = actionsBar.createDiv(
-				"github-issues-search-container",
-			);
-			searchContainer.addClass("github-issues-search-modern");
-
-			const searchInputWrapper = searchContainer.createDiv(
-				"github-issues-search-wrapper",
-			);
-			const searchIconContainer = searchInputWrapper.createDiv(
-				"github-issues-search-icon",
-			);
-			setIcon(searchIconContainer, "search");
-
-			const searchInput = searchInputWrapper.createEl("input");
-			searchInput.type = "text";
-			searchInput.placeholder = "Search projects...";
-			searchInput.addClass("github-issues-search-input-modern");
-
-			const clearButton = searchInputWrapper.createDiv(
-				"github-issues-clear-button github-issues-hidden",
-			);
-			setIcon(clearButton, "x");
-			clearButton.addEventListener("click", () => {
-				searchInput.value = "";
-				clearButton.classList.add("github-issues-hidden");
-				searchInput.dispatchEvent(new Event("input"));
-				searchInput.focus();
-			});
-
-			const statsCounter = searchContainer.createDiv(
-				"github-issues-stats-counter",
-			);
-			statsCounter.setText(`Showing all ${projects.length} projects`);
-
 			// Project list container
 			const projectListContainer = container.createDiv(
 				"github-issues-repo-list",
 			);
+			projectListContainer.addClass("github-issues-available-repos-list");
 
 			const noResultsMessage = container.createDiv(
 				"github-issues-no-results",
@@ -2221,6 +2276,17 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					selectedCountSpan.textContent = selectedCount.toString();
 				}
 				addSelectedButton.disabled = selectedCount === 0;
+
+				// Update sticky footer
+				const stickyCountSpan = stickyFooter?.querySelector(
+					".selected-count",
+				) as HTMLElement;
+				if (stickyCountSpan) {
+					stickyCountSpan.textContent = selectedCount.toString();
+				}
+				if (stickyFooter) {
+					stickyFooter.classList.toggle("github-issues-hidden", selectedCount === 0);
+				}
 			};
 
 			for (const ownerName of sortedOwners) {
@@ -2281,6 +2347,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					projectItem.setAttribute("data-project-id", project.id);
 					projectItem.setAttribute("data-project-title", project.title.toLowerCase());
 					projectItem.setAttribute("data-owner-name", project.owner.toLowerCase());
+					projectItem.setAttribute("data-full-name", `${project.owner}/${project.title}`.toLowerCase());
 
 					const projectInfoContainer = projectItem.createDiv(
 						"github-issues-repo-info",
@@ -2337,9 +2404,82 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						const trackedText = trackedContainer.createEl("span");
 						trackedText.setText("Tracked");
 						trackedText.addClass("github-issues-info-text");
+					} else {
+						// Per-project profile selector
+						const projProfileSelect = actionContainer.createEl("select");
+						projProfileSelect.addClasses(["dropdown", "github-issues-inline-profile-select"]);
+						const availProjectProfiles = getProjectProfiles(this.plugin.settings);
+						for (const profile of availProjectProfiles) {
+							const opt = projProfileSelect.createEl("option", {
+								text: profile.name,
+								value: profile.id,
+							});
+							if (profile.id === "default") opt.selected = true;
+						}
+						projProfileSelect.onchange = () => {
+							projectProfileSelections.set(project.id, projProfileSelect.value);
+						};
 					}
 				}
 			}
+
+			// Sticky "Add Selected" footer inside scrollable list
+			const stickyFooter = projectListContainer.createDiv(
+				"github-issues-sticky-add-footer",
+			);
+			stickyFooter.addClass("github-issues-hidden");
+			const stickyAddButton = stickyFooter.createEl("button");
+			stickyAddButton.createEl("span", {
+				cls: "github-issues-button-icon",
+				text: "+",
+			});
+			const stickyButtonText = stickyAddButton.createEl("span", {
+				cls: "github-issues-button-text",
+			});
+			stickyButtonText.setText("Add Selected (");
+			stickyButtonText.createEl("span", {
+				cls: "selected-count",
+				text: "0",
+			});
+			stickyButtonText.appendText(")");
+			stickyAddButton.addClass("github-issues-add-selected-button");
+			stickyAddButton.onclick = async () => {
+				if (selectedProjects.size > 0) {
+					const existingProjects = new Map(
+						this.plugin.settings.trackedProjects.map(p => [p.id, p])
+					);
+
+					for (const projectId of selectedProjects) {
+						if (!existingProjects.has(projectId)) {
+							const project = projects.find(p => p.id === projectId);
+							if (project) {
+								let statusOptions: any[] = [];
+								try {
+									statusOptions = await this.plugin.gitHubClient!.fetchProjectStatusOptions(project.id);
+								} catch {
+									// Ignore errors
+								}
+
+								this.plugin.settings.trackedProjects.push({
+									id: project.id,
+									title: project.title,
+									number: project.number,
+									url: project.url,
+									owner: project.owner,
+									enabled: true,
+									issueFolder: "GitHub/{project}",
+									statusOptions: statusOptions,
+									profileId: projectProfileSelections.get(project.id) || undefined,
+								});
+							}
+						}
+					}
+
+					await this.plugin.saveSettings();
+					new Notice(`Added ${selectedProjects.size} projects`);
+					this.display();
+				}
+			};
 
 			// Select all button
 			selectAllButton.onclick = () => {
@@ -2402,6 +2542,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 									enabled: true,
 									issueFolder: "GitHub/{project}",
 									statusOptions: statusOptions,
+									profileId: projectProfileSelections.get(project.id) || undefined,
 								});
 							}
 						}
@@ -2432,8 +2573,10 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				projectItems.forEach((item) => {
 					const projectTitle = item.getAttribute("data-project-title") || "";
 					const ownerName = item.getAttribute("data-owner-name") || "";
+					const fullName = item.getAttribute("data-full-name") || "";
 
 					if (
+						fullName.includes(searchTerm) ||
 						projectTitle.includes(searchTerm) ||
 						ownerName.includes(searchTerm)
 					) {
@@ -2453,16 +2596,31 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				);
 				ownerGroups.forEach((group) => {
 					const ownerName = group.getAttribute("data-owner") || "";
+					const chevron = group.querySelector(".github-issues-repo-owner-chevron");
 
 					if (
 						visibleProjectsByOwner[ownerName] &&
 						visibleProjectsByOwner[ownerName] > 0
 					) {
 						(group as HTMLElement).classList.remove("github-issues-hidden");
+						// Auto-expand groups with matches when searching
+						if (searchTerm.length > 0) {
+							(group as HTMLElement).classList.add("github-issues-owner-expanded");
+							if (chevron) setIcon(chevron as HTMLElement, "chevron-down");
+						}
 					} else {
 						(group as HTMLElement).classList.add("github-issues-hidden");
 					}
 				});
+
+				// When search is cleared, collapse all groups back to default
+				if (searchTerm.length === 0) {
+					ownerGroups.forEach((group) => {
+						const chevron = group.querySelector(".github-issues-repo-owner-chevron");
+						(group as HTMLElement).classList.remove("github-issues-owner-expanded");
+						if (chevron) setIcon(chevron as HTMLElement, "chevron-right");
+					});
+				}
 
 				if (searchTerm.length > 0) {
 					statsCounter.setText(

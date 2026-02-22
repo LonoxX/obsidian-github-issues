@@ -2,7 +2,10 @@ import { App, TFile } from "obsidian";
 import { format } from "date-fns";
 import { escapeBody } from "./escapeUtils";
 import { NoticeManager } from "../notice-manager";
-import { createIssueTemplateData, processFilenameTemplate } from "./templateUtils";
+import {
+	createIssueTemplateData,
+	processFilenameTemplate,
+} from "./templateUtils";
 
 export class FileHelpers {
 	constructor(
@@ -13,18 +16,24 @@ export class FileHelpers {
 	/**
 	 * Load template content from a file
 	 */
-	public async loadTemplateContent(templatePath: string): Promise<string | null> {
+	public async loadTemplateContent(
+		templatePath: string,
+	): Promise<string | null> {
 		if (!templatePath || templatePath.trim() === "") {
 			return null;
 		}
 
 		try {
-			const templateFile = this.app.vault.getAbstractFileByPath(templatePath.trim());
+			const templateFile = this.app.vault.getAbstractFileByPath(
+				templatePath.trim(),
+			);
 			if (templateFile instanceof TFile) {
 				return await this.app.vault.read(templateFile);
 			}
 		} catch (error) {
-			this.noticeManager.warning(`Could not load template file: ${templatePath}`);
+			this.noticeManager.warning(
+				`Could not load template file: ${templatePath}`,
+			);
 		}
 		return null;
 	}
@@ -35,7 +44,9 @@ export class FileHelpers {
 	public async ensureFolderExists(path: string): Promise<void> {
 		// Guard against undefined or empty paths
 		if (!path || path.trim() === "") {
-			this.noticeManager.error("Cannot create folder: path is empty or undefined");
+			this.noticeManager.error(
+				"Cannot create folder: path is empty or undefined",
+			);
 			return;
 		}
 
@@ -45,8 +56,12 @@ export class FileHelpers {
 				await this.app.vault.createFolder(path);
 				this.noticeManager.debug(`Created folder: ${path}`);
 			} catch (error) {
-				// If creation failed, try again to ensure folder exists
-				await this.app.vault.createFolder(path);
+				// Folder may have been created concurrently or vault cache was stale - verify it exists now
+				const existsNow = this.app.vault.getAbstractFileByPath(path);
+				if (!existsNow) {
+					// Folder truly doesn't exist and creation failed - rethrow
+					throw error;
+				}
 			}
 		}
 	}
@@ -65,7 +80,9 @@ export class FileHelpers {
 		}
 
 		comments.sort(
-			(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+			(a, b) =>
+				new Date(a.created_at).getTime() -
+				new Date(b.created_at).getTime(),
 		);
 
 		let commentSection = "\n## Comments\n\n";
@@ -106,46 +123,54 @@ export class FileHelpers {
 		noteTemplate: string,
 		repository: string,
 		dateFormat: string,
-		escapeMode: "disabled" | "normal" | "strict" | "veryStrict"
+		escapeMode: "disabled" | "normal" | "strict" | "veryStrict",
 	): Promise<any[]> {
 		if (!subIssues || subIssues.length === 0) {
 			return subIssues;
 		}
 
-		return Promise.all(subIssues.map(async (subIssue) => {
-			const templateData = createIssueTemplateData(
-				{
-					title: subIssue.title || "Untitled",
-					number: subIssue.number,
-					state: subIssue.state || "open",
-					user: { login: subIssue.user?.login || "unknown" },
-					created_at: subIssue.created_at || new Date().toISOString(),
-					updated_at: subIssue.updated_at || new Date().toISOString(),
-					html_url: subIssue.html_url || subIssue.url || "",
-					body: subIssue.body || "",
-					comments: 0,
-					locked: false,
-				},
-				repository,
-				[],
-				dateFormat,
-				escapeMode,
-				false
-			);
+		return Promise.all(
+			subIssues.map(async (subIssue) => {
+				const templateData = createIssueTemplateData(
+					{
+						title: subIssue.title || "Untitled",
+						number: subIssue.number,
+						state: subIssue.state || "open",
+						user: { login: subIssue.user?.login || "unknown" },
+						created_at:
+							subIssue.created_at || new Date().toISOString(),
+						updated_at:
+							subIssue.updated_at || new Date().toISOString(),
+						html_url: subIssue.html_url || subIssue.url || "",
+						body: subIssue.body || "",
+						comments: 0,
+						locked: false,
+					},
+					repository,
+					[],
+					dateFormat,
+					escapeMode,
+					false,
+				);
 
-			const expectedFilename = processFilenameTemplate(noteTemplate, templateData, dateFormat);
-			const expectedPath = `${issueFolder}/${expectedFilename}.md`;
+				const expectedFilename = processFilenameTemplate(
+					noteTemplate,
+					templateData,
+					dateFormat,
+				);
+				const expectedPath = `${issueFolder}/${expectedFilename}.md`;
 
-			// Check if the file exists in the vault
-			const file = this.app.vault.getAbstractFileByPath(expectedPath);
-			if (file instanceof TFile) {
-				return {
-					...subIssue,
-					vaultPath: expectedFilename,
-				};
-			}
+				// Check if the file exists in the vault
+				const file = this.app.vault.getAbstractFileByPath(expectedPath);
+				if (file instanceof TFile) {
+					return {
+						...subIssue,
+						vaultPath: expectedFilename,
+					};
+				}
 
-			return subIssue;
-		}));
+				return subIssue;
+			}),
+		);
 	}
 }

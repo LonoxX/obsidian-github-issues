@@ -43,7 +43,7 @@ export class IssueFileManager {
 		_currentIssueNumbers: Set<string>,
 	): Promise<void> {
 		// Apply global defaults to repository settings
-		const effectiveRepo = getEffectiveRepoSettings(repo, this.settings.globalDefaults);
+		const effectiveRepo = getEffectiveRepoSettings(repo, this.settings);
 
 		const [owner, repoName] = effectiveRepo.repository.split("/");
 		if (!owner || !repoName) return;
@@ -90,9 +90,10 @@ export class IssueFileManager {
 			await this.fileHelpers.ensureFolderExists(repo.customIssueFolder.trim());
 		} else {
 			// For default structure, ensure nested path exists
-			await this.fileHelpers.ensureFolderExists(repo.issueFolder);
-			await this.fileHelpers.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}`);
-			await this.fileHelpers.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`);
+			const issueFolder = repo.issueFolder ?? "GitHub";
+			await this.fileHelpers.ensureFolderExists(issueFolder);
+			await this.fileHelpers.ensureFolderExists(`${issueFolder}/${ownerCleaned}`);
+			await this.fileHelpers.ensureFolderExists(`${issueFolder}/${ownerCleaned}/${repoCleaned}`);
 		}
 
 		const file = this.app.vault.getAbstractFileByPath(`${issueFolderPath}/${fileName}`);
@@ -195,7 +196,7 @@ export class IssueFileManager {
 						this.noticeManager.debug(`Updated issue ${issue.number}`);
 					}
 				} else if (updateMode === "append") {
-					const shouldEscapeHashTags = repo.ignoreGlobalSettings ? repo.escapeHashTags : this.settings.escapeHashTags;
+					const shouldEscapeHashTags = repo.profileId !== "default" ? repo.escapeHashTags : this.settings.escapeHashTags;
 					content = `---\n### New status: "${
 						issue.state
 					}"\n\n# ${escapeBody(

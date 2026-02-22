@@ -240,7 +240,7 @@ export class ModalManager {
 	async fetchAndShowRepositoryCollaborators(
 		repositoryName: string,
 		repo: RepositoryTracking,
-		filterType: 'assigneeFilters' | 'prAssigneeFilters',
+		filterType: 'assigneeFilters' | 'prAssigneeFilters' | 'prReviewerFilters',
 		textAreaElement: HTMLTextAreaElement,
 	): Promise<void> {
 		if (!this.plugin.gitHubClient?.isReady()) {

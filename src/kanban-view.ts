@@ -1,5 +1,7 @@
 import { ItemView, WorkspaceLeaf, TFile, Notice, setIcon } from "obsidian";
 import { GitHubTrackerSettings, ProjectData, TrackedProject } from "./types";
+import { getEffectiveProjectSettings } from "./util/settingsUtils";
+import { FolderPathManager } from "./folder-path-manager";
 
 export const KANBAN_VIEW_TYPE = "github-kanban-view";
 
@@ -16,11 +18,11 @@ export class GitHubKanbanView extends ItemView {
 			const u = new URL(url);
 			let p = u.origin + u.pathname;
 			// Remove trailing slash
-			if (p.endsWith('/')) p = p.slice(0, -1);
+			if (p.endsWith("/")) p = p.slice(0, -1);
 			return p.toLowerCase();
 		} catch {
 			// Fallback: simple trim and toLower
-			return url.replace(/\/$/, '').toLowerCase();
+			return url.replace(/\/$/, "").toLowerCase();
 		}
 	}
 
@@ -29,15 +31,22 @@ export class GitHubKanbanView extends ItemView {
 	 */
 	private parseNumber(val: any): number | null {
 		if (val === undefined || val === null) return null;
-		if (typeof val === 'number') return val;
-		const s = String(val).trim().replace(/^"|"$/g, '').replace(/[^0-9-]/g, '');
-		if (s === '') return null;
+		if (typeof val === "number") return val;
+		const s = String(val)
+			.trim()
+			.replace(/^"|"$/g, "")
+			.replace(/[^0-9-]/g, "");
+		if (s === "") return null;
 		const n = Number(s);
 		return isNaN(n) ? null : n;
 	}
 	private gitHubClient: any = null;
 
-	constructor(leaf: WorkspaceLeaf, settings: GitHubTrackerSettings, gitHubClient: any) {
+	constructor(
+		leaf: WorkspaceLeaf,
+		settings: GitHubTrackerSettings,
+		gitHubClient: any,
+	) {
 		super(leaf);
 		this.settings = settings;
 		this.gitHubClient = gitHubClient;
@@ -67,9 +76,12 @@ export class GitHubKanbanView extends ItemView {
 
 	private startAutoRefresh(): void {
 		// Refresh every 5 minutes
-		this.refreshInterval = setInterval(() => {
-			this.render();
-		}, 5 * 60 * 1000);
+		this.refreshInterval = setInterval(
+			() => {
+				this.render();
+			},
+			5 * 60 * 1000,
+		);
 	}
 
 	private stopAutoRefresh(): void {
@@ -89,19 +101,24 @@ export class GitHubKanbanView extends ItemView {
 		if (trackedProjects.length === 0) {
 			container.createEl("p", {
 				text: "No projects tracked. Go to Settings → GitHub Projects to add projects.",
-				cls: "github-kanban-empty"
+				cls: "github-kanban-empty",
 			});
 			return;
 		}
 
 		// Tab bar
-		const tabBar = container.createDiv("github-kanban-tabs github-kanban-tabs-inline");
+		const tabBar = container.createDiv(
+			"github-kanban-tabs github-kanban-tabs-inline",
+		);
 
 		// Content container for the active project
 		const contentContainer = container.createDiv("github-kanban-content");
 
 		// Set first project as active if none selected
-		if (!this.activeProjectId || !trackedProjects.find(p => p.id === this.activeProjectId)) {
+		if (
+			!this.activeProjectId ||
+			!trackedProjects.find((p) => p.id === this.activeProjectId)
+		) {
 			this.activeProjectId = trackedProjects[0].id;
 		}
 
@@ -109,7 +126,7 @@ export class GitHubKanbanView extends ItemView {
 		for (const project of trackedProjects) {
 			const tab = tabBar.createEl("button", {
 				text: `${project.title}`,
-				cls: `github-kanban-tab github-kanban-tab-styled${project.id === this.activeProjectId ? " active" : ""}`
+				cls: `github-kanban-tab github-kanban-tab-styled${project.id === this.activeProjectId ? " active" : ""}`,
 			});
 
 			// Show loading indicator if not yet loaded
@@ -120,9 +137,11 @@ export class GitHubKanbanView extends ItemView {
 			tab.onclick = async () => {
 				this.activeProjectId = project.id;
 				// Update tab styles
-				tabBar.querySelectorAll(".github-kanban-tab").forEach((t: HTMLElement) => {
-					t.removeClass("active");
-				});
+				tabBar
+					.querySelectorAll(".github-kanban-tab")
+					.forEach((t: HTMLElement) => {
+						t.removeClass("active");
+					});
 				tab.addClass("active");
 
 				// Load and render the project
@@ -140,7 +159,7 @@ export class GitHubKanbanView extends ItemView {
 
 		// Refresh button (at the right of tab bar)
 		const refreshButton = tabBar.createEl("button", {
-			cls: "github-kanban-refresh-btn github-kanban-refresh-styled"
+			cls: "github-kanban-refresh-btn github-kanban-refresh-styled",
 		});
 		setIcon(refreshButton, "refresh-cw");
 		refreshButton.onclick = async () => {
@@ -160,11 +179,15 @@ export class GitHubKanbanView extends ItemView {
 		container.empty();
 
 		if (!this.activeProjectId) {
-			container.createEl("p", { text: "Select a project tab to view its board." });
+			container.createEl("p", {
+				text: "Select a project tab to view its board.",
+			});
 			return;
 		}
 
-		const project = this.settings.trackedProjects?.find(p => p.id === this.activeProjectId);
+		const project = this.settings.trackedProjects?.find(
+			(p) => p.id === this.activeProjectId,
+		);
 		if (!project) {
 			container.createEl("p", { text: "Project not found." });
 			return;
@@ -172,7 +195,9 @@ export class GitHubKanbanView extends ItemView {
 
 		// Show loading state if not cached
 		if (!this.loadedProjects.has(this.activeProjectId)) {
-			const loadingEl = container.createDiv("github-kanban-loading github-kanban-loading-styled");
+			const loadingEl = container.createDiv(
+				"github-kanban-loading github-kanban-loading-styled",
+			);
 			loadingEl.createEl("p", { text: `Loading ${project.title}...` });
 
 			// Load the project data
@@ -183,23 +208,24 @@ export class GitHubKanbanView extends ItemView {
 		}
 
 		// Render the project board
-		await this.renderProjectBoard(container, {
-			id: project.id,
-			title: project.title,
-			number: project.number,
-			url: project.url
-		});
+		await this.renderProjectBoard(container, project);
 	}
 
-	private async loadSingleProject(projectId: string, project: TrackedProject): Promise<void> {
+	private async loadSingleProject(
+		projectId: string,
+		project: TrackedProject,
+	): Promise<void> {
 		try {
-			const projectItems = await this.gitHubClient.fetchProjectItems(projectId);
+			const projectItems =
+				await this.gitHubClient.fetchProjectItems(projectId);
 			const itemsArray: any[] = [];
 
 			for (const item of projectItems) {
 				if (!item.content) continue;
 				const contentUrl: string | undefined = item.content.url;
-				const normalizedUrl = this.normalizeUrl(contentUrl) as string | null;
+				const normalizedUrl = this.normalizeUrl(contentUrl) as
+					| string
+					| null;
 
 				// Parse custom fields
 				const customFields: any = {};
@@ -207,21 +233,43 @@ export class GitHubKanbanView extends ItemView {
 					if (!fieldValue.field?.name) continue;
 					const fieldName = fieldValue.field.name;
 					if (fieldValue.text !== undefined) {
-						customFields[fieldName] = { fieldName, type: 'text', value: fieldValue.text };
+						customFields[fieldName] = {
+							fieldName,
+							type: "text",
+							value: fieldValue.text,
+						};
 					} else if (fieldValue.name !== undefined) {
-						customFields[fieldName] = { fieldName, type: 'single_select', value: fieldValue.name };
+						customFields[fieldName] = {
+							fieldName,
+							type: "single_select",
+							value: fieldValue.name,
+						};
 					} else if (fieldValue.date !== undefined) {
-						customFields[fieldName] = { fieldName, type: 'date', value: fieldValue.date };
+						customFields[fieldName] = {
+							fieldName,
+							type: "date",
+							value: fieldValue.date,
+						};
 					} else if (fieldValue.users?.nodes) {
-						customFields[fieldName] = { fieldName, type: 'user', value: fieldValue.users.nodes.map((u: any) => u.login).join(', '), users: fieldValue.users.nodes.map((u: any) => u.login) };
+						customFields[fieldName] = {
+							fieldName,
+							type: "user",
+							value: fieldValue.users.nodes
+								.map((u: any) => u.login)
+								.join(", "),
+							users: fieldValue.users.nodes.map(
+								(u: any) => u.login,
+							),
+						};
 					}
 				}
 
 				// Extract labels from content
-				const labels = item.content.labels?.nodes?.map((l: any) => ({
-					name: l.name,
-					color: l.color
-				})) || [];
+				const labels =
+					item.content.labels?.nodes?.map((l: any) => ({
+						name: l.name,
+						color: l.color,
+					})) || [];
 
 				const projectData = {
 					projectId: projectId,
@@ -231,27 +279,35 @@ export class GitHubKanbanView extends ItemView {
 					itemId: item.id,
 					number: item.content.number,
 					title: item.content.title,
-					body: item.content.body || '',
-					author: item.content.author?.login || 'unknown',
+					body: item.content.body || "",
+					author: item.content.author?.login || "unknown",
 					labels: labels,
 					url: contentUrl,
 					normalizedUrl,
 					customFields,
-					status: customFields?.Status?.value ?? null
+					status: customFields?.Status?.value ?? null,
 				};
 				itemsArray.push(projectData);
 			}
 
 			this.projectDataCache.set(projectId, itemsArray);
 		} catch (error) {
-			console.error(`Error loading project data for ${projectId}:`, error);
+			console.error(
+				`Error loading project data for ${projectId}:`,
+				error,
+			);
 		}
 	}
 
-	private async renderProjectBoard(container: Element, project: any): Promise<void> {
+	private async renderProjectBoard(
+		container: Element,
+		project: TrackedProject,
+	): Promise<void> {
 		const projectContainer = container.createDiv("github-kanban-project");
 
-		const boardContainer = projectContainer.createDiv("github-kanban-board");
+		const boardContainer = projectContainer.createDiv(
+			"github-kanban-board",
+		);
 
 		// Get issues/PRs for this project
 		const items = await this.getProjectItems(project);
@@ -260,7 +316,10 @@ export class GitHubKanbanView extends ItemView {
 		const statusColumns = this.groupItemsByStatus(items);
 
 		// Get sorted statuses based on settings
-		const sortedStatuses = this.getSortedStatuses(project.id, statusColumns);
+		const sortedStatuses = this.getSortedStatuses(
+			project.id,
+			statusColumns,
+		);
 
 		for (const status of sortedStatuses) {
 			const columnItems = statusColumns.get(status) || [];
@@ -268,26 +327,40 @@ export class GitHubKanbanView extends ItemView {
 		}
 	}
 
-	private getSortedStatuses(projectId: string, statusColumns: Map<string, any[]>): string[] {
+	private getSortedStatuses(
+		projectId: string,
+		statusColumns: Map<string, any[]>,
+	): string[] {
 		const statusesWithItems = Array.from(statusColumns.keys());
 
 		// Find the tracked project settings
-		const trackedProject = this.settings.trackedProjects?.find(p => p.id === projectId);
+		const trackedProject = this.settings.trackedProjects?.find(
+			(p) => p.id === projectId,
+		);
 
 		if (!trackedProject) {
 			// Fallback: alphabetical with "No Status" at end
 			return this.defaultStatusSort(statusesWithItems);
 		}
 
+		// Get effective settings from profile
+		const effectiveProject = getEffectiveProjectSettings(
+			trackedProject,
+			this.settings,
+		);
+
 		// Determine the order to use (includes ALL statuses, even empty ones)
 		let statusOrder: string[] = [];
 
-		if (trackedProject.useCustomStatusOrder && trackedProject.customStatusOrder?.length) {
-			// Use custom order
+		if (
+			trackedProject.useCustomStatusOrder &&
+			trackedProject.customStatusOrder?.length
+		) {
+			// Use custom order (project-specific)
 			statusOrder = trackedProject.customStatusOrder;
 		} else if (trackedProject.statusOptions?.length) {
 			// Use GitHub API order
-			statusOrder = trackedProject.statusOptions.map(opt => opt.name);
+			statusOrder = trackedProject.statusOptions.map((opt) => opt.name);
 		}
 
 		if (statusOrder.length === 0) {
@@ -295,8 +368,8 @@ export class GitHubKanbanView extends ItemView {
 			return this.defaultStatusSort(statusesWithItems);
 		}
 
-		// Check settings
-		const showEmptyColumns = trackedProject.showEmptyColumns ?? true;
+		// Check settings - showEmptyColumns from profile
+		const showEmptyColumns = effectiveProject.showEmptyColumns ?? true;
 		const hiddenStatuses = new Set(trackedProject.hiddenStatuses || []);
 
 		const orderedStatuses: string[] = [];
@@ -318,12 +391,15 @@ export class GitHubKanbanView extends ItemView {
 
 		// Add any remaining statuses that have items but aren't in the order (except "No Status" and hidden ones)
 		const remaining = Array.from(remainingStatuses)
-			.filter(s => s !== "No Status" && !hiddenStatuses.has(s))
+			.filter((s) => s !== "No Status" && !hiddenStatuses.has(s))
 			.sort();
 		orderedStatuses.push(...remaining);
 
 		// Always put "No Status" at the end if it has items and is not hidden
-		if (remainingStatuses.has("No Status") && !hiddenStatuses.has("No Status")) {
+		if (
+			remainingStatuses.has("No Status") &&
+			!hiddenStatuses.has("No Status")
+		) {
 			orderedStatuses.push("No Status");
 		}
 
@@ -332,43 +408,43 @@ export class GitHubKanbanView extends ItemView {
 
 	private defaultStatusSort(statuses: string[]): string[] {
 		return statuses
-			.filter(status => status !== "No Status")
+			.filter((status) => status !== "No Status")
 			.sort()
 			.concat(statuses.includes("No Status") ? ["No Status"] : []);
 	}
 
-	private async getProjectItems(project: any): Promise<any[]> {
+	private async getProjectItems(project: TrackedProject): Promise<any[]> {
 		const items: any[] = [];
 
-		const trackedProject = this.settings.trackedProjects?.find(p => p.id === project.id);
-
-		const processFolder = (folder: string | undefined): string | undefined => {
-			if (!folder) return undefined;
-			const sanitize = (str: string) => str.replace(/[<>:"|?*\\]/g, "-").replace(/\.\./g, ".").trim();
-			return folder
-				.replace(/\{project\}/g, sanitize(project.title || ""))
-				.replace(/\{owner\}/g, sanitize(project.owner || ""))
-				.replace(/\{project_number\}/g, (project.number || "").toString());
-		};
-
-		const issueFolder = processFolder(
-			trackedProject?.useCustomIssueFolder
-				? trackedProject?.customIssueFolder
-				: trackedProject?.issueFolder
+		const trackedProject = this.settings.trackedProjects?.find(
+			(p) => p.id === project.id,
 		);
-		const prFolder = processFolder(
-			trackedProject?.useCustomPullRequestFolder
-				? trackedProject?.customPullRequestFolder
-				: trackedProject?.pullRequestFolder
-		);
+
+		// Get effective settings from profile
+		const effectiveProject = trackedProject
+			? getEffectiveProjectSettings(trackedProject, this.settings)
+			: null;
+
+		// Use FolderPathManager for consistent folder path resolution (same as file-manager)
+		const folderPathManager = new FolderPathManager();
+		const issueFolder = effectiveProject
+			? folderPathManager.getProjectIssueFolderPath(effectiveProject)
+			: undefined;
+		const prFolder = effectiveProject
+			? (folderPathManager.getProjectPullRequestFolderPath(
+					effectiveProject,
+				) ?? undefined)
+			: undefined;
 
 		const files = this.app.vault.getMarkdownFiles();
 		const matchedNumbers = new Set<number>();
 		const matchedUrls = new Set<string>();
-		const cachedItemsForProject = this.projectDataCache.get(project.id) || [];
+		const cachedItemsForProject =
+			this.projectDataCache.get(project.id) || [];
 
 		const isFileInProjectFolder = (filePath: string): boolean => {
-			if (issueFolder && filePath.startsWith(issueFolder + "/")) return true;
+			if (issueFolder && filePath.startsWith(issueFolder + "/"))
+				return true;
 			if (prFolder && filePath.startsWith(prFolder + "/")) return true;
 			return false;
 		};
@@ -385,11 +461,15 @@ export class GitHubKanbanView extends ItemView {
 				const frontmatter = this.parseFrontmatter(content);
 				if (!frontmatter) continue;
 
-				const isIssue = frontmatter.number && frontmatter.title && frontmatter.state;
+				const isIssue =
+					frontmatter.number &&
+					frontmatter.title &&
+					frontmatter.state;
 				if (!isIssue) continue;
 
 				const isInProjectFolder = hasAnyProjectFolder;
-				const fileMatchesProject = frontmatter.project === project.title;
+				const fileMatchesProject =
+					frontmatter.project === project.title;
 				const itemUrl = frontmatter.url;
 				const normalizedItemUrl = this.normalizeUrl(itemUrl);
 
@@ -397,7 +477,10 @@ export class GitHubKanbanView extends ItemView {
 
 				// Try URL matching first (most reliable for cross-repository projects)
 				if (normalizedItemUrl) {
-					fullProjectData = cachedItemsForProject.find((ci: any) => ci.normalizedUrl === normalizedItemUrl) || null;
+					fullProjectData =
+						cachedItemsForProject.find(
+							(ci: any) => ci.normalizedUrl === normalizedItemUrl,
+						) || null;
 					if (fullProjectData && fullProjectData.normalizedUrl) {
 						matchedUrls.add(fullProjectData.normalizedUrl);
 					}
@@ -407,18 +490,26 @@ export class GitHubKanbanView extends ItemView {
 				if (!fullProjectData) {
 					const fmNum = this.parseNumber(frontmatter.number);
 					if (fmNum !== null) {
-						fullProjectData = cachedItemsForProject.find((ci: any) => Number(ci.number) === fmNum) || null;
+						fullProjectData =
+							cachedItemsForProject.find(
+								(ci: any) => Number(ci.number) === fmNum,
+							) || null;
 						if (fullProjectData) {
 							matchedNumbers.add(fmNum);
 						}
 					}
 				}
 
-				if (isInProjectFolder || fullProjectData || fileMatchesProject) {
-					let projectStatus = frontmatter.project_status
-						|| fullProjectData?.status
-						|| fullProjectData?.customFields?.Status?.value
-						|| "No Status";
+				if (
+					isInProjectFolder ||
+					fullProjectData ||
+					fileMatchesProject
+				) {
+					let projectStatus =
+						frontmatter.project_status ||
+						fullProjectData?.status ||
+						fullProjectData?.customFields?.Status?.value ||
+						"No Status";
 
 					const item = {
 						...frontmatter,
@@ -426,15 +517,20 @@ export class GitHubKanbanView extends ItemView {
 						title: frontmatter.title,
 						number: frontmatter.number,
 						state: frontmatter.state,
-						labels: fullProjectData?.labels || frontmatter.labels || [],
-						body: fullProjectData?.body || '',
-						author: fullProjectData?.author || frontmatter.opened_by || frontmatter.author || 'unknown',
+						labels:
+							fullProjectData?.labels || frontmatter.labels || [],
+						body: fullProjectData?.body || "",
+						author:
+							fullProjectData?.author ||
+							frontmatter.opened_by ||
+							frontmatter.author ||
+							"unknown",
 						pull_request: frontmatter.type === "pr",
 						projectStatus: projectStatus,
 						projectTitle: project.title,
 						projectNumber: project.number,
 						projectUrl: project.url,
-						fullProjectData: fullProjectData
+						fullProjectData: fullProjectData,
 					};
 					items.push(item);
 				}
@@ -442,7 +538,6 @@ export class GitHubKanbanView extends ItemView {
 				console.error(`Error processing file ${file.path}:`, error);
 			}
 		}
-
 
 		return items;
 	}
@@ -454,17 +549,17 @@ export class GitHubKanbanView extends ItemView {
 
 		try {
 			const frontmatter = match[1];
-			const lines = frontmatter.split('\n');
+			const lines = frontmatter.split("\n");
 			const result: any = {};
 
 			for (const line of lines) {
-				const colonIndex = line.indexOf(':');
+				const colonIndex = line.indexOf(":");
 				if (colonIndex > 0) {
 					const key = line.substring(0, colonIndex).trim();
 					let value = line.substring(colonIndex + 1).trim();
 
 					// Try to parse as JSON if it looks like an array/object
-					if (value.startsWith('[') || value.startsWith('{')) {
+					if (value.startsWith("[") || value.startsWith("{")) {
 						try {
 							result[key] = JSON.parse(value);
 						} catch {
@@ -472,8 +567,10 @@ export class GitHubKanbanView extends ItemView {
 						}
 					} else {
 						// Strip surrounding quotes from string values
-						if ((value.startsWith('"') && value.endsWith('"')) ||
-							(value.startsWith("'") && value.endsWith("'"))) {
+						if (
+							(value.startsWith('"') && value.endsWith('"')) ||
+							(value.startsWith("'") && value.endsWith("'"))
+						) {
 							value = value.slice(1, -1);
 						}
 						result[key] = value;
@@ -483,7 +580,7 @@ export class GitHubKanbanView extends ItemView {
 
 			return result;
 		} catch (error) {
-			console.error('Error parsing frontmatter:', error);
+			console.error("Error parsing frontmatter:", error);
 			return null;
 		}
 	}
@@ -502,7 +599,11 @@ export class GitHubKanbanView extends ItemView {
 		return groups;
 	}
 
-	private renderColumn(container: Element, status: string, items: any[]): void {
+	private renderColumn(
+		container: Element,
+		status: string,
+		items: any[],
+	): void {
 		const column = container.createDiv("github-kanban-column");
 		column.createEl("h4", { text: `${status} (${items.length})` });
 
@@ -517,71 +618,85 @@ export class GitHubKanbanView extends ItemView {
 		const itemEl = container.createDiv("github-kanban-item");
 
 		// Header: Number and type
-		const headerEl = itemEl.createEl("div", { cls: "github-kanban-item-header" });
+		const headerEl = itemEl.createEl("div", {
+			cls: "github-kanban-item-header",
+		});
 
 		const type = item.pull_request ? "PR" : "Issue";
 		const number = item.number;
 		headerEl.createEl("span", {
 			text: `#${number} · ${type}`,
-			cls: "github-kanban-item-type"
+			cls: "github-kanban-item-type",
 		});
 
 		// Title
-		const titleEl = itemEl.createEl("div", { cls: "github-kanban-item-title" });
+		const titleEl = itemEl.createEl("div", {
+			cls: "github-kanban-item-title",
+		});
 		titleEl.setText(item.title || "Untitled");
 
 		// Labels
 		if (item.labels && item.labels.length > 0) {
-			const labelsEl = itemEl.createEl("div", { cls: "github-kanban-item-labels" });
+			const labelsEl = itemEl.createEl("div", {
+				cls: "github-kanban-item-labels",
+			});
 
 			for (const label of item.labels.slice(0, 5)) {
-				const labelEl = labelsEl.createEl("span", { cls: "github-kanban-label" });
+				const labelEl = labelsEl.createEl("span", {
+					cls: "github-kanban-label",
+				});
 				labelEl.setText(label.name);
 
 				// Set background color and calculate text color (dynamic, must stay inline)
-				const bgColor = label.color || 'cccccc';
+				const bgColor = label.color || "cccccc";
 				labelEl.style.backgroundColor = `#${bgColor}`;
 				const r = parseInt(bgColor.slice(0, 2), 16);
 				const g = parseInt(bgColor.slice(2, 4), 16);
 				const b = parseInt(bgColor.slice(4, 6), 16);
 				const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-				labelEl.style.color = luminance > 0.5 ? '#000000' : '#ffffff';
+				labelEl.style.color = luminance > 0.5 ? "#000000" : "#ffffff";
 			}
 
 			if (item.labels.length > 5) {
 				labelsEl.createEl("span", {
 					text: `+${item.labels.length - 5}`,
-					cls: "github-kanban-label-more"
+					cls: "github-kanban-label-more",
 				});
 			}
 		}
 
 		// Creator
 		if (item.author) {
-			const creatorEl = itemEl.createEl("div", { cls: "github-kanban-item-creator" });
-			const userIcon = creatorEl.createEl("span", { cls: "github-kanban-user-icon" });
+			const creatorEl = itemEl.createEl("div", {
+				cls: "github-kanban-item-creator",
+			});
+			const userIcon = creatorEl.createEl("span", {
+				cls: "github-kanban-user-icon",
+			});
 			setIcon(userIcon, "user");
 			creatorEl.createEl("span", { text: item.author });
 		}
 
 		// Description preview (first 150 chars)
 		if (item.body && item.body.trim()) {
-			const descEl = itemEl.createEl("div", { cls: "github-kanban-item-description" });
+			const descEl = itemEl.createEl("div", {
+				cls: "github-kanban-item-description",
+			});
 
 			// Clean up the body text (remove markdown syntax, extra whitespace)
 			let bodyPreview = item.body
-				.replace(/```[\s\S]*?```/g, '') // Remove code blocks
-				.replace(/`[^`]*`/g, '') // Remove inline code
-				.replace(/!\[.*?\]\(.*?\)/g, '') // Remove images
-				.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // Convert links to text
-				.replace(/#{1,6}\s*/g, '') // Remove headings
-				.replace(/[*_~]+/g, '') // Remove bold/italic/strikethrough
-				.replace(/\n+/g, ' ') // Convert newlines to spaces
-				.replace(/\s+/g, ' ') // Normalize whitespace
+				.replace(/```[\s\S]*?```/g, "") // Remove code blocks
+				.replace(/`[^`]*`/g, "") // Remove inline code
+				.replace(/!\[.*?\]\(.*?\)/g, "") // Remove images
+				.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // Convert links to text
+				.replace(/#{1,6}\s*/g, "") // Remove headings
+				.replace(/[*_~]+/g, "") // Remove bold/italic/strikethrough
+				.replace(/\n+/g, " ") // Convert newlines to spaces
+				.replace(/\s+/g, " ") // Normalize whitespace
 				.trim();
 
 			if (bodyPreview.length > 150) {
-				bodyPreview = bodyPreview.substring(0, 150) + '...';
+				bodyPreview = bodyPreview.substring(0, 150) + "...";
 			}
 
 			descEl.setText(bodyPreview);
@@ -613,7 +728,7 @@ export class GitHubKanbanView extends ItemView {
 
 		// Fallback: open GitHub URL if available
 		if (item.url) {
-			window.open(item.url, '_blank');
+			window.open(item.url, "_blank");
 		} else {
 			new Notice(`File for #${item.number} not found in vault`);
 		}

@@ -1,6 +1,7 @@
-import { App, Notice, setIcon } from "obsidian";
+import { App, Notice, Setting, setIcon } from "obsidian";
 import { TrackedProject, ProjectInfo } from "../types";
 import GitHubTrackerPlugin from "../main";
+import { getProjectProfiles } from "../util/settingsUtils";
 
 export class ProjectListManager {
 	private selectedProjects: Set<string> = new Set();
@@ -106,7 +107,7 @@ export class ProjectListManager {
 
 		const deselectAllButton = bulkActionButtons.createEl("button", {
 			text: "Deselect all",
-			cls: "github-issues-deselect-all-button"
+			cls: "github-issues-select-none-button"
 		});
 
 		const removeSelectedButton = bulkActionButtons.createEl("button", {
@@ -267,6 +268,8 @@ export class ProjectListManager {
 				);
 				projectItem.setAttribute("data-project-id", project.id);
 				projectItem.setAttribute("data-owner-name", owner.toLowerCase());
+				projectItem.setAttribute("data-repo-name", project.title.toLowerCase());
+				projectItem.setAttribute("data-full-name", `${owner}/${project.title}`.toLowerCase());
 
 				const headerContainer = projectItem.createDiv(
 					"github-issues-repo-header-container",
@@ -353,6 +356,25 @@ export class ProjectListManager {
 				const detailsContainer = projectItem.createDiv(
 					"github-issues-repo-details",
 				);
+
+				// Profile selector for project
+				const projectProfiles = getProjectProfiles(this.plugin.settings);
+				if (projectProfiles.length > 0) {
+					new Setting(detailsContainer)
+						.setName("Settings profile")
+						.setDesc("Select which profile provides default settings for this project")
+						.addDropdown((dropdown: any) => {
+							dropdown.addOption("", "None (use project-specific settings)");
+							for (const profile of projectProfiles) {
+								dropdown.addOption(profile.id, profile.name);
+							}
+							dropdown.setValue(project.profileId || "");
+							dropdown.onChange(async (value: string) => {
+								project.profileId = value || undefined;
+								await this.plugin.saveSettings();
+							});
+						});
+				}
 
 				// Populate detailsContainer with project settings
 				renderProjectSettings(detailsContainer, project);

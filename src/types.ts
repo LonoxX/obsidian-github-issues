@@ -1,24 +1,90 @@
+// Profile types
+export type ProfileType = "repository" | "project";
+
+export interface SettingsProfile {
+	id: string;
+	name: string;
+	type: ProfileType;
+
+	// Repository-type profile fields
+	issueUpdateMode?: "none" | "update" | "append";
+	allowDeleteIssue?: boolean;
+	issueFolder?: string;
+	issueNoteTemplate?: string;
+	issueContentTemplate?: string;
+	useCustomIssueContentTemplate?: boolean;
+	includeIssueComments?: boolean;
+	pullRequestUpdateMode?: "none" | "update" | "append";
+	allowDeletePullRequest?: boolean;
+	pullRequestFolder?: string;
+	pullRequestNoteTemplate?: string;
+	pullRequestContentTemplate?: string;
+	useCustomPullRequestContentTemplate?: boolean;
+	includePullRequestComments?: boolean;
+	includeClosedIssues?: boolean;
+	includeClosedPullRequests?: boolean;
+	trackIssues?: boolean;
+	trackPullRequest?: boolean;
+	includeSubIssues?: boolean;
+
+	// Issue filter defaults (undefined = not set in this profile)
+	enableLabelFilter?: boolean;
+	labelFilterMode?: "include" | "exclude";
+	labelFilters?: string[];
+	enableAssigneeFilter?: boolean;
+	assigneeFilterModes?: Array<
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned"
+	>;
+	assigneeFilters?: string[];
+
+	// PR filter defaults (undefined = not set in this profile)
+	enablePrLabelFilter?: boolean;
+	prLabelFilterMode?: "include" | "exclude";
+	prLabelFilters?: string[];
+	enablePrAssigneeFilter?: boolean;
+	prAssigneeFilterModes?: Array<
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned"
+	>;
+	prAssigneeFilters?: string[];
+	enablePrReviewerFilter?: boolean;
+	prReviewerFilterModes?: Array<
+		| "review-requested-from-me"
+		| "review-requested-from-specific"
+		| "no-review-requested"
+		| "any-review-requested"
+	>;
+	prReviewerFilters?: string[];
+
+	// Project-type profile fields
+	projectIssueFolder?: string;
+	projectPullRequestFolder?: string;
+	projectIssueNoteTemplate?: string;
+	projectPullRequestNoteTemplate?: string;
+	projectUseCustomIssueContentTemplate?: boolean;
+	projectIssueContentTemplate?: string;
+	projectUseCustomPullRequestContentTemplate?: boolean;
+	projectPullRequestContentTemplate?: string;
+	skipHiddenStatusesOnSync?: boolean;
+	showEmptyColumns?: boolean;
+	projectIncludeSubIssues?: boolean;
+}
+
 export interface RepositoryTracking {
 	repository: string;
-	ignoreGlobalSettings: boolean; // If true, use only repository-specific settings
-	trackIssues: boolean;
-	issueUpdateMode: "none" | "update" | "append";
-	allowDeleteIssue: boolean;
-	issueFolder: string;
+	profileId: string; // ID of the SettingsProfile to use
+	ignoreGlobalSettings?: boolean; // @deprecated - kept for migration only
+	trackIssues?: boolean;
+	trackPullRequest?: boolean;
 	useCustomIssueFolder: boolean;
 	customIssueFolder: string;
-	issueNoteTemplate: string;
-	issueContentTemplate: string;
-	useCustomIssueContentTemplate: boolean;
-	trackPullRequest: boolean;
-	pullRequestFolder: string;
 	useCustomPullRequestFolder: boolean;
 	customPullRequestFolder: string;
-	pullRequestNoteTemplate: string;
-	pullRequestContentTemplate: string;
-	useCustomPullRequestContentTemplate: boolean;
-	pullRequestUpdateMode: "none" | "update" | "append";
-	allowDeletePullRequest: boolean;
 	enableLabelFilter: boolean;
 	labelFilterMode: "include" | "exclude";
 	labelFilters: string[];
@@ -26,17 +92,69 @@ export interface RepositoryTracking {
 	prLabelFilterMode: "include" | "exclude";
 	prLabelFilters: string[];
 	enableAssigneeFilter: boolean;
-	assigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+	/** @deprecated Use assigneeFilterModes instead */
+	assigneeFilterMode?:
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned";
+	assigneeFilterModes: Array<
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned"
+	>;
 	assigneeFilters: string[];
 	enablePrAssigneeFilter: boolean;
-	prAssigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+	/** @deprecated Use prAssigneeFilterModes instead */
+	prAssigneeFilterMode?:
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned";
+	prAssigneeFilterModes: Array<
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned"
+	>;
 	prAssigneeFilters: string[];
-	includeIssueComments: boolean;
-	includePullRequestComments: boolean;
-	includeClosedIssues: boolean;
-	includeClosedPullRequests: boolean;
+	enablePrReviewerFilter: boolean;
+	/** @deprecated Use prReviewerFilterModes instead */
+	prReviewerFilterMode?:
+		| "review-requested-from-me"
+		| "review-requested-from-specific"
+		| "no-review-requested"
+		| "any-review-requested";
+	prReviewerFilterModes: Array<
+		| "review-requested-from-me"
+		| "review-requested-from-specific"
+		| "no-review-requested"
+		| "any-review-requested"
+	>;
+	prReviewerFilters: string[];
 	escapeHashTags: boolean;
-	includeSubIssues: boolean;
+	overrideIssueFilters?: boolean;
+	overridePrFilters?: boolean;
+
+	// Profile-managed fields (optional - hydrated from profile at runtime)
+	issueUpdateMode?: "none" | "update" | "append";
+	allowDeleteIssue?: boolean;
+	issueFolder?: string;
+	issueNoteTemplate?: string;
+	issueContentTemplate?: string;
+	useCustomIssueContentTemplate?: boolean;
+	includeIssueComments?: boolean;
+	includeClosedIssues?: boolean;
+	includeSubIssues?: boolean;
+	pullRequestUpdateMode?: "none" | "update" | "append";
+	allowDeletePullRequest?: boolean;
+	pullRequestFolder?: string;
+	pullRequestNoteTemplate?: string;
+	pullRequestContentTemplate?: string;
+	useCustomPullRequestContentTemplate?: boolean;
+	includePullRequestComments?: boolean;
+	includeClosedPullRequests?: boolean;
 }
 
 // Basic project info for selection UI
@@ -64,6 +182,7 @@ export interface TrackedProject {
 	url: string;
 	owner: string;
 	enabled: boolean;
+	profileId?: string; // ID of a "project" type SettingsProfile
 	issueFolder?: string;
 	useCustomIssueFolder?: boolean;
 	customIssueFolder?: string;
@@ -88,7 +207,14 @@ export interface TrackedProject {
 // GitHub Projects v2 types
 export interface ProjectFieldValue {
 	fieldName: string;
-	type: 'text' | 'number' | 'date' | 'single_select' | 'iteration' | 'user' | 'labels';
+	type:
+		| "text"
+		| "number"
+		| "date"
+		| "single_select"
+		| "iteration"
+		| "user"
+		| "labels";
 	value: string | number | null;
 	startDate?: string;
 	duration?: number;
@@ -155,7 +281,7 @@ export interface GitHubTrackerSettings {
 	backgroundSyncInterval: number; // in minutes
 	cleanupClosedIssuesDays: number;
 	globalDefaults: GlobalDefaults;
-	// GitHub Projects settings
+	profiles: SettingsProfile[];
 	enableProjectTracking: boolean;
 	trackedProjects: TrackedProject[];
 }
@@ -179,6 +305,48 @@ export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
 	includeClosedPullRequests: false,
 };
 
+export const DEFAULT_REPOSITORY_PROFILE: SettingsProfile = {
+	id: "default",
+	name: "Default Profile",
+	type: "repository",
+	issueUpdateMode: "none",
+	allowDeleteIssue: true,
+	issueFolder: "GitHub",
+	issueNoteTemplate: "Issue - {number}",
+	issueContentTemplate: "",
+	useCustomIssueContentTemplate: false,
+	includeIssueComments: true,
+	pullRequestUpdateMode: "none",
+	allowDeletePullRequest: true,
+	pullRequestFolder: "GitHub Pull Requests",
+	pullRequestNoteTemplate: "PR - {number}",
+	pullRequestContentTemplate: "",
+	useCustomPullRequestContentTemplate: false,
+	includePullRequestComments: true,
+	includeClosedIssues: false,
+	trackIssues: true,
+	trackPullRequest: false,
+	includeClosedPullRequests: false,
+	includeSubIssues: false,
+};
+
+export const DEFAULT_PROJECT_PROFILE: SettingsProfile = {
+	id: "default-project",
+	name: "Default Project Profile",
+	type: "project",
+	projectIssueFolder: "GitHub/{project}",
+	projectPullRequestFolder: "GitHub/{project}",
+	projectIssueNoteTemplate: "Issue - {number}",
+	projectPullRequestNoteTemplate: "PR - {number}",
+	projectUseCustomIssueContentTemplate: false,
+	projectIssueContentTemplate: "",
+	projectUseCustomPullRequestContentTemplate: false,
+	projectPullRequestContentTemplate: "",
+	skipHiddenStatusesOnSync: false,
+	showEmptyColumns: true,
+	projectIncludeSubIssues: false,
+};
+
 export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	githubToken: "",
 	useSecretStorage: false,
@@ -194,32 +362,22 @@ export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	backgroundSyncInterval: 30,
 	cleanupClosedIssuesDays: 30,
 	globalDefaults: DEFAULT_GLOBAL_DEFAULTS,
+	profiles: [
+		{ ...DEFAULT_REPOSITORY_PROFILE },
+		{ ...DEFAULT_PROJECT_PROFILE },
+	],
 	enableProjectTracking: true,
 	trackedProjects: [],
 };
 
-// Default repository tracking settings
+// Default repository tracking settings (repo-specific fields only; profile fields come from the profile)
 export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	repository: "",
-	ignoreGlobalSettings: false,
-	trackIssues: true,
-	issueUpdateMode: "none",
-	allowDeleteIssue: true,
-	issueFolder: "GitHub",
+	profileId: "default",
 	useCustomIssueFolder: false,
 	customIssueFolder: "",
-	issueNoteTemplate: "Issue - {number}",
-	issueContentTemplate: "",
-	useCustomIssueContentTemplate: false,
-	trackPullRequest: false,
-	pullRequestFolder: "GitHub Pull Requests",
 	useCustomPullRequestFolder: false,
 	customPullRequestFolder: "",
-	pullRequestNoteTemplate: "PR - {number}",
-	pullRequestContentTemplate: "",
-	useCustomPullRequestContentTemplate: false,
-	pullRequestUpdateMode: "none",
-	allowDeletePullRequest: true,
 	enableLabelFilter: false,
 	labelFilterMode: "include",
 	labelFilters: [],
@@ -227,15 +385,13 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	prLabelFilterMode: "include",
 	prLabelFilters: [],
 	enableAssigneeFilter: false,
-	assigneeFilterMode: "assigned-to-me",
+	assigneeFilterModes: [],
 	assigneeFilters: [],
 	enablePrAssigneeFilter: false,
-	prAssigneeFilterMode: "assigned-to-me",
+	prAssigneeFilterModes: [],
 	prAssigneeFilters: [],
-	includeIssueComments: true,
-	includePullRequestComments: true,
-	includeClosedIssues: false,
-	includeClosedPullRequests: false,
+	enablePrReviewerFilter: false,
+	prReviewerFilterModes: [],
+	prReviewerFilters: [],
 	escapeHashTags: false,
-	includeSubIssues: false,
 };

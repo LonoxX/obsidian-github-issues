@@ -166,7 +166,7 @@ function buildReplacements(
 		"{status}": data.status || "unknown",
 		"{state}": data.state || data.status || "unknown",
 		"{author}": data.author || "unknown",
-		"{assignee}": data.assignee || "unassigned",
+		"{assignee}": data.assignee || "",
 		"{repository}": data.repository,
 		"{owner}": data.owner,
 		"{repoName}": data.repoName,
@@ -217,7 +217,7 @@ function buildReplacements(
 		replacements["{assignees_yaml}"] =
 			`[${data.assignees.map((a) => `'${a}'`).join(", ")}]`;
 	} else {
-		replacements["{assignees}"] = "unassigned";
+		replacements["{assignees}"] = "";
 		replacements["{assignees_list}"] = "";
 		replacements["{assignees_yaml}"] = "[]";
 	}

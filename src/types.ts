@@ -27,6 +27,40 @@ export interface SettingsProfile {
 	trackPullRequest?: boolean;
 	includeSubIssues?: boolean;
 
+	// Issue filter defaults (undefined = not set in this profile)
+	enableLabelFilter?: boolean;
+	labelFilterMode?: "include" | "exclude";
+	labelFilters?: string[];
+	enableAssigneeFilter?: boolean;
+	assigneeFilterModes?: Array<
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned"
+	>;
+	assigneeFilters?: string[];
+
+	// PR filter defaults (undefined = not set in this profile)
+	enablePrLabelFilter?: boolean;
+	prLabelFilterMode?: "include" | "exclude";
+	prLabelFilters?: string[];
+	enablePrAssigneeFilter?: boolean;
+	prAssigneeFilterModes?: Array<
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned"
+	>;
+	prAssigneeFilters?: string[];
+	enablePrReviewerFilter?: boolean;
+	prReviewerFilterModes?: Array<
+		| "review-requested-from-me"
+		| "review-requested-from-specific"
+		| "no-review-requested"
+		| "any-review-requested"
+	>;
+	prReviewerFilters?: string[];
+
 	// Project-type profile fields
 	projectIssueFolder?: string;
 	projectPullRequestFolder?: string;
@@ -58,15 +92,50 @@ export interface RepositoryTracking {
 	prLabelFilterMode: "include" | "exclude";
 	prLabelFilters: string[];
 	enableAssigneeFilter: boolean;
-	assigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+	/** @deprecated Use assigneeFilterModes instead */
+	assigneeFilterMode?:
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned";
+	assigneeFilterModes: Array<
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned"
+	>;
 	assigneeFilters: string[];
 	enablePrAssigneeFilter: boolean;
-	prAssigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+	/** @deprecated Use prAssigneeFilterModes instead */
+	prAssigneeFilterMode?:
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned";
+	prAssigneeFilterModes: Array<
+		| "assigned-to-me"
+		| "assigned-to-specific"
+		| "unassigned"
+		| "any-assigned"
+	>;
 	prAssigneeFilters: string[];
 	enablePrReviewerFilter: boolean;
-	prReviewerFilterMode: "review-requested-from-me" | "review-requested-from-specific" | "no-review-requested" | "any-review-requested";
+	/** @deprecated Use prReviewerFilterModes instead */
+	prReviewerFilterMode?:
+		| "review-requested-from-me"
+		| "review-requested-from-specific"
+		| "no-review-requested"
+		| "any-review-requested";
+	prReviewerFilterModes: Array<
+		| "review-requested-from-me"
+		| "review-requested-from-specific"
+		| "no-review-requested"
+		| "any-review-requested"
+	>;
 	prReviewerFilters: string[];
 	escapeHashTags: boolean;
+	overrideIssueFilters?: boolean;
+	overridePrFilters?: boolean;
 
 	// Profile-managed fields (optional - hydrated from profile at runtime)
 	issueUpdateMode?: "none" | "update" | "append";
@@ -138,7 +207,14 @@ export interface TrackedProject {
 // GitHub Projects v2 types
 export interface ProjectFieldValue {
 	fieldName: string;
-	type: 'text' | 'number' | 'date' | 'single_select' | 'iteration' | 'user' | 'labels';
+	type:
+		| "text"
+		| "number"
+		| "date"
+		| "single_select"
+		| "iteration"
+		| "user"
+		| "labels";
 	value: string | number | null;
 	startDate?: string;
 	duration?: number;
@@ -309,13 +385,13 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	prLabelFilterMode: "include",
 	prLabelFilters: [],
 	enableAssigneeFilter: false,
-	assigneeFilterMode: "assigned-to-me",
+	assigneeFilterModes: [],
 	assigneeFilters: [],
 	enablePrAssigneeFilter: false,
-	prAssigneeFilterMode: "assigned-to-me",
+	prAssigneeFilterModes: [],
 	prAssigneeFilters: [],
 	enablePrReviewerFilter: false,
-	prReviewerFilterMode: "review-requested-from-me",
+	prReviewerFilterModes: [],
 	prReviewerFilters: [],
 	escapeHashTags: false,
 };

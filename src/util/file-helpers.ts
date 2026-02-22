@@ -56,10 +56,10 @@ export class FileHelpers {
 				await this.app.vault.createFolder(path);
 				this.noticeManager.debug(`Created folder: ${path}`);
 			} catch (error) {
-				// Folder may have been created concurrently or vault cache was stale — verify it exists now
+				// Folder may have been created concurrently or vault cache was stale - verify it exists now
 				const existsNow = this.app.vault.getAbstractFileByPath(path);
 				if (!existsNow) {
-					// Folder truly doesn't exist and creation failed — rethrow
+					// Folder truly doesn't exist and creation failed - rethrow
 					throw error;
 				}
 			}

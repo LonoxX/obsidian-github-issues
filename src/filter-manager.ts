@@ -20,10 +20,13 @@ export class FilterManager {
 		}
 
 		// Apply assignee filtering
-		if (repo.enableAssigneeFilter ?? false) {
+		if (
+			(repo.enableAssigneeFilter ?? false) &&
+			(repo.assigneeFilterModes?.length ?? 0) > 0
+		) {
 			filteredIssues = this.applyAssigneeFilter(
 				filteredIssues,
-				repo.assigneeFilterModes ?? ["assigned-to-me"],
+				repo.assigneeFilterModes ?? [],
 				repo.assigneeFilters ?? [],
 			);
 		}
@@ -50,19 +53,25 @@ export class FilterManager {
 		}
 
 		// Apply assignee filtering
-		if (repo.enablePrAssigneeFilter ?? false) {
+		if (
+			(repo.enablePrAssigneeFilter ?? false) &&
+			(repo.prAssigneeFilterModes?.length ?? 0) > 0
+		) {
 			filteredPullRequests = this.applyAssigneeFilter(
 				filteredPullRequests,
-				repo.prAssigneeFilterModes ?? ["assigned-to-me"],
+				repo.prAssigneeFilterModes ?? [],
 				repo.prAssigneeFilters ?? [],
 			);
 		}
 
 		// Apply reviewer filtering
-		if (repo.enablePrReviewerFilter ?? false) {
+		if (
+			(repo.enablePrReviewerFilter ?? false) &&
+			(repo.prReviewerFilterModes?.length ?? 0) > 0
+		) {
 			filteredPullRequests = this.applyReviewerFilter(
 				filteredPullRequests,
-				repo.prReviewerFilterModes ?? ["review-requested-from-me"],
+				repo.prReviewerFilterModes ?? [],
 				repo.prReviewerFilters ?? [],
 			);
 		}

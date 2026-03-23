@@ -1,15 +1,21 @@
 export class UIHelpers {
 	static setupTabSwitching(
-		tab1: HTMLElement, tab2: HTMLElement,
-		content1: HTMLElement, content2: HTMLElement
+		tab1: HTMLElement,
+		tab2: HTMLElement,
+		content1: HTMLElement,
+		content2: HTMLElement,
 	): void {
 		tab1.onclick = () => {
-			tab1.addClass("mod-cta"); tab2.removeClass("mod-cta");
-			content1.addClass("active"); content2.removeClass("active");
+			tab1.addClass("mod-cta");
+			tab2.removeClass("mod-cta");
+			content1.addClass("active");
+			content2.removeClass("active");
 		};
 		tab2.onclick = () => {
-			tab2.addClass("mod-cta"); tab1.removeClass("mod-cta");
-			content2.addClass("active"); content1.removeClass("active");
+			tab2.addClass("mod-cta");
+			tab1.removeClass("mod-cta");
+			content2.addClass("active");
+			content1.removeClass("active");
 		};
 	}
 

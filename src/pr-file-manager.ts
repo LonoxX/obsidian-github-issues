@@ -1,11 +1,11 @@
 import { App, TFile } from "obsidian";
-import { GitHubTrackerSettings, RepositoryTracking } from "./types";
+import { IssueTrackerSettings, RepositoryTracking } from "./types";
 import { escapeBody } from "./util/escapeUtils";
 import { NoticeManager } from "./notice-manager";
-import { GitHubClient } from "./github-client";
+import { IssueProvider, ProviderExtraParams } from "./providers/provider";
 import {
 	createPullRequestTemplateData,
-	processFilenameTemplate
+	processFilenameTemplate,
 } from "./util/templateUtils";
 import { getEffectiveRepoSettings } from "./util/settingsUtils";
 import { extractPersistBlocks, mergePersistBlocks } from "./util/persistUtils";
@@ -23,9 +23,9 @@ export class PullRequestFileManager {
 
 	constructor(
 		private app: App,
-		private settings: GitHubTrackerSettings,
+		private settings: IssueTrackerSettings,
 		private noticeManager: NoticeManager,
-		private gitHubClient: GitHubClient,
+		private provider: IssueProvider,
 	) {
 		this.fileHelpers = new FileHelpers(app, noticeManager);
 		this.folderPathManager = new FolderPathManager();
@@ -80,34 +80,56 @@ export class PullRequestFileManager {
 		const baseFileName = processFilenameTemplate(
 			repo.pullRequestNoteTemplate || "PR - {number}",
 			templateData,
-			this.settings.dateFormat
+			this.settings.dateFormat,
 		);
 		const fileName = `${baseFileName}.md`;
-		const pullRequestFolderPath = this.folderPathManager.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
+		const pullRequestFolderPath =
+			this.folderPathManager.getPullRequestFolderPath(
+				repo,
+				ownerCleaned,
+				repoCleaned,
+			);
 
 		// Ensure folder structure exists
-		if (repo.useCustomPullRequestFolder && repo.customPullRequestFolder && repo.customPullRequestFolder.trim()) {
+		if (
+			repo.useCustomPullRequestFolder &&
+			repo.customPullRequestFolder &&
+			repo.customPullRequestFolder.trim()
+		) {
 			// For custom folders, just ensure the custom path exists
-			await this.fileHelpers.ensureFolderExists(repo.customPullRequestFolder.trim());
+			await this.fileHelpers.ensureFolderExists(
+				repo.customPullRequestFolder.trim(),
+			);
 		} else {
 			// For default structure, ensure nested path exists
-			const pullRequestFolder = repo.pullRequestFolder ?? "GitHub Pull Requests";
+			const pullRequestFolder =
+				repo.pullRequestFolder ?? "GitHub Pull Requests";
 			await this.fileHelpers.ensureFolderExists(pullRequestFolder);
-			await this.fileHelpers.ensureFolderExists(`${pullRequestFolder}/${ownerCleaned}`);
-			await this.fileHelpers.ensureFolderExists(`${pullRequestFolder}/${ownerCleaned}/${repoCleaned}`);
+			await this.fileHelpers.ensureFolderExists(
+				`${pullRequestFolder}/${ownerCleaned}`,
+			);
+			await this.fileHelpers.ensureFolderExists(
+				`${pullRequestFolder}/${ownerCleaned}/${repoCleaned}`,
+			);
 		}
 
-		const file = this.app.vault.getAbstractFileByPath(`${pullRequestFolderPath}/${fileName}`);
+		const file = this.app.vault.getAbstractFileByPath(
+			`${pullRequestFolderPath}/${fileName}`,
+		);
 
 		const [owner, repoName] = repo.repository.split("/");
+		const extra: ProviderExtraParams | undefined = repo.gitlabProjectId
+			? { gitlabProjectId: repo.gitlabProjectId }
+			: undefined;
 
 		// Only fetch comments if they should be included
 		let comments: any[] = [];
 		if (repo.includePullRequestComments) {
-			comments = await this.gitHubClient.fetchPullRequestComments(
+			comments = await this.provider.fetchPullRequestComments(
 				owner,
 				repoName,
 				pr.number,
+				extra,
 			);
 		} else {
 			this.noticeManager.debug(
@@ -115,7 +137,12 @@ export class PullRequestFileManager {
 			);
 		}
 
-		let content = await this.contentGenerator.createPullRequestContent(pr, repo, comments, this.settings);
+		let content = await this.contentGenerator.createPullRequestContent(
+			pr,
+			repo,
+			comments,
+			this.settings,
+		);
 
 		if (file) {
 			if (file instanceof TFile) {
@@ -126,15 +153,21 @@ export class PullRequestFileManager {
 				const existingContent = await this.app.vault.read(file);
 
 				// Check if status has changed (e.g., open -> closed)
-				const statusHasChanged = hasStatusChanged(existingContent, pr.state);
+				const statusHasChanged = hasStatusChanged(
+					existingContent,
+					pr.state,
+				);
 
 				// If status changed, always update regardless of updateMode
 				// Otherwise, respect the updateMode setting
 				if (statusHasChanged || updateMode === "update") {
 					// Check if content needs updating based on updated_at field
-					if (!statusHasChanged && !shouldUpdateContent(existingContent, pr.updated_at)) {
+					if (
+						!statusHasChanged &&
+						!shouldUpdateContent(existingContent, pr.updated_at)
+					) {
 						this.noticeManager.debug(
-							`Skipped update for PR ${pr.number}: no changes detected (updated_at match)`
+							`Skipped update for PR ${pr.number}: no changes detected (updated_at match)`,
 						);
 						return;
 					}
@@ -143,29 +176,39 @@ export class PullRequestFileManager {
 					const persistBlocks = extractPersistBlocks(existingContent);
 
 					// Create the complete new content with updated frontmatter
-					let updatedContent = await this.contentGenerator.createPullRequestContent(
-						pr,
-						repo,
-						comments,
-						this.settings,
-					);
+					let updatedContent =
+						await this.contentGenerator.createPullRequestContent(
+							pr,
+							repo,
+							comments,
+							this.settings,
+						);
 
 					// Merge persist blocks back into new content
 					if (persistBlocks.size > 0) {
-						updatedContent = mergePersistBlocks(updatedContent, existingContent, persistBlocks);
+						updatedContent = mergePersistBlocks(
+							updatedContent,
+							existingContent,
+							persistBlocks,
+						);
 						this.noticeManager.debug(
-							`Restored ${persistBlocks.size} persist block(s) for PR ${pr.number}`
+							`Restored ${persistBlocks.size} persist block(s) for PR ${pr.number}`,
 						);
 					}
 
 					await this.app.vault.modify(file, updatedContent);
 					if (statusHasChanged) {
-						this.noticeManager.debug(`Updated PR ${pr.number} (status changed to ${pr.state})`);
+						this.noticeManager.debug(
+							`Updated PR ${pr.number} (status changed to ${pr.state})`,
+						);
 					} else {
 						this.noticeManager.debug(`Updated PR ${pr.number}`);
 					}
 				} else if (updateMode === "append") {
-					const shouldEscapeHashTags = repo.profileId !== "default" ? repo.escapeHashTags : this.settings.escapeHashTags;
+					const shouldEscapeHashTags =
+						repo.profileId !== "default"
+							? repo.escapeHashTags
+							: this.settings.escapeHashTags;
 					content = `---\n### New status: "${
 						pr.state
 					}"\n\n# ${escapeBody(
@@ -174,7 +217,11 @@ export class PullRequestFileManager {
 						false,
 					)}\n${
 						pr.body
-							? escapeBody(pr.body, this.settings.escapeMode, shouldEscapeHashTags)
+							? escapeBody(
+									pr.body,
+									this.settings.escapeMode,
+									shouldEscapeHashTags,
+								)
 							: "No description found"
 					}\n`;
 					if (comments.length > 0) {
@@ -199,7 +246,10 @@ export class PullRequestFileManager {
 				}
 			}
 		} else {
-			await this.app.vault.create(`${pullRequestFolderPath}/${fileName}`, content);
+			await this.app.vault.create(
+				`${pullRequestFolderPath}/${fileName}`,
+				content,
+			);
 			this.noticeManager.debug(`Created PR file for ${pr.number}`);
 		}
 	}
@@ -209,6 +259,10 @@ export class PullRequestFileManager {
 		pullRequestFolder: string,
 		ownerCleaned: string,
 	): Promise<void> {
-		return this.cleanupManager.cleanupEmptyPullRequestFolder(repo, pullRequestFolder, ownerCleaned);
+		return this.cleanupManager.cleanupEmptyPullRequestFolder(
+			repo,
+			pullRequestFolder,
+			ownerCleaned,
+		);
 	}
 }

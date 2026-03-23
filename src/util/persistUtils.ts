@@ -9,7 +9,6 @@
  * Integration plugin preserves user annotations and comments.
  */
 
-
 /**
  * Information about a persist block including its content and position
  */
@@ -25,11 +24,14 @@ interface PersistBlockInfo {
  * @param content The content to extract persist blocks from
  * @returns Map of block names to their content and position info
  */
-export function extractPersistBlocks(content: string): Map<string, PersistBlockInfo> {
+export function extractPersistBlocks(
+	content: string,
+): Map<string, PersistBlockInfo> {
 	const persistBlocks = new Map<string, PersistBlockInfo>();
 
 	// Match {% persist "name" %} ... {% endpersist %}
-	const persistPattern = /\{%\s*persist\s+["']([^"']+)["']\s*%\}([\s\S]*?)\{%\s*endpersist\s*%\}/g;
+	const persistPattern =
+		/\{%\s*persist\s+["']([^"']+)["']\s*%\}([\s\S]*?)\{%\s*endpersist\s*%\}/g;
 
 	let match;
 	while ((match = persistPattern.exec(content)) !== null) {
@@ -41,7 +43,7 @@ export function extractPersistBlocks(content: string): Map<string, PersistBlockI
 		persistBlocks.set(blockName, {
 			content: blockContent,
 			position: position,
-			fullMatch: fullMatch
+			fullMatch: fullMatch,
 		});
 	}
 
@@ -60,13 +62,14 @@ export function extractPersistBlocks(content: string): Map<string, PersistBlockI
 export function mergePersistBlocks(
 	newContent: string,
 	oldContent: string,
-	persistBlocks: Map<string, PersistBlockInfo>
+	persistBlocks: Map<string, PersistBlockInfo>,
 ): string {
 	let result = newContent;
 	const processedBlocks = new Set<string>();
 
 	// First pass: Replace persist blocks that exist in the new content
-	const persistPattern = /\{%\s*persist\s+["']([^"']+)["']\s*%\}[\s\S]*?\{%\s*endpersist\s*%\}/g;
+	const persistPattern =
+		/\{%\s*persist\s+["']([^"']+)["']\s*%\}[\s\S]*?\{%\s*endpersist\s*%\}/g;
 
 	result = result.replace(persistPattern, (match, blockName) => {
 		processedBlocks.add(blockName);
@@ -91,7 +94,11 @@ export function mergePersistBlocks(
 
 	// Insert blocks based on their context/position in old content
 	if (blocksToInsert.length > 0) {
-		result = insertPersistBlocksIntelligently(oldContent, result, blocksToInsert);
+		result = insertPersistBlocksIntelligently(
+			oldContent,
+			result,
+			blocksToInsert,
+		);
 	}
 
 	return result;
@@ -108,11 +115,11 @@ export function mergePersistBlocks(
 function insertPersistBlocksIntelligently(
 	oldContent: string,
 	newContent: string,
-	blocksToInsert: Array<{ name: string; info: PersistBlockInfo }>
+	blocksToInsert: Array<{ name: string; info: PersistBlockInfo }>,
 ): string {
 	// Split both contents into lines for easier manipulation
-	const oldLines = oldContent.split('\n');
-	const newLines = newContent.split('\n');
+	const oldLines = oldContent.split("\n");
+	const newLines = newContent.split("\n");
 
 	for (const { name, info } of blocksToInsert) {
 		const blockText = `\n{% persist "${name}" %}${info.content}{% endpersist %}`;
@@ -136,7 +143,7 @@ function insertPersistBlocksIntelligently(
 		for (let i = Math.max(0, oldLineNumber - 2); i < oldLineNumber; i++) {
 			const line = oldLines[i];
 			// Skip frontmatter, empty lines, and the persist block itself
-			if (line && line.trim() !== '---' && !line.includes('{% persist')) {
+			if (line && line.trim() !== "---" && !line.includes("{% persist")) {
 				contextBefore.push(line.trim());
 			}
 		}
@@ -144,15 +151,19 @@ function insertPersistBlocksIntelligently(
 		// Find the end of the persist block
 		let blockEndLine = oldLineNumber;
 		for (let i = oldLineNumber; i < oldLines.length; i++) {
-			if (oldLines[i].includes('{% endpersist %}')) {
+			if (oldLines[i].includes("{% endpersist %}")) {
 				blockEndLine = i;
 				break;
 			}
 		}
 
-		for (let i = blockEndLine + 1; i < Math.min(oldLines.length, blockEndLine + 3); i++) {
+		for (
+			let i = blockEndLine + 1;
+			i < Math.min(oldLines.length, blockEndLine + 3);
+			i++
+		) {
 			const line = oldLines[i];
-			if (line && line.trim() !== '' && !line.includes('{% persist')) {
+			if (line && line.trim() !== "" && !line.includes("{% persist")) {
 				contextAfter.push(line.trim());
 			}
 		}
@@ -162,9 +173,9 @@ function insertPersistBlocksIntelligently(
 
 		// First, find where the frontmatter ends in the new content
 		let frontmatterEnd = 0;
-		if (newLines[0]?.trim() === '---') {
+		if (newLines[0]?.trim() === "---") {
 			for (let i = 1; i < newLines.length; i++) {
-				if (newLines[i]?.trim() === '---') {
+				if (newLines[i]?.trim() === "---") {
 					frontmatterEnd = i + 1;
 					break;
 				}
@@ -209,5 +220,5 @@ function insertPersistBlocksIntelligently(
 		newLines.splice(insertIndex, 0, blockText);
 	}
 
-	return newLines.join('\n');
+	return newLines.join("\n");
 }

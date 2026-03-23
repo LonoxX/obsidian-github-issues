@@ -12,18 +12,21 @@
 	--github-color-warning-text: #212529;
 }
 
-/* Settings header */
+/* Settings header  1337*/
 .github-issues-settings-header {
 	margin-bottom: 20px;
 	padding-bottom: 10px;
 	border-bottom: 2px solid var(--background-modifier-border);
+
+
 }
 
 .github-issues-settings-header h2 {
-	margin: 0 0 8px 0;
+	margin: 0;
 	font-size: 1.8em;
 	font-weight: 600;
 	color: var(--text-normal);
+	text-align: center;
 }
 
 .github-issues-settings-subtitle {
@@ -31,6 +34,7 @@
 	color: var(--text-muted);
 	font-size: 0.95em;
 	line-height: 1.5;
+	text-align: center;
 }
 
 .github-issues-subtitle-links {
@@ -38,6 +42,7 @@
 	font-size: 0.9em;
 	display: flex;
 	align-items: center;
+	justify-content: center;
 	gap: 4px;
 }
 
@@ -1560,6 +1565,159 @@ button:disabled {
 	font-size: 11px;
 	color: var(--text-muted);
 	text-transform: capitalize;
+}
+
+/* Provider cards */
+.github-issues-provider-card {
+	margin-top: 10px;
+	padding: 0;
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-primary);
+	overflow: hidden;
+}
+
+.github-issues-provider-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 14px;
+	background-color: var(--background-primary-alt);
+	border-bottom: 1px solid var(--background-modifier-border);
+	cursor: pointer;
+	user-select: none;
+	transition: background-color 0.15s ease;
+}
+
+.github-issues-provider-card-header:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.github-issues-provider-card-header-left {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.github-issues-provider-card-chevron {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+	width: 18px;
+	height: 18px;
+}
+
+.github-issues-provider-card-chevron svg {
+	width: 18px;
+	height: 18px;
+}
+
+.github-issues-provider-card-icon {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+	width: 20px;
+	height: 20px;
+}
+
+.github-issues-provider-card-icon svg {
+	width: 20px;
+	height: 20px;
+}
+
+.github-issues-provider-card-title {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.github-issues-provider-card-name {
+	font-weight: 600;
+	font-size: 1em;
+	color: var(--text-normal);
+}
+
+.github-issues-provider-card-desc {
+	font-size: 0.8em;
+	color: var(--text-muted);
+}
+
+.github-issues-provider-card-header-right .setting-item {
+	border-top: none !important;
+	padding: 0 !important;
+	background-color: transparent !important;
+}
+
+.github-issues-provider-card-body {
+	padding: 4px 16px 12px;
+	max-height: 800px;
+	overflow: hidden;
+	transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+	opacity: 1;
+}
+
+.github-issues-provider-card-body.github-issues-collapsed {
+	max-height: 0;
+	opacity: 0;
+	padding-top: 0;
+	padding-bottom: 0;
+}
+
+.github-issues-provider-card-body .setting-item {
+	border-top: none;
+	padding: 8px 0;
+	background-color: transparent;
+}
+
+.github-issues-provider-card-body .github-issues-info-text {
+	margin-bottom: 4px;
+}
+
+/* Add provider instance button */
+.github-issues-add-instance-container {
+	display: flex;
+	justify-content: center;
+	margin-top: 8px;
+}
+
+.github-issues-add-instance-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 14px;
+	background: var(--interactive-normal);
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 6px;
+	color: var(--text-muted);
+	font-size: 13px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.github-issues-add-instance-button:hover {
+	background: var(--interactive-hover);
+	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+}
+
+/* Remove provider instance button */
+.github-issues-provider-remove-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
+	background: transparent;
+	border: none;
+	border-radius: 4px;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: all 0.2s ease;
+	margin-right: 4px;
+}
+
+.github-issues-provider-remove-button:hover {
+	color: var(--text-error);
+	background: var(--background-modifier-hover);
 }
 
 /* Token status badges */

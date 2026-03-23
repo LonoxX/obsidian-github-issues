@@ -1,5 +1,5 @@
 import { App, TFile, TFolder } from "obsidian";
-import { GitHubTrackerSettings, RepositoryTracking } from "./types";
+import { IssueTrackerSettings, RepositoryTracking } from "./types";
 import { extractProperties } from "./util/properties";
 import { NoticeManager } from "./notice-manager";
 import { extractNumberFromFilename } from "./util/templateUtils";
@@ -10,7 +10,7 @@ export class CleanupManager {
 
 	constructor(
 		private app: App,
-		private settings: GitHubTrackerSettings,
+		private settings: IssueTrackerSettings,
 		private noticeManager: NoticeManager,
 	) {
 		this.folderPathManager = new FolderPathManager();
@@ -25,15 +25,21 @@ export class CleanupManager {
 		repoCleaned: string,
 		allIssuesIncludingRecentlyClosed: any[],
 	): Promise<void> {
-		const issueFolderPath = this.folderPathManager.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
-		const repoFolder = this.app.vault.getAbstractFileByPath(issueFolderPath);
+		const issueFolderPath = this.folderPathManager.getIssueFolderPath(
+			repo,
+			ownerCleaned,
+			repoCleaned,
+		);
+		const repoFolder =
+			this.app.vault.getAbstractFileByPath(issueFolderPath);
 
 		if (repoFolder) {
 			const files = this.app.vault
 				.getFiles()
 				.filter(
 					(file) =>
-						file.path.startsWith(`${issueFolderPath}/`) && file.extension === "md",
+						file.path.startsWith(`${issueFolderPath}/`) &&
+						file.extension === "md",
 				);
 
 			for (const file of files) {
@@ -53,14 +59,14 @@ export class CleanupManager {
 					// Fallback: try to extract from filename
 					fileNumberString = extractNumberFromFilename(
 						file.name,
-						repo.issueNoteTemplate || "Issue - {number}"
+						repo.issueNoteTemplate || "Issue - {number}",
 					);
 				}
 
 				if (!fileNumberString) {
 					// If we can't determine the issue number, log a warning but skip
 					this.noticeManager.debug(
-						`Could not determine issue number for file: ${file.name}. Consider adding a 'number' property to the frontmatter.`
+						`Could not determine issue number for file: ${file.name}. Consider adding a 'number' property to the frontmatter.`,
 					);
 					continue;
 				}
@@ -75,15 +81,26 @@ export class CleanupManager {
 				let deleteReason = "";
 
 				if (correspondingIssue) {
-					if (correspondingIssue.state === "closed" && correspondingIssue.closed_at) {
+					if (
+						correspondingIssue.state === "closed" &&
+						correspondingIssue.closed_at
+					) {
 						// Check if issue has been closed longer than the configured days
-						const closedDate = new Date(correspondingIssue.closed_at);
+						const closedDate = new Date(
+							correspondingIssue.closed_at,
+						);
 						const cutoffDate = new Date();
-						cutoffDate.setDate(cutoffDate.getDate() - this.settings.cleanupClosedIssuesDays);
+						cutoffDate.setDate(
+							cutoffDate.getDate() -
+								this.settings.cleanupClosedIssuesDays,
+						);
 
 						if (closedDate < cutoffDate) {
 							shouldDelete = true;
-							const daysClosed = Math.floor((Date.now() - closedDate.getTime()) / (1000 * 60 * 60 * 24));
+							const daysClosed = Math.floor(
+								(Date.now() - closedDate.getTime()) /
+									(1000 * 60 * 60 * 24),
+							);
 							deleteReason = `Deleted issue ${fileNumberString} from ${repo.repository} (closed ${daysClosed} days ago, threshold: ${this.settings.cleanupClosedIssuesDays} days)`;
 						}
 					}
@@ -94,10 +111,10 @@ export class CleanupManager {
 
 				if (shouldDelete) {
 					const allowDelete = properties.allowDelete
-					? String(properties.allowDelete)
-							.toLowerCase()
-							.replace('"', "") === "true"
-					: repo.allowDeleteIssue;
+						? String(properties.allowDelete)
+								.toLowerCase()
+								.replace('"', "") === "true"
+						: repo.allowDeleteIssue;
 
 					if (allowDelete) {
 						await this.app.fileManager.trashFile(file);
@@ -117,15 +134,23 @@ export class CleanupManager {
 		repoCleaned: string,
 		allPullRequestsIncludingRecentlyClosed: any[],
 	): Promise<void> {
-		const pullRequestFolderPath = this.folderPathManager.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
-		const repoFolder = this.app.vault.getAbstractFileByPath(pullRequestFolderPath);
+		const pullRequestFolderPath =
+			this.folderPathManager.getPullRequestFolderPath(
+				repo,
+				ownerCleaned,
+				repoCleaned,
+			);
+		const repoFolder = this.app.vault.getAbstractFileByPath(
+			pullRequestFolderPath,
+		);
 
 		if (repoFolder) {
 			const files = this.app.vault
 				.getFiles()
 				.filter(
 					(file) =>
-						file.path.startsWith(`${pullRequestFolderPath}/`) && file.extension === "md",
+						file.path.startsWith(`${pullRequestFolderPath}/`) &&
+						file.extension === "md",
 				);
 
 			for (const file of files) {
@@ -145,14 +170,15 @@ export class CleanupManager {
 					// Fallback: try to extract from filename
 					fileNumberString = extractNumberFromFilename(
 						file.name,
-						repo.pullRequestNoteTemplate || "Pull Request - {number}"
+						repo.pullRequestNoteTemplate ||
+							"Pull Request - {number}",
 					);
 				}
 
 				if (!fileNumberString) {
 					// If we can't determine the PR number, log a warning but skip
 					this.noticeManager.debug(
-						`Could not determine PR number for file: ${file.name}. Consider adding a 'number' property to the frontmatter.`
+						`Could not determine PR number for file: ${file.name}. Consider adding a 'number' property to the frontmatter.`,
 					);
 					continue;
 				}
@@ -166,15 +192,24 @@ export class CleanupManager {
 				let deleteReason = "";
 
 				if (correspondingPR) {
-					if (correspondingPR.state === "closed" && correspondingPR.closed_at) {
+					if (
+						correspondingPR.state === "closed" &&
+						correspondingPR.closed_at
+					) {
 						// Check if PR has been closed longer than the configured days
 						const closedDate = new Date(correspondingPR.closed_at);
 						const cutoffDate = new Date();
-						cutoffDate.setDate(cutoffDate.getDate() - this.settings.cleanupClosedIssuesDays);
+						cutoffDate.setDate(
+							cutoffDate.getDate() -
+								this.settings.cleanupClosedIssuesDays,
+						);
 
 						if (closedDate < cutoffDate) {
 							shouldDelete = true;
-							const daysClosed = Math.floor((Date.now() - closedDate.getTime()) / (1000 * 60 * 60 * 24));
+							const daysClosed = Math.floor(
+								(Date.now() - closedDate.getTime()) /
+									(1000 * 60 * 60 * 24),
+							);
 							deleteReason = `Deleted pull request ${fileNumberString} from ${repo.repository} (closed ${daysClosed} days ago, threshold: ${this.settings.cleanupClosedIssuesDays} days)`;
 						}
 					}
@@ -185,10 +220,10 @@ export class CleanupManager {
 
 				if (shouldDelete) {
 					const allowDelete = properties.allowDelete
-					? String(properties.allowDelete)
-							.toLowerCase()
-							.replace('"', "") === "true"
-					: repo.allowDeletePullRequest;
+						? String(properties.allowDelete)
+								.toLowerCase()
+								.replace('"', "") === "true"
+						: repo.allowDeletePullRequest;
 
 					if (allowDelete) {
 						await this.app.fileManager.trashFile(file);
@@ -219,10 +254,10 @@ export class CleanupManager {
 						// Use Obsidian's MetadataCache to get frontmatter
 						const properties = extractProperties(this.app, file);
 						const allowDelete = properties.allowDelete
-						? String(properties.allowDelete)
-							.toLowerCase()
-							.replace('"', "") === "true"
-						: false;
+							? String(properties.allowDelete)
+									.toLowerCase()
+									.replace('"', "") === "true"
+							: false;
 
 						if (allowDelete) {
 							await this.app.fileManager.trashFile(file);
@@ -236,14 +271,21 @@ export class CleanupManager {
 			}
 
 			// Only cleanup nested folder structure if not using custom folder
-			if (!repo.useCustomIssueFolder || !repo.customIssueFolder || !repo.customIssueFolder.trim()) {
+			if (
+				!repo.useCustomIssueFolder ||
+				!repo.customIssueFolder ||
+				!repo.customIssueFolder.trim()
+			) {
 				if (files.length === 0) {
 					this.noticeManager.info(
 						`Deleting empty folder: ${issueFolder}`,
 					);
 					const folder =
 						this.app.vault.getAbstractFileByPath(issueFolder);
-					if (folder instanceof TFolder && folder.children.length === 0) {
+					if (
+						folder instanceof TFolder &&
+						folder.children.length === 0
+					) {
 						await this.app.fileManager.trashFile(folder);
 					}
 				}
@@ -285,10 +327,10 @@ export class CleanupManager {
 						// Use Obsidian's MetadataCache to get frontmatter
 						const properties = extractProperties(this.app, file);
 						const allowDelete = properties.allowDelete
-						? String(properties.allowDelete)
-							.toLowerCase()
-							.replace('"', "") === "true"
-						: false;
+							? String(properties.allowDelete)
+									.toLowerCase()
+									.replace('"', "") === "true"
+							: false;
 
 						if (allowDelete) {
 							await this.app.fileManager.trashFile(file);
@@ -302,21 +344,29 @@ export class CleanupManager {
 			}
 
 			// Only cleanup nested folder structure if not using custom folder
-			if (!repo.useCustomPullRequestFolder || !repo.customPullRequestFolder || !repo.customPullRequestFolder.trim()) {
+			if (
+				!repo.useCustomPullRequestFolder ||
+				!repo.customPullRequestFolder ||
+				!repo.customPullRequestFolder.trim()
+			) {
 				if (files.length === 0) {
 					this.noticeManager.info(
 						`Deleting empty folder: ${pullRequestFolder}`,
 					);
 					const folder =
 						this.app.vault.getAbstractFileByPath(pullRequestFolder);
-					if (folder instanceof TFolder && folder.children.length === 0) {
+					if (
+						folder instanceof TFolder &&
+						folder.children.length === 0
+					) {
 						await this.app.fileManager.trashFile(folder);
 					}
 				}
 
-				const pullRequestOwnerFolder = this.app.vault.getAbstractFileByPath(
-					`${repo.pullRequestFolder}/${ownerCleaned}`,
-				);
+				const pullRequestOwnerFolder =
+					this.app.vault.getAbstractFileByPath(
+						`${repo.pullRequestFolder}/${ownerCleaned}`,
+					);
 
 				if (pullRequestOwnerFolder instanceof TFolder) {
 					const files = pullRequestOwnerFolder.children;

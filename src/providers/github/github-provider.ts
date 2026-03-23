@@ -1,6 +1,15 @@
-import { GitHubTrackerSettings, ProjectData, ProjectFieldValue, ProjectInfo, ProjectStatusOption } from "./types";
+import {
+	IssueTrackerSettings,
+	ProviderConfig,
+	ProviderType,
+	ProjectData,
+	ProjectFieldValue,
+	ProjectInfo,
+	ProjectStatusOption,
+} from "../../types";
 import { Octokit } from "octokit";
-import { NoticeManager } from "./notice-manager";
+import { NoticeManager } from "../../notice-manager";
+import { IssueProvider, ProviderId, ProviderExtraParams } from "../provider";
 import {
 	GET_ITEM_PROJECT_DATA,
 	GET_ITEMS_PROJECT_DATA_BATCH,
@@ -13,18 +22,34 @@ import {
 	ProjectItemData,
 } from "./github-graphql";
 
-export class GitHubClient {
+export class GitHubProvider implements IssueProvider {
+	readonly id: ProviderId;
+	readonly type: ProviderType = "github";
+	readonly displayName: string;
+
 	private octokit: Octokit | null = null;
 	private currentUser: string = "";
 	private tokenGetter: () => string;
+	private configId: string;
 
 	constructor(
-		private settings: GitHubTrackerSettings,
+		private settings: IssueTrackerSettings,
 		private noticeManager: NoticeManager,
 		tokenGetter: () => string,
+		providerConfig: ProviderConfig,
 	) {
 		this.tokenGetter = tokenGetter;
+		this.id = providerConfig.id;
+		this.configId = providerConfig.id;
+		this.displayName = providerConfig.label || "GitHub";
 		this.initializeClient();
+	}
+
+	supportsProjects(): boolean {
+		return true;
+	}
+	supportsSubIssues(): boolean {
+		return true;
 	}
 
 	/**
@@ -94,7 +119,8 @@ export class GitHubClient {
 		owner: string,
 		repo: string,
 		includeClosed: boolean = false,
-		daysToKeepClosed: number = 30, // Default to 30 days if not provided
+		daysToKeepClosed: number = 30,
+		extra?: ProviderExtraParams,
 	): Promise<any[]> {
 		if (!this.octokit) {
 			return [];
@@ -158,7 +184,8 @@ export class GitHubClient {
 		owner: string,
 		repo: string,
 		includeClosed: boolean = false,
-		daysToKeepClosed: number = 30, // Default to 30 days if not provided
+		daysToKeepClosed: number = 30,
+		extra?: ProviderExtraParams,
 	): Promise<any[]> {
 		if (!this.octokit) {
 			return [];
@@ -178,7 +205,7 @@ export class GitHubClient {
 					per_page: 100,
 					page,
 					// Include milestone data explicitly
-					sort: 'updated',
+					sort: "updated",
 				});
 
 				allItems = [...allItems, ...response.data];
@@ -333,6 +360,7 @@ export class GitHubClient {
 		owner: string,
 		repo: string,
 		issueNumber: number,
+		extra?: ProviderExtraParams,
 	): Promise<any[]> {
 		if (!this.octokit) {
 			return [];
@@ -379,6 +407,7 @@ export class GitHubClient {
 		owner: string,
 		repo: string,
 		prNumber: number,
+		extra?: ProviderExtraParams,
 	): Promise<any[]> {
 		if (!this.octokit) {
 			return [];
@@ -434,6 +463,7 @@ export class GitHubClient {
 	public async fetchRepositoryLabels(
 		owner: string,
 		repo: string,
+		extra?: ProviderExtraParams,
 	): Promise<any[]> {
 		if (!this.octokit) {
 			return [];
@@ -445,12 +475,13 @@ export class GitHubClient {
 			let hasMorePages = true;
 
 			while (hasMorePages) {
-				const response = await this.octokit.rest.issues.listLabelsForRepo({
-					owner,
-					repo,
-					per_page: 100,
-					page,
-				});
+				const response =
+					await this.octokit.rest.issues.listLabelsForRepo({
+						owner,
+						repo,
+						per_page: 100,
+						page,
+					});
 
 				allLabels = [...allLabels, ...response.data];
 				hasMorePages = response.data.length === 100;
@@ -476,6 +507,7 @@ export class GitHubClient {
 	public async fetchRepositoryCollaborators(
 		owner: string,
 		repo: string,
+		extra?: ProviderExtraParams,
 	): Promise<any[]> {
 		if (!this.octokit) {
 			return [];
@@ -487,12 +519,13 @@ export class GitHubClient {
 			let hasMorePages = true;
 
 			while (hasMorePages) {
-				const response = await this.octokit.rest.repos.listCollaborators({
-					owner,
-					repo,
-					per_page: 100,
-					page,
-				});
+				const response =
+					await this.octokit.rest.repos.listCollaborators({
+						owner,
+						repo,
+						per_page: 100,
+						page,
+					});
 
 				allCollaborators = [...allCollaborators, ...response.data];
 				hasMorePages = response.data.length === 100;
@@ -511,12 +544,13 @@ export class GitHubClient {
 				let hasMorePages = true;
 
 				while (hasMorePages) {
-					const response = await this.octokit.rest.repos.listContributors({
-						owner,
-						repo,
-						per_page: 100,
-						page,
-					});
+					const response =
+						await this.octokit.rest.repos.listContributors({
+							owner,
+							repo,
+							per_page: 100,
+							page,
+						});
 
 					allContributors = [...allContributors, ...response.data];
 					hasMorePages = response.data.length === 100;
@@ -540,18 +574,23 @@ export class GitHubClient {
 	/**
 	 * Validate the GitHub token and get its scopes
 	 */
-	public async validateToken(): Promise<{ valid: boolean; scopes: string[]; user?: string }> {
+	public async validateToken(): Promise<{
+		valid: boolean;
+		scopes?: string[];
+		user?: string;
+	}> {
 		if (!this.octokit) {
 			return { valid: false, scopes: [] };
 		}
 
 		try {
 			const response = await this.octokit.rest.users.getAuthenticated();
-			const scopes = response.headers['x-oauth-scopes']?.split(', ') || [];
+			const scopes =
+				response.headers["x-oauth-scopes"]?.split(", ") || [];
 			return {
 				valid: true,
 				scopes,
-				user: response.data.login
+				user: response.data.login,
 			};
 		} catch (error) {
 			return { valid: false, scopes: [] };
@@ -561,7 +600,11 @@ export class GitHubClient {
 	/**
 	 * Get current rate limit information
 	 */
-	public async getRateLimit(): Promise<{ remaining: number; limit: number; reset: Date } | null> {
+	public async getRateLimit(): Promise<{
+		remaining: number;
+		limit: number;
+		reset: Date;
+	} | null> {
 		if (!this.octokit) {
 			return null;
 		}
@@ -571,7 +614,7 @@ export class GitHubClient {
 			return {
 				remaining: response.data.rate.remaining,
 				limit: response.data.rate.limit,
-				reset: new Date(response.data.rate.reset * 1000)
+				reset: new Date(response.data.rate.reset * 1000),
 			};
 		} catch (error) {
 			return null;
@@ -581,15 +624,20 @@ export class GitHubClient {
 	/**
 	 * Fetch project data for a single issue or PR by its node ID
 	 */
-	public async fetchProjectDataForItem(nodeId: string): Promise<ProjectData[]> {
+	public async fetchProjectDataForItem(
+		nodeId: string,
+	): Promise<ProjectData[]> {
 		if (!this.octokit) {
 			return [];
 		}
 
 		try {
-			const response: any = await this.octokit.graphql(GET_ITEM_PROJECT_DATA, {
-				nodeId,
-			});
+			const response: any = await this.octokit.graphql(
+				GET_ITEM_PROJECT_DATA,
+				{
+					nodeId,
+				},
+			);
 
 			if (!response?.node) {
 				return [];
@@ -633,7 +681,10 @@ export class GitHubClient {
 					for (const node of response.nodes) {
 						if (node?.id) {
 							const projectItems = parseItemProjectData(node);
-							result.set(node.id, this.convertToProjectData(projectItems));
+							result.set(
+								node.id,
+								this.convertToProjectData(projectItems),
+							);
 						}
 					}
 				}
@@ -654,12 +705,16 @@ export class GitHubClient {
 	/**
 	 * Convert parsed project items to ProjectData format
 	 */
-	private convertToProjectData(projectItems: ProjectItemData[]): ProjectData[] {
+	private convertToProjectData(
+		projectItems: ProjectItemData[],
+	): ProjectData[] {
 		return projectItems.map((item) => {
 			const customFields: Record<string, ProjectFieldValue> = {};
 			let status: string | undefined;
 			let priority: string | undefined;
-			let iteration: { title: string; startDate: string; duration: number } | undefined;
+			let iteration:
+				| { title: string; startDate: string; duration: number }
+				| undefined;
 
 			for (const field of item.fieldValues) {
 				// Store in customFields
@@ -667,11 +722,21 @@ export class GitHubClient {
 
 				// Extract common fields
 				const fieldNameLower = field.fieldName.toLowerCase();
-				if (fieldNameLower === 'status' && field.type === 'single_select') {
+				if (
+					fieldNameLower === "status" &&
+					field.type === "single_select"
+				) {
 					status = field.value as string;
-				} else if (fieldNameLower === 'priority' && field.type === 'single_select') {
+				} else if (
+					fieldNameLower === "priority" &&
+					field.type === "single_select"
+				) {
 					priority = field.value as string;
-				} else if (field.type === 'iteration' && field.startDate && field.duration !== undefined) {
+				} else if (
+					field.type === "iteration" &&
+					field.startDate &&
+					field.duration !== undefined
+				) {
 					iteration = {
 						title: field.value as string,
 						startDate: field.startDate,
@@ -743,11 +808,17 @@ export class GitHubClient {
 						}
 					}
 
-					hasNextPage = userResponse?.user?.projectsV2?.pageInfo?.hasNextPage ?? false;
-					cursor = userResponse?.user?.projectsV2?.pageInfo?.endCursor ?? null;
+					hasNextPage =
+						userResponse?.user?.projectsV2?.pageInfo?.hasNextPage ??
+						false;
+					cursor =
+						userResponse?.user?.projectsV2?.pageInfo?.endCursor ??
+						null;
 				}
 			} catch (error) {
-				this.noticeManager.debug(`Error fetching user projects: ${error}`);
+				this.noticeManager.debug(
+					`Error fetching user projects: ${error}`,
+				);
 			}
 
 			// Fetch organization projects
@@ -757,10 +828,11 @@ export class GitHubClient {
 				let hasMoreOrgs = true;
 
 				while (hasMoreOrgs) {
-					const { data: orgs } = await this.octokit.rest.orgs.listForAuthenticatedUser({
-						per_page: 100,
-						page: orgsPage,
-					});
+					const { data: orgs } =
+						await this.octokit.rest.orgs.listForAuthenticatedUser({
+							per_page: 100,
+							page: orgsPage,
+						});
 
 					allOrgs = [...allOrgs, ...orgs];
 					hasMoreOrgs = orgs.length === 100;
@@ -783,7 +855,8 @@ export class GitHubClient {
 							);
 
 							if (orgResponse?.organization?.projectsV2?.nodes) {
-								for (const node of orgResponse.organization.projectsV2.nodes) {
+								for (const node of orgResponse.organization
+									.projectsV2.nodes) {
 									if (!seenIds.has(node.id)) {
 										seenIds.add(node.id);
 										projects.push({
@@ -798,15 +871,23 @@ export class GitHubClient {
 								}
 							}
 
-							hasNextPage = orgResponse?.organization?.projectsV2?.pageInfo?.hasNextPage ?? false;
-							cursor = orgResponse?.organization?.projectsV2?.pageInfo?.endCursor ?? null;
+							hasNextPage =
+								orgResponse?.organization?.projectsV2?.pageInfo
+									?.hasNextPage ?? false;
+							cursor =
+								orgResponse?.organization?.projectsV2?.pageInfo
+									?.endCursor ?? null;
 						}
 					} catch (error) {
-						this.noticeManager.debug(`Error fetching projects for org ${org.login}: ${error}`);
+						this.noticeManager.debug(
+							`Error fetching projects for org ${org.login}: ${error}`,
+						);
 					}
 				}
 			} catch (error) {
-				this.noticeManager.debug(`Error fetching organizations: ${error}`);
+				this.noticeManager.debug(
+					`Error fetching organizations: ${error}`,
+				);
 			}
 
 			this.noticeManager.debug(`Found ${projects.length} total projects`);
@@ -858,8 +939,12 @@ export class GitHubClient {
 					}
 				}
 
-				hasNextPage = response?.repository?.projectsV2?.pageInfo?.hasNextPage ?? false;
-				cursor = response?.repository?.projectsV2?.pageInfo?.endCursor ?? null;
+				hasNextPage =
+					response?.repository?.projectsV2?.pageInfo?.hasNextPage ??
+					false;
+				cursor =
+					response?.repository?.projectsV2?.pageInfo?.endCursor ??
+					null;
 			}
 
 			// Also try to get organization projects if the owner is an org
@@ -878,9 +963,10 @@ export class GitHubClient {
 					);
 
 					if (orgResponse?.organization?.projectsV2?.nodes) {
-						for (const node of orgResponse.organization.projectsV2.nodes) {
+						for (const node of orgResponse.organization.projectsV2
+							.nodes) {
 							// Avoid duplicates
-							if (!projects.some(p => p.id === node.id)) {
+							if (!projects.some((p) => p.id === node.id)) {
 								projects.push({
 									id: node.id,
 									title: node.title,
@@ -892,8 +978,12 @@ export class GitHubClient {
 						}
 					}
 
-					hasNextPage = orgResponse?.organization?.projectsV2?.pageInfo?.hasNextPage ?? false;
-					cursor = orgResponse?.organization?.projectsV2?.pageInfo?.endCursor ?? null;
+					hasNextPage =
+						orgResponse?.organization?.projectsV2?.pageInfo
+							?.hasNextPage ?? false;
+					cursor =
+						orgResponse?.organization?.projectsV2?.pageInfo
+							?.endCursor ?? null;
 				}
 			} catch {
 				// Owner is probably a user, not an org - try user projects instead
@@ -916,7 +1006,7 @@ export class GitHubClient {
 
 					if (userResponse?.user?.projectsV2?.nodes) {
 						for (const node of userResponse.user.projectsV2.nodes) {
-							if (!projects.some(p => p.id === node.id)) {
+							if (!projects.some((p) => p.id === node.id)) {
 								projects.push({
 									id: node.id,
 									title: node.title,
@@ -928,8 +1018,12 @@ export class GitHubClient {
 						}
 					}
 
-					hasNextPage = userResponse?.user?.projectsV2?.pageInfo?.hasNextPage ?? false;
-					cursor = userResponse?.user?.projectsV2?.pageInfo?.endCursor ?? null;
+					hasNextPage =
+						userResponse?.user?.projectsV2?.pageInfo?.hasNextPage ??
+						false;
+					cursor =
+						userResponse?.user?.projectsV2?.pageInfo?.endCursor ??
+						null;
 				}
 			} catch {
 				// Owner is an org, not a user - that's fine
@@ -952,10 +1046,11 @@ export class GitHubClient {
 	 */
 	public async hasProjectScope(): Promise<boolean> {
 		const { scopes } = await this.validateToken();
-		return scopes.some(scope =>
-			scope === 'read:project' ||
-			scope === 'project' ||
-			scope === 'repo' // repo scope includes project access
+		return (scopes ?? []).some(
+			(scope) =>
+				scope === "read:project" ||
+				scope === "project" ||
+				scope === "repo", // repo scope includes project access
 		);
 	}
 
@@ -986,7 +1081,8 @@ export class GitHubClient {
 					allItems = [...allItems, ...response.node.items.nodes];
 				}
 
-				hasNextPage = response?.node?.items?.pageInfo?.hasNextPage ?? false;
+				hasNextPage =
+					response?.node?.items?.pageInfo?.hasNextPage ?? false;
 				cursor = response?.node?.items?.pageInfo?.endCursor ?? null;
 			}
 
@@ -1006,15 +1102,20 @@ export class GitHubClient {
 	/**
 	 * Fetch status field options for a project (in GitHub's order)
 	 */
-	public async fetchProjectStatusOptions(projectId: string): Promise<ProjectStatusOption[]> {
+	public async fetchProjectStatusOptions(
+		projectId: string,
+	): Promise<ProjectStatusOption[]> {
 		if (!this.octokit) {
 			return [];
 		}
 
 		try {
-			const response: any = await this.octokit.graphql(GET_PROJECT_FIELDS, {
-				projectId,
-			});
+			const response: any = await this.octokit.graphql(
+				GET_PROJECT_FIELDS,
+				{
+					projectId,
+				},
+			);
 
 			if (!response?.node?.fields?.nodes) {
 				return [];
@@ -1022,7 +1123,7 @@ export class GitHubClient {
 
 			// Find the Status field (SingleSelectField with name "Status")
 			for (const field of response.node.fields.nodes) {
-				if (field.name === 'Status' && field.options) {
+				if (field.name === "Status" && field.options) {
 					return field.options.map((opt: any) => ({
 						id: opt.id,
 						name: opt.name,
@@ -1061,14 +1162,14 @@ export class GitHubClient {
 
 			while (hasMorePages) {
 				const response = await this.octokit.request(
-					'GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+					"GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues",
 					{
 						owner,
 						repo,
 						issue_number: issueNumber,
 						per_page: 100,
 						page,
-					}
+					},
 				);
 
 				allSubIssues = [...allSubIssues, ...response.data];
@@ -1107,12 +1208,12 @@ export class GitHubClient {
 
 		try {
 			const response = await this.octokit.request(
-				'GET /repos/{owner}/{repo}/issues/{issue_number}/parent',
+				"GET /repos/{owner}/{repo}/issues/{issue_number}/parent",
 				{
 					owner,
 					repo,
 					issue_number: issueNumber,
-				}
+				},
 			);
 
 			this.noticeManager.debug(

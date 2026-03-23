@@ -6,22 +6,24 @@
  * @returns The text with escaped # characters
  */
 function escapeHashTags(text: string): string {
-	const lines = text.split('\n');
+	const lines = text.split("\n");
 
-	return lines.map(line => {
-		const trimmed = line.trim();
+	return lines
+		.map((line) => {
+			const trimmed = line.trim();
 
-		// Check if this is a valid Markdown header (one or more # followed by a space)
-		// Valid: "# Header", "## Header", "### Header", etc.
-		// Invalid: "#1337", "#tag", "###NoSpace"
-		if (/^#{1,6}\s/.test(trimmed)) {
-			// This is a valid Markdown header, don't escape
-			return line;
-		}
+			// Check if this is a valid Markdown header (one or more # followed by a space)
+			// Valid: "# Header", "## Header", "### Header", etc.
+			// Invalid: "#1337", "#tag", "###NoSpace"
+			if (/^#{1,6}\s/.test(trimmed)) {
+				// This is a valid Markdown header, don't escape
+				return line;
+			}
 
-		// Escape all # characters in this line
-		return line.replace(/#/g, '\\#');
-	}).join('\n');
+			// Escape all # characters in this line
+			return line.replace(/#/g, "\\#");
+		})
+		.join("\n");
 }
 
 /**
@@ -61,28 +63,28 @@ export function escapeBody(
 			// Allow Unicode characters, whitespace, common punctuation, and URL/Markdown specific characters
 			// Remove potentially dangerous characters while preserving Chinese and other Unicode characters
 			escaped = unsafe
-				.replace(/[<>{}$`\\]/g, "")  // Remove potentially dangerous HTML/JS/template characters
-				.replace(/---/g, "- - -");  // Escape YAML frontmatter separators
+				.replace(/[<>{}$`\\]/g, "") // Remove potentially dangerous HTML/JS/template characters
+				.replace(/---/g, "- - -"); // Escape YAML frontmatter separators
 			break;
 
 		case "veryStrict":
 			// Allow Unicode characters, whitespace, basic punctuation, and essential URL/Markdown characters
 			// More restrictive than strict mode but still preserves Chinese and other Unicode characters
 			escaped = unsafe
-				.replace(/[<>{}$`\\"'|&*~^]/g, "")  // Remove more potentially dangerous characters
-				.replace(/---/g, "- - -");  // Escape YAML frontmatter separators
+				.replace(/[<>{}$`\\"'|&*~^]/g, "") // Remove more potentially dangerous characters
+				.replace(/---/g, "- - -"); // Escape YAML frontmatter separators
 			break;
 
 		case "normal":
 		default:
 			// Basic escaping for Templater and Dataview compatibility
 			escaped = unsafe
-				.replace(/<%/g, "'<<'")    // Templater tags
-				.replace(/%>/g, "'>>'")    // Templater tags
-				.replace(/`/g, '"')        // Backticks (can interfere with Dataview)
-				.replace(/---/g, "- - -")  // YAML frontmatter separators
-				.replace(/{{/g, "((")      // Templater/Dataview variables
-				.replace(/}}/g, "))");     // Templater/Dataview variables
+				.replace(/<%/g, "'<<'") // Templater tags
+				.replace(/%>/g, "'>>'") // Templater tags
+				.replace(/`/g, '"') // Backticks (can interfere with Dataview)
+				.replace(/---/g, "- - -") // YAML frontmatter separators
+				.replace(/{{/g, "((") // Templater/Dataview variables
+				.replace(/}}/g, "))"); // Templater/Dataview variables
 			break;
 	}
 
@@ -98,6 +100,6 @@ export function escapeBody(
 export function escapeYamlString(str: string): string {
 	// In YAML double-quoted strings, we need to escape backslashes and double quotes
 	return str
-		.replace(/\\/g, '\\\\')  // Escape backslashes first
-		.replace(/"/g, '\\"');   // Then escape double quotes
+		.replace(/\\/g, "\\\\") // Escape backslashes first
+		.replace(/"/g, '\\"'); // Then escape double quotes
 }

@@ -1,3 +1,21 @@
+// Provider types
+export type ProviderType = "github" | "gitlab";
+/** Unique instance identifier – e.g. "github", "gitlab", "gitlab-2" */
+export type ProviderId = string;
+
+export interface ProviderConfig {
+	id: ProviderId;
+	type: ProviderType;
+	enabled: boolean;
+	token: string;
+	useSecretStorage: boolean;
+	secretTokenName: string;
+	/** Display name shown in the UI (auto-generated if empty) */
+	label?: string;
+	/** GitLab base URL (e.g. https://gitlab.example.com). Leave empty for gitlab.com */
+	baseUrl?: string;
+}
+
 // Profile types
 export type ProfileType = "repository" | "project";
 
@@ -77,7 +95,10 @@ export interface SettingsProfile {
 
 export interface RepositoryTracking {
 	repository: string;
+	provider: ProviderId;
 	profileId: string; // ID of the SettingsProfile to use
+	/** GitLab project numeric ID (needed for GitLab API). Resolved automatically if not set. */
+	gitlabProjectId?: number;
 	ignoreGlobalSettings?: boolean; // @deprecated - kept for migration only
 	trackIssues?: boolean;
 	trackPullRequest?: boolean;
@@ -266,10 +287,14 @@ export interface GlobalDefaults {
 	includeClosedPullRequests: boolean;
 }
 
-export interface GitHubTrackerSettings {
-	githubToken: string;
-	useSecretStorage: boolean;
-	secretTokenName: string;
+export interface IssueTrackerSettings {
+	/** @deprecated Use providers array instead. Kept for migration only. */
+	githubToken?: string;
+	/** @deprecated Use providers array instead. Kept for migration only. */
+	useSecretStorage?: boolean;
+	/** @deprecated Use providers array instead. Kept for migration only. */
+	secretTokenName?: string;
+	providers: ProviderConfig[];
 	repositories: RepositoryTracking[];
 	dateFormat: string;
 	syncOnStartup: boolean;
@@ -285,6 +310,9 @@ export interface GitHubTrackerSettings {
 	enableProjectTracking: boolean;
 	trackedProjects: TrackedProject[];
 }
+
+/** @deprecated Use IssueTrackerSettings instead */
+export type GitHubTrackerSettings = IssueTrackerSettings;
 
 export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
 	issueUpdateMode: "none",
@@ -347,10 +375,26 @@ export const DEFAULT_PROJECT_PROFILE: SettingsProfile = {
 	projectIncludeSubIssues: false,
 };
 
-export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
-	githubToken: "",
-	useSecretStorage: false,
-	secretTokenName: "",
+export const DEFAULT_SETTINGS: IssueTrackerSettings = {
+	providers: [
+		{
+			id: "github",
+			type: "github",
+			enabled: true,
+			token: "",
+			useSecretStorage: false,
+			secretTokenName: "",
+		},
+		{
+			id: "gitlab",
+			type: "gitlab",
+			enabled: false,
+			token: "",
+			useSecretStorage: false,
+			secretTokenName: "",
+			baseUrl: "",
+		},
+	],
 	repositories: [],
 	dateFormat: "",
 	syncOnStartup: true,
@@ -373,6 +417,7 @@ export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 // Default repository tracking settings (repo-specific fields only; profile fields come from the profile)
 export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	repository: "",
+	provider: "github",
 	profileId: "default",
 	useCustomIssueFolder: false,
 	customIssueFolder: "",

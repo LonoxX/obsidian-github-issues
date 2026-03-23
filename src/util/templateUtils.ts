@@ -42,6 +42,7 @@ interface TemplateData {
 	merged?: boolean;
 	baseBranch?: string;
 	headBranch?: string;
+	draft?: boolean;
 	commentsCount: number;
 	isLocked: boolean;
 	lockReason?: string;
@@ -207,6 +208,7 @@ function buildReplacements(
 		replacements["{merged}"] = data.merged ? "true" : "false";
 		replacements["{baseBranch}"] = data.baseBranch || "";
 		replacements["{headBranch}"] = data.headBranch || "";
+		replacements["{draft}"] = data.draft ? "true" : "false";
 	}
 
 	if (data.assignees && data.assignees.length > 0) {
@@ -820,6 +822,7 @@ export function createPullRequestTemplateData(
 		merged: pr.merged || false,
 		baseBranch: pr.base?.ref,
 		headBranch: pr.head?.ref,
+		draft: pr.draft,
 		comments: formatComments(
 			comments,
 			dateFormat,

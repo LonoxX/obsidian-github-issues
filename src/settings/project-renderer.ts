@@ -1,11 +1,11 @@
 import { App, Setting, setIcon } from "obsidian";
 import { TrackedProject } from "../types";
-import GitHubTrackerPlugin from "../main";
+import IssueTrackerPlugin from "../main";
 
 export class ProjectRenderer {
 	constructor(
 		private app: App,
-		private plugin: GitHubTrackerPlugin,
+		private plugin: IssueTrackerPlugin,
 	) {}
 
 	renderProjectSettings(
@@ -52,7 +52,9 @@ export class ProjectRenderer {
 		// Refresh from GitHub button
 		const refreshSetting = new Setting(statusOrderContainer)
 			.setName("Status columns")
-			.setDesc("Drag to reorder, toggle visibility, or refresh from GitHub");
+			.setDesc(
+				"Drag to reorder, toggle visibility, or refresh from GitHub",
+			);
 
 		refreshSetting.addButton((button) => {
 			button
@@ -62,12 +64,17 @@ export class ProjectRenderer {
 					button.setDisabled(true);
 					button.setButtonText("Loading...");
 					try {
-						const statusOptions = await this.plugin.gitHubClient?.fetchProjectStatusOptions(project.id);
+						const statusOptions =
+							await this.plugin.gitHubClient?.fetchProjectStatusOptions?.(
+								project.id,
+							);
 						if (statusOptions) {
 							project.statusOptions = statusOptions;
 							// Update custom order if it exists
 							if (project.useCustomStatusOrder) {
-								project.customStatusOrder = statusOptions.map((opt: any) => opt.name);
+								project.customStatusOrder = statusOptions.map(
+									(opt: any) => opt.name,
+								);
 							}
 							await this.plugin.saveSettings();
 							// Re-render the status list
@@ -87,7 +94,10 @@ export class ProjectRenderer {
 		this.renderStatusList(statusListContainer, project);
 	}
 
-	private renderStatusList(container: HTMLElement, project: TrackedProject): void {
+	private renderStatusList(
+		container: HTMLElement,
+		project: TrackedProject,
+	): void {
 		container.empty();
 
 		// Get status order
@@ -95,7 +105,7 @@ export class ProjectRenderer {
 		if (project.useCustomStatusOrder && project.customStatusOrder?.length) {
 			statusOrder = [...project.customStatusOrder];
 		} else if (project.statusOptions?.length) {
-			statusOrder = project.statusOptions.map(opt => opt.name);
+			statusOrder = project.statusOptions.map((opt) => opt.name);
 		} else {
 			statusOrder = [];
 		}
@@ -137,7 +147,9 @@ export class ProjectRenderer {
 			}
 
 			// Move buttons
-			const moveContainer = statusItem.createDiv("github-issues-status-move-buttons");
+			const moveContainer = statusItem.createDiv(
+				"github-issues-status-move-buttons",
+			);
 
 			const moveUpBtn = moveContainer.createEl("button", {
 				cls: "github-issues-status-move-btn",
@@ -147,7 +159,10 @@ export class ProjectRenderer {
 			moveUpBtn.onclick = async (e) => {
 				e.stopPropagation();
 				if (i > 0) {
-					[statusOrder[i - 1], statusOrder[i]] = [statusOrder[i], statusOrder[i - 1]];
+					[statusOrder[i - 1], statusOrder[i]] = [
+						statusOrder[i],
+						statusOrder[i - 1],
+					];
 					project.customStatusOrder = statusOrder;
 					project.useCustomStatusOrder = true;
 					await this.plugin.saveSettings();
@@ -163,7 +178,10 @@ export class ProjectRenderer {
 			moveDownBtn.onclick = async (e) => {
 				e.stopPropagation();
 				if (i < statusOrder.length - 1) {
-					[statusOrder[i], statusOrder[i + 1]] = [statusOrder[i + 1], statusOrder[i]];
+					[statusOrder[i], statusOrder[i + 1]] = [
+						statusOrder[i + 1],
+						statusOrder[i],
+					];
 					project.customStatusOrder = statusOrder;
 					project.useCustomStatusOrder = true;
 					await this.plugin.saveSettings();
@@ -211,7 +229,9 @@ export class ProjectRenderer {
 			statusItem.ondrop = async (e) => {
 				e.preventDefault();
 				statusItem.removeClass("drag-over");
-				const fromIndex = parseInt(e.dataTransfer?.getData("text/plain") || "0");
+				const fromIndex = parseInt(
+					e.dataTransfer?.getData("text/plain") || "0",
+				);
 				const toIndex = i;
 				if (fromIndex !== toIndex) {
 					const [movedItem] = statusOrder.splice(fromIndex, 1);

@@ -1,6 +1,6 @@
 import { App, Notice, Setting, setIcon } from "obsidian";
 import { TrackedProject, ProjectInfo } from "../types";
-import GitHubTrackerPlugin from "../main";
+import IssueTrackerPlugin from "../main";
 import { getProjectProfiles } from "../util/settingsUtils";
 
 export class ProjectListManager {
@@ -8,7 +8,7 @@ export class ProjectListManager {
 
 	constructor(
 		private app: App,
-		private plugin: GitHubTrackerPlugin,
+		private plugin: IssueTrackerPlugin,
 	) {}
 
 	async addProject(project: ProjectInfo): Promise<void> {
@@ -80,7 +80,10 @@ export class ProjectListManager {
 	renderProjectsList(
 		container: HTMLElement,
 		onRefreshNeeded: () => void,
-		renderProjectSettings: (container: HTMLElement, project: TrackedProject) => void,
+		renderProjectSettings: (
+			container: HTMLElement,
+			project: TrackedProject,
+		) => void,
 		showDeleteModal: (project: TrackedProject) => Promise<void>,
 		showBulkDeleteModal: (projects: TrackedProject[]) => Promise<void>,
 	): void {
@@ -89,37 +92,43 @@ export class ProjectListManager {
 		);
 
 		// Add bulk actions toolbar
-		const bulkActionsToolbar = projectsContainer.createDiv("github-issues-bulk-actions-toolbar");
+		const bulkActionsToolbar = projectsContainer.createDiv(
+			"github-issues-bulk-actions-toolbar",
+		);
 		bulkActionsToolbar.style.display = "none"; // Hidden by default
 
-		const bulkActionInfo = bulkActionsToolbar.createDiv("github-issues-bulk-action-info");
+		const bulkActionInfo = bulkActionsToolbar.createDiv(
+			"github-issues-bulk-action-info",
+		);
 		const selectedCountSpan = bulkActionInfo.createEl("span", {
 			cls: "github-issues-selected-count",
-			text: "0 selected"
+			text: "0 selected",
 		});
 
-		const bulkActionButtons = bulkActionsToolbar.createDiv("github-issues-bulk-action-buttons");
+		const bulkActionButtons = bulkActionsToolbar.createDiv(
+			"github-issues-bulk-action-buttons",
+		);
 
 		const selectAllButton = bulkActionButtons.createEl("button", {
 			text: "Select all",
-			cls: "github-issues-select-all-button"
+			cls: "github-issues-select-all-button",
 		});
 
 		const deselectAllButton = bulkActionButtons.createEl("button", {
 			text: "Deselect all",
-			cls: "github-issues-select-none-button"
+			cls: "github-issues-select-none-button",
 		});
 
 		const removeSelectedButton = bulkActionButtons.createEl("button", {
-			cls: "github-issues-remove-selected-button mod-warning"
+			cls: "github-issues-remove-selected-button mod-warning",
 		});
 		const removeIcon = removeSelectedButton.createEl("span", {
-			cls: "github-issues-button-icon"
+			cls: "github-issues-button-icon",
 		});
 		setIcon(removeIcon, "trash-2");
 		removeSelectedButton.createEl("span", {
 			cls: "github-issues-button-text",
-			text: "Remove selected"
+			text: "Remove selected",
 		});
 
 		// Update UI based on selection
@@ -132,30 +141,39 @@ export class ProjectListManager {
 
 		// Select/Deselect all handlers
 		selectAllButton.onclick = () => {
-			this.plugin.settings.trackedProjects.forEach(project => {
+			this.plugin.settings.trackedProjects.forEach((project) => {
 				this.selectedProjects.add(project.id);
 			});
 			// Update all checkboxes
-			container.querySelectorAll<HTMLInputElement>('.github-issues-project-checkbox').forEach(checkbox => {
-				checkbox.checked = true;
-			});
+			container
+				.querySelectorAll<HTMLInputElement>(
+					".github-issues-project-checkbox",
+				)
+				.forEach((checkbox) => {
+					checkbox.checked = true;
+				});
 			updateBulkActionsUI();
 		};
 
 		deselectAllButton.onclick = () => {
 			this.selectedProjects.clear();
 			// Update all checkboxes
-			container.querySelectorAll<HTMLInputElement>('.github-issues-project-checkbox').forEach(checkbox => {
-				checkbox.checked = false;
-			});
+			container
+				.querySelectorAll<HTMLInputElement>(
+					".github-issues-project-checkbox",
+				)
+				.forEach((checkbox) => {
+					checkbox.checked = false;
+				});
 			updateBulkActionsUI();
 		};
 
 		// Remove selected handler
 		removeSelectedButton.onclick = async () => {
-			const projectsToDelete = this.plugin.settings.trackedProjects.filter(
-				project => this.selectedProjects.has(project.id)
-			);
+			const projectsToDelete =
+				this.plugin.settings.trackedProjects.filter((project) =>
+					this.selectedProjects.has(project.id),
+				);
 			if (projectsToDelete.length > 0) {
 				await showBulkDeleteModal(projectsToDelete);
 				this.selectedProjects.clear();
@@ -188,8 +206,10 @@ export class ProjectListManager {
 		}
 
 		const sortedOwners = Object.keys(projectsByOwner).sort((a, b) => {
-			if (projectsByOwner[a].isUser && !projectsByOwner[b].isUser) return -1;
-			if (!projectsByOwner[a].isUser && projectsByOwner[b].isUser) return 1;
+			if (projectsByOwner[a].isUser && !projectsByOwner[b].isUser)
+				return -1;
+			if (!projectsByOwner[a].isUser && projectsByOwner[b].isUser)
+				return 1;
 			return a.localeCompare(b);
 		});
 
@@ -248,28 +268,45 @@ export class ProjectListManager {
 			// Make owner header collapsible
 			ownerHeader.addEventListener("click", (e) => {
 				e.stopPropagation();
-				const isExpanded = ownerContainer.classList.contains("github-issues-owner-expanded");
+				const isExpanded = ownerContainer.classList.contains(
+					"github-issues-owner-expanded",
+				);
 				if (isExpanded) {
-					ownerContainer.classList.remove("github-issues-owner-expanded");
+					ownerContainer.classList.remove(
+						"github-issues-owner-expanded",
+					);
 					setIcon(chevronIcon, "chevron-right");
 				} else {
-					ownerContainer.classList.add("github-issues-owner-expanded");
+					ownerContainer.classList.add(
+						"github-issues-owner-expanded",
+					);
 					setIcon(chevronIcon, "chevron-down");
 				}
 			});
 
-			const sortedProjects = projectsByOwner[owner].projects.sort((a, b) => {
-				return a.title.localeCompare(b.title);
-			});
+			const sortedProjects = projectsByOwner[owner].projects.sort(
+				(a, b) => {
+					return a.title.localeCompare(b.title);
+				},
+			);
 
 			for (const project of sortedProjects) {
 				const projectItem = ownerProjectsContainer.createDiv(
 					"github-issues-item github-issues-repo-settings",
 				);
 				projectItem.setAttribute("data-project-id", project.id);
-				projectItem.setAttribute("data-owner-name", owner.toLowerCase());
-				projectItem.setAttribute("data-repo-name", project.title.toLowerCase());
-				projectItem.setAttribute("data-full-name", `${owner}/${project.title}`.toLowerCase());
+				projectItem.setAttribute(
+					"data-owner-name",
+					owner.toLowerCase(),
+				);
+				projectItem.setAttribute(
+					"data-repo-name",
+					project.title.toLowerCase(),
+				);
+				projectItem.setAttribute(
+					"data-full-name",
+					`${owner}/${project.title}`.toLowerCase(),
+				);
 
 				const headerContainer = projectItem.createDiv(
 					"github-issues-repo-header-container",
@@ -282,7 +319,7 @@ export class ProjectListManager {
 				// Add checkbox for bulk selection
 				const checkbox = projectInfoContainer.createEl("input", {
 					type: "checkbox",
-					cls: "github-issues-project-checkbox"
+					cls: "github-issues-project-checkbox",
 				});
 				checkbox.checked = this.selectedProjects.has(project.id);
 				checkbox.onclick = (e) => {
@@ -358,13 +395,20 @@ export class ProjectListManager {
 				);
 
 				// Profile selector for project
-				const projectProfiles = getProjectProfiles(this.plugin.settings);
+				const projectProfiles = getProjectProfiles(
+					this.plugin.settings,
+				);
 				if (projectProfiles.length > 0) {
 					new Setting(detailsContainer)
 						.setName("Settings profile")
-						.setDesc("Select which profile provides default settings for this project")
+						.setDesc(
+							"Select which profile provides default settings for this project",
+						)
 						.addDropdown((dropdown: any) => {
-							dropdown.addOption("", "None (use project-specific settings)");
+							dropdown.addOption(
+								"",
+								"None (use project-specific settings)",
+							);
 							for (const profile of projectProfiles) {
 								dropdown.addOption(profile.id, profile.name);
 							}

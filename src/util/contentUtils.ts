@@ -10,10 +10,12 @@
  */
 export function shouldUpdateContent(
 	existingContent: string,
-	githubUpdatedAt: string
+	githubUpdatedAt: string,
 ): boolean {
 	// Extract updated field from frontmatter
-	const updatedMatch = existingContent.match(/^updated:\s*["']?([^"'\n]+)["']?$/m);
+	const updatedMatch = existingContent.match(
+		/^updated:\s*["']?([^"'\n]+)["']?$/m,
+	);
 
 	if (!updatedMatch) {
 		// No updated field found, should update
@@ -37,10 +39,12 @@ export function shouldUpdateContent(
  */
 export function hasStatusChanged(
 	existingContent: string,
-	githubStatus: string
+	githubStatus: string,
 ): boolean {
 	// Extract status field from frontmatter
-	const statusMatch = existingContent.match(/^status:\s*["']?([^"'\n]+)["']?$/m);
+	const statusMatch = existingContent.match(
+		/^status:\s*["']?([^"'\n]+)["']?$/m,
+	);
 
 	if (!statusMatch) {
 		// No status field found, should update

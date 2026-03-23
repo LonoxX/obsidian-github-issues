@@ -1,6 +1,6 @@
-# GitHub Issues for Obsidian
+# GitHub & GitLab Issues for Obsidian
 
-An Obsidian plugin that integrates with GitHub to track issues and pull requests directly in your vault.
+An Obsidian plugin that integrates with GitHub and GitLab to track issues and pull requests directly in your vault.
 
 
 >The configurations are heavily inspired by https://github.com/schaier-io, including some specific settings. However, I had already started working on my prototype before I discovered the plugin, and had initially even given it a similar name.
@@ -11,12 +11,17 @@ Check out the [documentation](https://github.com/LonoxX/obsidian-github-issues/w
 ## Features
 
 ### Issue & Pull Request Tracking
-- Track issues and pull requests from multiple GitHub repositories
-- Automatically sync GitHub data on startup (configurable)
+- Track issues and pull requests from multiple GitHub and GitLab repositories
+- Automatically sync data on startup (configurable)
 - Background sync at configurable intervals
 - Filter by labels, assignees, and reviewers
 - Include or exclude closed issues/PRs
 - Automatic cleanup of old closed items
+
+### GitLab Support
+- Full support for GitLab Issues and Merge Requests
+- Works with self-hosted GitLab instances
+- Multiple GitLab instances can be configured simultaneously
 
 ### GitHub Projects v2 Integration
 - Track GitHub Projects across repositories
@@ -25,10 +30,14 @@ Check out the [documentation](https://github.com/LonoxX/obsidian-github-issues/w
 - Project-specific filtering and organization
 
 ### Sub-Issues Support
-- Track GitHub sub-issues (parent/child relationships)
+- Track sub-issues for both GitHub and GitLab (parent/child relationships)
 - Display sub-issues list with status indicators
 - Navigate between parent and child issues
 - Progress tracking with completion percentage
+
+### Settings Profiles
+- Central configuration for folders, templates, sync behaviour, and filters
+- Assign one profile to multiple repositories instead of configuring each one individually
 
 ### Markdown Notes
 - Create markdown notes for each issue or PR
@@ -57,16 +66,20 @@ Check out the [documentation](https://github.com/LonoxX/obsidian-github-issues/w
 
 ## Configuration
 
-1. Create a new GitHub token with the `repo` and `read:org` permissions
+### GitHub
+1. Create a GitHub token with `repo` and `read:org` permissions
    → [GitHub Settings > Developer Settings > Personal access tokens](https://github.com/settings/tokens)
-2. Configure the plugin in Obsidian settings:
-    - Paste your GitHub token in the **GitHub Token** field
-    - Adjust additional settings as needed
+2. Paste the token in **Settings → GitHub & GitLab Issues → GitHub Token**
+
+### GitLab
+1. Create a GitLab Personal Access Token with `read_api` scope
+   → GitLab → Preferences → Access Tokens
+2. Enable the GitLab provider in **Settings → Providers** and paste your token
 
 ## Adding Repositories
 
 1. Open the plugin settings in Obsidian
-2. Add repositories by entering the full GitHub repository path (e.g., `lonoxx/obsidian-github-issues`),
+2. Add repositories by entering the full repository path (e.g., `lonoxx/obsidian-github-issues`),
    or use the repository browser to select one or multiple repositories
 3. Click **Add Repository** or **Add Selected Repositories**
 4. The plugin will automatically fetch issues from the configured repositories

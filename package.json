@@ -21,10 +21,10 @@
 	"author": "LonoxX",
 	"license": "MIT",
 	"devDependencies": {
-		"@types/node": "^25.3.0",
+		"@types/node": "^25.5.0",
 		"builtin-modules": "^5.0.0",
-		"esbuild": "^0.27.3",
-		"obsidian": "^1.12.2",
+		"esbuild": "^0.27.4",
+		"obsidian": "^1.12.3",
 		"prettier": "^3.8.1",
 		"tslib": "^2.8.1",
 		"typescript": "^5.9.3"

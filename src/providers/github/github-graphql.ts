@@ -223,7 +223,14 @@ export interface ProjectV2Node {
 
 export interface ProjectFieldValue {
 	fieldName: string;
-	type: 'text' | 'number' | 'date' | 'single_select' | 'iteration' | 'user' | 'labels';
+	type:
+		| "text"
+		| "number"
+		| "date"
+		| "single_select"
+		| "iteration"
+		| "user"
+		| "labels";
 	value: string | number | null;
 	// Additional data for specific types
 	startDate?: string;
@@ -258,64 +265,64 @@ export function parseFieldValues(fieldValuesNodes: any[]): ProjectFieldValue[] {
 		const fieldName = node.field.name;
 
 		// Text field
-		if ('text' in node && node.text !== undefined) {
+		if ("text" in node && node.text !== undefined) {
 			fieldValues.push({
 				fieldName,
-				type: 'text',
+				type: "text",
 				value: node.text,
 			});
 		}
 		// Number field
-		else if ('number' in node && node.number !== undefined) {
+		else if ("number" in node && node.number !== undefined) {
 			fieldValues.push({
 				fieldName,
-				type: 'number',
+				type: "number",
 				value: node.number,
 			});
 		}
 		// Date field
-		else if ('date' in node && node.date !== undefined) {
+		else if ("date" in node && node.date !== undefined) {
 			fieldValues.push({
 				fieldName,
-				type: 'date',
+				type: "date",
 				value: node.date,
 			});
 		}
 		// Single select field
-		else if ('name' in node && 'optionId' in node) {
+		else if ("name" in node && "optionId" in node) {
 			fieldValues.push({
 				fieldName,
-				type: 'single_select',
+				type: "single_select",
 				value: node.name,
 			});
 		}
 		// Iteration field
-		else if ('title' in node && 'iterationId' in node) {
+		else if ("title" in node && "iterationId" in node) {
 			fieldValues.push({
 				fieldName,
-				type: 'iteration',
+				type: "iteration",
 				value: node.title,
 				startDate: node.startDate,
 				duration: node.duration,
 			});
 		}
 		// User field
-		else if ('users' in node && node.users?.nodes) {
+		else if ("users" in node && node.users?.nodes) {
 			const userLogins = node.users.nodes.map((u: any) => u.login);
 			fieldValues.push({
 				fieldName,
-				type: 'user',
-				value: userLogins.join(', '),
+				type: "user",
+				value: userLogins.join(", "),
 				users: userLogins,
 			});
 		}
 		// Labels field
-		else if ('labels' in node && node.labels?.nodes) {
+		else if ("labels" in node && node.labels?.nodes) {
 			const labelNames = node.labels.nodes.map((l: any) => l.name);
 			fieldValues.push({
 				fieldName,
-				type: 'labels',
-				value: labelNames.join(', '),
+				type: "labels",
+				value: labelNames.join(", "),
 				labels: labelNames,
 			});
 		}

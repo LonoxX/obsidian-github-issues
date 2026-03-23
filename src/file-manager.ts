@@ -1,12 +1,12 @@
 import { App, TFile } from "obsidian";
 import {
-	GitHubTrackerSettings,
+	IssueTrackerSettings,
 	RepositoryTracking,
 	TrackedProject,
 	ProjectData,
 } from "./types";
 import { NoticeManager } from "./notice-manager";
-import { GitHubClient } from "./github-client";
+import { IssueProvider } from "./providers/provider";
 import { IssueFileManager } from "./issue-file-manager";
 import { PullRequestFileManager } from "./pr-file-manager";
 import { FilterManager } from "./filter-manager";
@@ -33,23 +33,23 @@ export class FileManager {
 
 	constructor(
 		private app: App,
-		private settings: GitHubTrackerSettings,
+		private settings: IssueTrackerSettings,
 		private noticeManager: NoticeManager,
-		private gitHubClient: GitHubClient,
+		private provider: IssueProvider,
 	) {
 		this.issueFileManager = new IssueFileManager(
 			app,
 			settings,
 			noticeManager,
-			gitHubClient,
+			provider,
 		);
 		this.prFileManager = new PullRequestFileManager(
 			app,
 			settings,
 			noticeManager,
-			gitHubClient,
+			provider,
 		);
-		this.filterManager = new FilterManager(gitHubClient);
+		this.filterManager = new FilterManager(provider);
 		this.folderPathManager = new FolderPathManager();
 		this.fileHelpers = new FileHelpers(app, noticeManager);
 	}
@@ -232,16 +232,18 @@ export class FileManager {
 			if (isIssue && effectiveProject.includeSubIssues) {
 				const [owner, repoName] = repository.split("/");
 				if (owner && repoName) {
-					subIssues = await this.gitHubClient.fetchSubIssues(
-						owner,
-						repoName,
-						content.number,
-					);
-					parentIssue = await this.gitHubClient.fetchParentIssue(
-						owner,
-						repoName,
-						content.number,
-					);
+					subIssues =
+						(await this.provider.fetchSubIssues?.(
+							owner,
+							repoName,
+							content.number,
+						)) ?? [];
+					parentIssue =
+						(await this.provider.fetchParentIssue?.(
+							owner,
+							repoName,
+							content.number,
+						)) ?? null;
 
 					// Enrich sub-issues with vault paths if they exist
 					const noteTemplate =

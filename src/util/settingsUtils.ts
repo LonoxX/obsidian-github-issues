@@ -1,12 +1,11 @@
 import {
 	RepositoryTracking,
-	GitHubTrackerSettings,
+	IssueTrackerSettings,
 	SettingsProfile,
 	TrackedProject,
 	DEFAULT_REPOSITORY_PROFILE,
 	DEFAULT_PROJECT_PROFILE,
 } from "../types";
-
 /**
  * Fields managed exclusively by profiles. These are stripped from repo objects
  * before persisting to data.json and hydrated back from the profile on load.
@@ -51,7 +50,7 @@ export function stripProfileFieldsFromRepo(
  * Find a profile by ID from the settings
  */
 export function getProfileById(
-	settings: GitHubTrackerSettings,
+	settings: IssueTrackerSettings,
 	profileId: string,
 ): SettingsProfile | undefined {
 	return settings.profiles.find((p) => p.id === profileId);
@@ -61,7 +60,7 @@ export function getProfileById(
  * Get all repository-type profiles
  */
 export function getRepositoryProfiles(
-	settings: GitHubTrackerSettings,
+	settings: IssueTrackerSettings,
 ): SettingsProfile[] {
 	return settings.profiles.filter((p) => p.type === "repository");
 }
@@ -70,7 +69,7 @@ export function getRepositoryProfiles(
  * Get all project-type profiles
  */
 export function getProjectProfiles(
-	settings: GitHubTrackerSettings,
+	settings: IssueTrackerSettings,
 ): SettingsProfile[] {
 	return settings.profiles.filter((p) => p.type === "project");
 }
@@ -81,7 +80,7 @@ export function getProjectProfiles(
  */
 export function getEffectiveRepoSettings(
 	repo: RepositoryTracking,
-	settings: GitHubTrackerSettings,
+	settings: IssueTrackerSettings,
 ): RepositoryTracking {
 	const profile = getProfileById(settings, repo.profileId);
 
@@ -175,7 +174,7 @@ function applyProfileToRepo(
  */
 export function getEffectiveProjectSettings(
 	project: TrackedProject,
-	settings: GitHubTrackerSettings,
+	settings: IssueTrackerSettings,
 ): TrackedProject {
 	const profile = getProfileById(
 		settings,

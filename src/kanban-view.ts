@@ -1,12 +1,12 @@
 import { ItemView, WorkspaceLeaf, TFile, Notice, setIcon } from "obsidian";
-import { GitHubTrackerSettings, ProjectData, TrackedProject } from "./types";
+import { IssueTrackerSettings, ProjectData, TrackedProject } from "./types";
 import { getEffectiveProjectSettings } from "./util/settingsUtils";
 import { FolderPathManager } from "./folder-path-manager";
 
 export const KANBAN_VIEW_TYPE = "github-kanban-view";
 
 export class GitHubKanbanView extends ItemView {
-	private settings: GitHubTrackerSettings;
+	private settings: IssueTrackerSettings;
 	private refreshInterval: NodeJS.Timeout | null = null;
 	private projectDataCache: Map<string, any[]> = new Map();
 	private activeProjectId: string | null = null;
@@ -44,7 +44,7 @@ export class GitHubKanbanView extends ItemView {
 
 	constructor(
 		leaf: WorkspaceLeaf,
-		settings: GitHubTrackerSettings,
+		settings: IssueTrackerSettings,
 		gitHubClient: any,
 	) {
 		super(leaf);

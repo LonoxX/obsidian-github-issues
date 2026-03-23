@@ -1,11 +1,11 @@
 import { App, Setting } from "obsidian";
 import { RepositoryTracking } from "../types";
-import GitHubTrackerPlugin from "../main";
+import IssueTrackerPlugin from "../main";
 
 export class RepositoryRenderer {
 	constructor(
 		private app: App,
-		private plugin: GitHubTrackerPlugin,
+		private plugin: IssueTrackerPlugin,
 		private fetchLabels?: (
 			repo: string,
 			repoObj: RepositoryTracking,

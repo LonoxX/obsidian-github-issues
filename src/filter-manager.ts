@@ -1,8 +1,8 @@
 import { RepositoryTracking } from "./types";
-import { GitHubClient } from "./github-client";
+import { IssueProvider } from "./providers/provider";
 
 export class FilterManager {
-	constructor(private gitHubClient: GitHubClient) {}
+	constructor(private provider: IssueProvider) {}
 
 	public filterIssues(repo: RepositoryTracking, issues: any[]): any[] {
 		let filteredIssues = issues;
@@ -181,7 +181,7 @@ export class FilterManager {
 	}
 
 	private getCurrentUser(): string {
-		// Access the current user from the GitHubClient through the main plugin
-		return this.gitHubClient ? this.gitHubClient.getCurrentUser() : "";
+		// Access the current user from the provider
+		return this.provider ? this.provider.getCurrentUser() : "";
 	}
 }

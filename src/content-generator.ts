@@ -1,17 +1,20 @@
 import { format } from "date-fns";
-import { GitHubTrackerSettings, RepositoryTracking, ProjectData } from "./types";
+import {
+	IssueTrackerSettings,
+	RepositoryTracking,
+	ProjectData,
+	ProviderConfig,
+} from "./types";
 import { escapeBody, escapeYamlString } from "./util/escapeUtils";
 import {
 	createIssueTemplateData,
 	createPullRequestTemplateData,
-	processContentTemplate
+	processContentTemplate,
 } from "./util/templateUtils";
 import { FileHelpers } from "./util/file-helpers";
 
 export class ContentGenerator {
-	constructor(
-		private fileHelpers: FileHelpers,
-	) {}
+	constructor(private fileHelpers: FileHelpers) {}
 
 	/**
 	 * Create issue content using template or default format
@@ -20,17 +23,22 @@ export class ContentGenerator {
 		issue: any,
 		repo: RepositoryTracking,
 		comments: any[],
-		settings: GitHubTrackerSettings,
+		settings: IssueTrackerSettings,
 		projectData?: ProjectData[],
 		subIssues?: any[],
 		parentIssue?: any,
 	): Promise<string> {
 		// Determine whether to escape hash tags (repo setting takes precedence if using a custom profile)
-		const shouldEscapeHashTags = repo.profileId !== "default" ? repo.escapeHashTags : settings.escapeHashTags;
+		const shouldEscapeHashTags =
+			repo.profileId !== "default"
+				? repo.escapeHashTags
+				: settings.escapeHashTags;
 
 		// Check if custom template is enabled and load template content
 		if (repo.useCustomIssueContentTemplate && repo.issueContentTemplate) {
-			const templateContent = await this.fileHelpers.loadTemplateContent(repo.issueContentTemplate);
+			const templateContent = await this.fileHelpers.loadTemplateContent(
+				repo.issueContentTemplate,
+			);
 			if (templateContent) {
 				const templateData = createIssueTemplateData(
 					issue,
@@ -41,9 +49,13 @@ export class ContentGenerator {
 					shouldEscapeHashTags,
 					projectData,
 					subIssues,
-					parentIssue
+					parentIssue,
 				);
-				return processContentTemplate(templateContent, templateData, settings.dateFormat);
+				return processContentTemplate(
+					templateContent,
+					templateData,
+					settings.dateFormat,
+				);
 			}
 		}
 
@@ -87,7 +99,9 @@ parent_issue_url: "${parentIssue.url}"`;
 
 		// Add sub-issues metadata if available
 		if (subIssues && subIssues.length > 0) {
-			const closedCount = subIssues.filter((si: any) => si.state === "closed").length;
+			const closedCount = subIssues.filter(
+				(si: any) => si.state === "closed",
+			).length;
 			const openCount = subIssues.length - closedCount;
 			frontmatter += `
 sub_issues: [${subIssues.map((si: any) => si.number).join(", ")}]
@@ -123,12 +137,15 @@ ${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFo
 			frontmatter += `
 
 ## Sub-Issues
-${subIssues.map((si: any) => {
-	const statusIcon = si.state === "closed"
-		? '<span class="github-issues-sub-issue-closed">●</span>'
-		: '<span class="github-issues-sub-issue-open">●</span>';
-	return `- ${statusIcon} [#${si.number} ${si.title}](${si.url})`;
-}).join("\n")}`;
+${subIssues
+	.map((si: any) => {
+		const statusIcon =
+			si.state === "closed"
+				? '<span class="github-issues-sub-issue-closed">●</span>'
+				: '<span class="github-issues-sub-issue-open">●</span>';
+		return `- ${statusIcon} [#${si.number} ${si.title}](${si.url})`;
+	})
+	.join("\n")}`;
 		}
 
 		// Add parent issue link if available
@@ -149,15 +166,23 @@ ${subIssues.map((si: any) => {
 		pr: any,
 		repo: RepositoryTracking,
 		comments: any[],
-		settings: GitHubTrackerSettings,
+		settings: IssueTrackerSettings,
 		projectData?: ProjectData[],
 	): Promise<string> {
 		// Determine whether to escape hash tags (repo setting takes precedence if using a custom profile)
-		const shouldEscapeHashTags = repo.profileId !== "default" ? repo.escapeHashTags : settings.escapeHashTags;
+		const shouldEscapeHashTags =
+			repo.profileId !== "default"
+				? repo.escapeHashTags
+				: settings.escapeHashTags;
 
 		// Check if custom template is enabled and load template content
-		if (repo.useCustomPullRequestContentTemplate && repo.pullRequestContentTemplate) {
-			const templateContent = await this.fileHelpers.loadTemplateContent(repo.pullRequestContentTemplate);
+		if (
+			repo.useCustomPullRequestContentTemplate &&
+			repo.pullRequestContentTemplate
+		) {
+			const templateContent = await this.fileHelpers.loadTemplateContent(
+				repo.pullRequestContentTemplate,
+			);
 			if (templateContent) {
 				const templateData = createPullRequestTemplateData(
 					pr,
@@ -166,18 +191,26 @@ ${subIssues.map((si: any) => {
 					settings.dateFormat,
 					settings.escapeMode,
 					shouldEscapeHashTags,
-					projectData
+					projectData,
 				);
-				return processContentTemplate(templateContent, templateData, settings.dateFormat);
+				return processContentTemplate(
+					templateContent,
+					templateData,
+					settings.dateFormat,
+				);
 			}
 		}
 
 		// Fallback to default template
+		const providerConfig = settings.providers?.find(
+			(p: ProviderConfig) => p.id === repo.provider,
+		);
+		const prType = providerConfig?.type === "gitlab" ? "mr" : "pr";
 		let frontmatter = `---
 title: "${escapeYamlString(pr.title)}"
 number: ${pr.number}
 state: "${pr.state}"
-type: "pr"
+type: "${prType}"
 created: "${
 			settings.dateFormat !== ""
 				? format(new Date(pr.created_at), settings.dateFormat)
@@ -204,7 +237,20 @@ labels: [${(
 			pr.labels?.map(
 				(label: { name: string }) => '"' + label.name + '"',
 			) || []
-		).join(", ")}]
+		).join(", ")}]`;
+
+		// Add branch info if available
+		if (pr.head?.ref) {
+			frontmatter += `\nsource_branch: "${pr.head.ref}"`;
+		}
+		if (pr.base?.ref) {
+			frontmatter += `\ntarget_branch: "${pr.base.ref}"`;
+		}
+		if (pr.draft !== undefined) {
+			frontmatter += `\ndraft: ${pr.draft}`;
+		}
+
+		frontmatter += `
 updateMode: "${repo.pullRequestUpdateMode}"
 allowDelete: ${repo.allowDeletePullRequest ? true : false}`;
 

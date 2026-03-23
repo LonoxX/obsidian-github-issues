@@ -1,11 +1,11 @@
 import { App, TFile } from "obsidian";
-import { GitHubTrackerSettings, RepositoryTracking } from "./types";
+import { IssueTrackerSettings, RepositoryTracking } from "./types";
 import { escapeBody } from "./util/escapeUtils";
 import { NoticeManager } from "./notice-manager";
-import { GitHubClient } from "./github-client";
+import { IssueProvider, ProviderExtraParams } from "./providers/provider";
 import {
 	createIssueTemplateData,
-	processFilenameTemplate
+	processFilenameTemplate,
 } from "./util/templateUtils";
 import { getEffectiveRepoSettings } from "./util/settingsUtils";
 import { extractPersistBlocks, mergePersistBlocks } from "./util/persistUtils";
@@ -23,9 +23,9 @@ export class IssueFileManager {
 
 	constructor(
 		private app: App,
-		private settings: GitHubTrackerSettings,
+		private settings: IssueTrackerSettings,
 		private noticeManager: NoticeManager,
-		private gitHubClient: GitHubClient,
+		private provider: IssueProvider,
 	) {
 		this.fileHelpers = new FileHelpers(app, noticeManager);
 		this.folderPathManager = new FolderPathManager();
@@ -79,34 +79,54 @@ export class IssueFileManager {
 		const baseFileName = processFilenameTemplate(
 			repo.issueNoteTemplate || "Issue - {number}",
 			templateData,
-			this.settings.dateFormat
+			this.settings.dateFormat,
 		);
 		const fileName = `${baseFileName}.md`;
-		const issueFolderPath = this.folderPathManager.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
+		const issueFolderPath = this.folderPathManager.getIssueFolderPath(
+			repo,
+			ownerCleaned,
+			repoCleaned,
+		);
 
 		// Ensure folder structure exists
-		if (repo.useCustomIssueFolder && repo.customIssueFolder && repo.customIssueFolder.trim()) {
+		if (
+			repo.useCustomIssueFolder &&
+			repo.customIssueFolder &&
+			repo.customIssueFolder.trim()
+		) {
 			// For custom folders, just ensure the custom path exists
-			await this.fileHelpers.ensureFolderExists(repo.customIssueFolder.trim());
+			await this.fileHelpers.ensureFolderExists(
+				repo.customIssueFolder.trim(),
+			);
 		} else {
 			// For default structure, ensure nested path exists
 			const issueFolder = repo.issueFolder ?? "GitHub";
 			await this.fileHelpers.ensureFolderExists(issueFolder);
-			await this.fileHelpers.ensureFolderExists(`${issueFolder}/${ownerCleaned}`);
-			await this.fileHelpers.ensureFolderExists(`${issueFolder}/${ownerCleaned}/${repoCleaned}`);
+			await this.fileHelpers.ensureFolderExists(
+				`${issueFolder}/${ownerCleaned}`,
+			);
+			await this.fileHelpers.ensureFolderExists(
+				`${issueFolder}/${ownerCleaned}/${repoCleaned}`,
+			);
 		}
 
-		const file = this.app.vault.getAbstractFileByPath(`${issueFolderPath}/${fileName}`);
+		const file = this.app.vault.getAbstractFileByPath(
+			`${issueFolderPath}/${fileName}`,
+		);
 
 		const [owner, repoName] = repo.repository.split("/");
+		const extra: ProviderExtraParams | undefined = repo.gitlabProjectId
+			? { gitlabProjectId: repo.gitlabProjectId }
+			: undefined;
 
 		// Only fetch comments if they should be included
 		let comments: any[] = [];
 		if (repo.includeIssueComments) {
-			comments = await this.gitHubClient.fetchIssueComments(
+			comments = await this.provider.fetchIssueComments(
 				owner,
 				repoName,
 				issue.number,
+				extra,
 			);
 		} else {
 			this.noticeManager.debug(
@@ -119,11 +139,27 @@ export class IssueFileManager {
 		let parentIssue: any = null;
 
 		if (repo.includeSubIssues) {
-			subIssues = await this.gitHubClient.fetchSubIssues(owner, repoName, issue.number);
-			parentIssue = await this.gitHubClient.fetchParentIssue(owner, repoName, issue.number);
+			subIssues =
+				(await this.provider.fetchSubIssues?.(
+					owner,
+					repoName,
+					issue.number,
+					extra,
+				)) ?? [];
+			parentIssue =
+				(await this.provider.fetchParentIssue?.(
+					owner,
+					repoName,
+					issue.number,
+					extra,
+				)) ?? null;
 
 			// Enrich sub-issues with vault paths if they exist
-			const issueFolder = this.folderPathManager.getIssueFolderPath(repo, owner, repoName);
+			const issueFolder = this.folderPathManager.getIssueFolderPath(
+				repo,
+				owner,
+				repoName,
+			);
 			const noteTemplate = repo.issueNoteTemplate || "Issue - {number}";
 			subIssues = await this.fileHelpers.enrichSubIssuesWithVaultPaths(
 				subIssues,
@@ -131,7 +167,7 @@ export class IssueFileManager {
 				noteTemplate,
 				repo.repository,
 				this.settings.dateFormat,
-				this.settings.escapeMode
+				this.settings.escapeMode,
 			);
 		}
 
@@ -142,7 +178,7 @@ export class IssueFileManager {
 			this.settings,
 			undefined, // projectData
 			subIssues,
-			parentIssue
+			parentIssue,
 		);
 
 		if (file) {
@@ -154,15 +190,21 @@ export class IssueFileManager {
 				const existingContent = await this.app.vault.read(file);
 
 				// Check if status has changed (e.g., open -> closed)
-				const statusHasChanged = hasStatusChanged(existingContent, issue.state);
+				const statusHasChanged = hasStatusChanged(
+					existingContent,
+					issue.state,
+				);
 
 				// If status changed, always update regardless of updateMode
 				// Otherwise, respect the updateMode setting
 				if (statusHasChanged || updateMode === "update") {
 					// Check if content needs updating based on updated_at field
-					if (!statusHasChanged && !shouldUpdateContent(existingContent, issue.updated_at)) {
+					if (
+						!statusHasChanged &&
+						!shouldUpdateContent(existingContent, issue.updated_at)
+					) {
 						this.noticeManager.debug(
-							`Skipped update for issue ${issue.number}: no changes detected (updated_at match)`
+							`Skipped update for issue ${issue.number}: no changes detected (updated_at match)`,
 						);
 						return;
 					}
@@ -171,32 +213,44 @@ export class IssueFileManager {
 					const persistBlocks = extractPersistBlocks(existingContent);
 
 					// Create the complete new content with updated frontmatter
-					let updatedContent = await this.contentGenerator.createIssueContent(
-						issue,
-						repo,
-						comments,
-						this.settings,
-						undefined, // projectData
-						subIssues,
-						parentIssue
-					);
+					let updatedContent =
+						await this.contentGenerator.createIssueContent(
+							issue,
+							repo,
+							comments,
+							this.settings,
+							undefined, // projectData
+							subIssues,
+							parentIssue,
+						);
 
 					// Merge persist blocks back into new content
 					if (persistBlocks.size > 0) {
-						updatedContent = mergePersistBlocks(updatedContent, existingContent, persistBlocks);
+						updatedContent = mergePersistBlocks(
+							updatedContent,
+							existingContent,
+							persistBlocks,
+						);
 						this.noticeManager.debug(
-							`Restored ${persistBlocks.size} persist block(s) for issue ${issue.number}`
+							`Restored ${persistBlocks.size} persist block(s) for issue ${issue.number}`,
 						);
 					}
 
 					await this.app.vault.modify(file, updatedContent);
 					if (statusHasChanged) {
-						this.noticeManager.debug(`Updated issue ${issue.number} (status changed to ${issue.state})`);
+						this.noticeManager.debug(
+							`Updated issue ${issue.number} (status changed to ${issue.state})`,
+						);
 					} else {
-						this.noticeManager.debug(`Updated issue ${issue.number}`);
+						this.noticeManager.debug(
+							`Updated issue ${issue.number}`,
+						);
 					}
 				} else if (updateMode === "append") {
-					const shouldEscapeHashTags = repo.profileId !== "default" ? repo.escapeHashTags : this.settings.escapeHashTags;
+					const shouldEscapeHashTags =
+						repo.profileId !== "default"
+							? repo.escapeHashTags
+							: this.settings.escapeHashTags;
 					content = `---\n### New status: "${
 						issue.state
 					}"\n\n# ${escapeBody(
@@ -205,7 +259,11 @@ export class IssueFileManager {
 						false,
 					)}\n${
 						issue.body
-							? escapeBody(issue.body, this.settings.escapeMode, shouldEscapeHashTags)
+							? escapeBody(
+									issue.body,
+									this.settings.escapeMode,
+									shouldEscapeHashTags,
+								)
 							: "No description found"
 					}\n`;
 
@@ -230,7 +288,10 @@ export class IssueFileManager {
 				}
 			}
 		} else {
-			await this.app.vault.create(`${issueFolderPath}/${fileName}`, content);
+			await this.app.vault.create(
+				`${issueFolderPath}/${fileName}`,
+				content,
+			);
 			this.noticeManager.debug(`Created issue file for ${issue.number}`);
 		}
 	}
@@ -240,6 +301,10 @@ export class IssueFileManager {
 		issueFolder: string,
 		ownerCleaned: string,
 	): Promise<void> {
-		return this.cleanupManager.cleanupEmptyIssueFolder(repo, issueFolder, ownerCleaned);
+		return this.cleanupManager.cleanupEmptyIssueFolder(
+			repo,
+			issueFolder,
+			ownerCleaned,
+		);
 	}
 }

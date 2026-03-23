@@ -1,10 +1,19 @@
 import { Notice } from "obsidian";
-import { GitHubTrackerSettings } from "./types";
+import { IssueTrackerSettings } from "./types";
 
 export type NoticeLevel = "error" | "warning" | "info" | "success" | "debug";
 
 export class NoticeManager {
-	constructor(private settings: GitHubTrackerSettings) {}
+	private providerPrefix = "GitHub";
+
+	constructor(private settings: IssueTrackerSettings) {}
+
+	/**
+	 * Set the provider prefix used in debug console output (e.g. "GitHub" or "GitLab")
+	 */
+	public setProviderPrefix(prefix: string): void {
+		this.providerPrefix = prefix;
+	}
 
 	/**
 	 * Show a notice based on the current notification mode and provided level
@@ -19,7 +28,7 @@ export class NoticeManager {
 		forceShow = false,
 	): void {
 		if (this.settings.syncNoticeMode === "debug") {
-			const prefix = `[GitHub] ${level.toUpperCase()}:`;
+			const prefix = `[${this.providerPrefix}] ${level.toUpperCase()}:`;
 			if (level === "error") {
 				console.error(prefix, message);
 			} else if (level === "warning") {
@@ -75,7 +84,7 @@ export class NoticeManager {
 			fullMessage += `: ${error.message}`;
 
 			if (this.settings.syncNoticeMode === "debug") {
-				console.error("[GitHub] ERROR:", error);
+				console.error(`[${this.providerPrefix}] ERROR:`, error);
 			}
 		}
 

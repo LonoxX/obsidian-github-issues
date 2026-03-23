@@ -1,6 +1,11 @@
 import { App, Notice, Setting, setIcon } from "obsidian";
-import { RepositoryTracking, DEFAULT_REPOSITORY_TRACKING } from "../types";
-import GitHubTrackerPlugin from "../main";
+import {
+	RepositoryTracking,
+	DEFAULT_REPOSITORY_TRACKING,
+	ProviderId,
+	ProviderConfig,
+} from "../types";
+import IssueTrackerPlugin from "../main";
 import { getRepositoryProfiles } from "../util/settingsUtils";
 
 export class RepositoryListManager {
@@ -8,36 +13,74 @@ export class RepositoryListManager {
 
 	constructor(
 		private app: App,
-		private plugin: GitHubTrackerPlugin,
+		private plugin: IssueTrackerPlugin,
 	) {}
 
-	async addRepository(repoName: string, profileId?: string): Promise<void> {
+	/** Get display label for a provider config */
+	private getProviderLabel(config: ProviderConfig): string {
+		if (config.label) return config.label;
+		if (config.type === "github") return "GitHub";
+		if (config.type === "gitlab") {
+			const gitlabCount = this.plugin.settings.providers.filter(
+				(p) => p.type === "gitlab",
+			).length;
+			if (gitlabCount > 1 && config.baseUrl) {
+				try {
+					const url = new URL(config.baseUrl);
+					return `GitLab (${url.hostname})`;
+				} catch {
+					return `GitLab (${config.baseUrl})`;
+				}
+			}
+			return "GitLab";
+		}
+		return config.id;
+	}
+
+	async addRepository(
+		repoName: string,
+		profileId?: string,
+		provider?: ProviderId,
+		gitlabProjectId?: number,
+	): Promise<void> {
 		if (
 			this.plugin.settings.repositories.some(
-				(r) => r.repository === repoName,
+				(r) =>
+					r.repository === repoName &&
+					r.provider === (provider || "github"),
 			)
 		) {
 			new Notice("This repository is already being tracked");
 			return;
 		}
 
-		const newRepo = {
+		const newRepo: RepositoryTracking = {
 			...DEFAULT_REPOSITORY_TRACKING,
 			repository: repoName,
 			profileId: profileId || "default",
+			provider: provider || "github",
 		};
+		if (gitlabProjectId !== undefined) {
+			newRepo.gitlabProjectId = gitlabProjectId;
+		}
 		this.plugin.settings.repositories.push(newRepo);
 		await this.plugin.saveSettings();
 		new Notice(`Added repository: ${repoName}`);
 	}
 
-	async addMultipleRepositories(repoNames: string[], profileIds?: Map<string, string>): Promise<void> {
+	async addMultipleRepositories(
+		repoNames: string[],
+		profileIds?: Map<string, string>,
+		provider?: ProviderId,
+		gitlabProjectIds?: Map<string, number>,
+	): Promise<void> {
+		const pid = provider || "github";
 		const newRepos: string[] = [];
 		const existingRepos: string[] = [];
 		for (const repoName of repoNames) {
 			if (
 				this.plugin.settings.repositories.some(
-					(r) => r.repository === repoName,
+					(r) => r.repository === repoName && r.provider === pid,
 				)
 			) {
 				existingRepos.push(repoName);
@@ -47,11 +90,16 @@ export class RepositoryListManager {
 		}
 
 		for (const repoName of newRepos) {
-			const newRepo = {
+			const newRepo: RepositoryTracking = {
 				...DEFAULT_REPOSITORY_TRACKING,
 				repository: repoName,
 				profileId: profileIds?.get(repoName) || "default",
+				provider: pid,
 			};
+			const glId = gitlabProjectIds?.get(repoName);
+			if (glId !== undefined) {
+				newRepo.gitlabProjectId = glId;
+			}
 			this.plugin.settings.repositories.push(newRepo);
 		}
 
@@ -73,47 +121,59 @@ export class RepositoryListManager {
 	renderRepositoriesList(
 		container: HTMLElement,
 		onRefreshNeeded: () => void,
-		renderIssueSettings: (container: HTMLElement, repo: RepositoryTracking) => void,
-		renderPullRequestSettings: (container: HTMLElement, repo: RepositoryTracking) => void,
+		renderIssueSettings: (
+			container: HTMLElement,
+			repo: RepositoryTracking,
+		) => void,
+		renderPullRequestSettings: (
+			container: HTMLElement,
+			repo: RepositoryTracking,
+		) => void,
 		showDeleteModal: (repo: RepositoryTracking) => Promise<void>,
-		showBulkDeleteModal: (repos: RepositoryTracking[]) => Promise<void>
+		showBulkDeleteModal: (repos: RepositoryTracking[]) => Promise<void>,
 	): void {
 		const reposContainer = container.createDiv(
 			"github-issues-repos-container",
 		);
 
 		// Add bulk actions toolbar
-		const bulkActionsToolbar = reposContainer.createDiv("github-issues-bulk-actions-toolbar");
+		const bulkActionsToolbar = reposContainer.createDiv(
+			"github-issues-bulk-actions-toolbar",
+		);
 		bulkActionsToolbar.style.display = "none"; // Hidden by default
 
-		const bulkActionInfo = bulkActionsToolbar.createDiv("github-issues-bulk-action-info");
+		const bulkActionInfo = bulkActionsToolbar.createDiv(
+			"github-issues-bulk-action-info",
+		);
 		const selectedCountSpan = bulkActionInfo.createEl("span", {
 			cls: "github-issues-selected-count",
-			text: "0 selected"
+			text: "0 selected",
 		});
 
-		const bulkActionButtons = bulkActionsToolbar.createDiv("github-issues-bulk-action-buttons");
+		const bulkActionButtons = bulkActionsToolbar.createDiv(
+			"github-issues-bulk-action-buttons",
+		);
 
 		const selectAllButton = bulkActionButtons.createEl("button", {
 			text: "Select all",
-			cls: "github-issues-select-all-button"
+			cls: "github-issues-select-all-button",
 		});
 
 		const deselectAllButton = bulkActionButtons.createEl("button", {
 			text: "Deselect all",
-			cls: "github-issues-select-none-button"
+			cls: "github-issues-select-none-button",
 		});
 
 		const removeSelectedButton = bulkActionButtons.createEl("button", {
-			cls: "github-issues-remove-selected-button mod-warning"
+			cls: "github-issues-remove-selected-button mod-warning",
 		});
 		const removeIcon = removeSelectedButton.createEl("span", {
-			cls: "github-issues-button-icon"
+			cls: "github-issues-button-icon",
 		});
 		setIcon(removeIcon, "trash-2");
 		removeSelectedButton.createEl("span", {
 			cls: "github-issues-button-text",
-			text: "Remove selected"
+			text: "Remove selected",
 		});
 
 		// Update UI based on selection
@@ -126,29 +186,37 @@ export class RepositoryListManager {
 
 		// Select/Deselect all handlers
 		selectAllButton.onclick = () => {
-			this.plugin.settings.repositories.forEach(repo => {
+			this.plugin.settings.repositories.forEach((repo) => {
 				this.selectedRepositories.add(repo.repository);
 			});
 			// Update all checkboxes
-			container.querySelectorAll<HTMLInputElement>('.github-issues-repo-checkbox').forEach(checkbox => {
-				checkbox.checked = true;
-			});
+			container
+				.querySelectorAll<HTMLInputElement>(
+					".github-issues-repo-checkbox",
+				)
+				.forEach((checkbox) => {
+					checkbox.checked = true;
+				});
 			updateBulkActionsUI();
 		};
 
 		deselectAllButton.onclick = () => {
 			this.selectedRepositories.clear();
 			// Update all checkboxes
-			container.querySelectorAll<HTMLInputElement>('.github-issues-repo-checkbox').forEach(checkbox => {
-				checkbox.checked = false;
-			});
+			container
+				.querySelectorAll<HTMLInputElement>(
+					".github-issues-repo-checkbox",
+				)
+				.forEach((checkbox) => {
+					checkbox.checked = false;
+				});
 			updateBulkActionsUI();
 		};
 
 		// Remove selected handler
 		removeSelectedButton.onclick = async () => {
 			const reposToDelete = this.plugin.settings.repositories.filter(
-				repo => this.selectedRepositories.has(repo.repository)
+				(repo) => this.selectedRepositories.has(repo.repository),
 			);
 			if (reposToDelete.length > 0) {
 				await showBulkDeleteModal(reposToDelete);
@@ -246,12 +314,18 @@ export class RepositoryListManager {
 			// Make owner header collapsible
 			ownerHeader.addEventListener("click", (e) => {
 				e.stopPropagation();
-				const isExpanded = ownerContainer.classList.contains("github-issues-owner-expanded");
+				const isExpanded = ownerContainer.classList.contains(
+					"github-issues-owner-expanded",
+				);
 				if (isExpanded) {
-					ownerContainer.classList.remove("github-issues-owner-expanded");
+					ownerContainer.classList.remove(
+						"github-issues-owner-expanded",
+					);
 					setIcon(chevronIcon, "chevron-right");
 				} else {
-					ownerContainer.classList.add("github-issues-owner-expanded");
+					ownerContainer.classList.add(
+						"github-issues-owner-expanded",
+					);
 					setIcon(chevronIcon, "chevron-down");
 				}
 			});
@@ -285,9 +359,11 @@ export class RepositoryListManager {
 				// Add checkbox for bulk selection
 				const checkbox = repoInfoContainer.createEl("input", {
 					type: "checkbox",
-					cls: "github-issues-repo-checkbox"
+					cls: "github-issues-repo-checkbox",
 				});
-				checkbox.checked = this.selectedRepositories.has(repo.repository);
+				checkbox.checked = this.selectedRepositories.has(
+					repo.repository,
+				);
 				checkbox.onclick = (e) => {
 					e.stopPropagation();
 					if (checkbox.checked) {
@@ -301,7 +377,13 @@ export class RepositoryListManager {
 				const repoIcon = repoInfoContainer.createDiv(
 					"github-issues-repo-icon",
 				);
-				setIcon(repoIcon, "github");
+				const providerConfig = this.plugin.settings.providers.find(
+					(p) => p.id === repo.provider,
+				);
+				setIcon(
+					repoIcon,
+					providerConfig?.type === "gitlab" ? "gitlab" : "github",
+				);
 
 				const repoText = repoInfoContainer.createEl("span");
 				repoText.setText(repoName);
@@ -361,11 +443,40 @@ export class RepositoryListManager {
 				});
 				description.addClass("github-issues-repo-description");
 
+				// Provider selector dropdown
+				const enabledProviders = this.plugin.settings.providers.filter(
+					(p) => p.enabled,
+				);
+				new Setting(detailsContainer)
+					.setName("Provider")
+					.setDesc("Which provider hosts this repository")
+					.addDropdown((dropdown: any) => {
+						for (const p of enabledProviders) {
+							dropdown.addOption(p.id, this.getProviderLabel(p));
+						}
+						dropdown.setValue(repo.provider || "github");
+						dropdown.onChange(async (value: string) => {
+							repo.provider = value;
+							await this.plugin.saveSettings();
+							const pc = this.plugin.settings.providers.find(
+								(p) => p.id === value,
+							);
+							setIcon(
+								repoIcon,
+								pc?.type === "gitlab" ? "gitlab" : "github",
+							);
+						});
+					});
+
 				// Profile selector dropdown
-				const repoProfiles = getRepositoryProfiles(this.plugin.settings);
+				const repoProfiles = getRepositoryProfiles(
+					this.plugin.settings,
+				);
 				new Setting(detailsContainer)
 					.setName("Settings profile")
-					.setDesc("Select which profile provides default settings for this repository")
+					.setDesc(
+						"Select which profile provides default settings for this repository",
+					)
 					.addDropdown((dropdown: any) => {
 						for (const profile of repoProfiles) {
 							dropdown.addOption(profile.id, profile.name);
@@ -379,12 +490,16 @@ export class RepositoryListManager {
 
 				new Setting(detailsContainer)
 					.setName("Escape hash tags")
-					.setDesc("Escape # characters for this repository (overrides global setting if 'Ignore global settings' is enabled)")
+					.setDesc(
+						"Escape # characters for this repository (overrides global setting if 'Ignore global settings' is enabled)",
+					)
 					.addToggle((toggle: any) =>
-						toggle.setValue(repo.escapeHashTags).onChange(async (value: boolean) => {
-							repo.escapeHashTags = value;
-							await this.plugin.saveSettings();
-						}),
+						toggle
+							.setValue(repo.escapeHashTags)
+							.onChange(async (value: boolean) => {
+								repo.escapeHashTags = value;
+								await this.plugin.saveSettings();
+							}),
 					);
 
 				const issuesContainer = detailsContainer.createDiv(

@@ -1,15 +1,21 @@
 import { Notice, Plugin } from "obsidian";
 import {
-	GitHubTrackerSettings,
+	IssueTrackerSettings,
 	DEFAULT_SETTINGS,
 	DEFAULT_REPOSITORY_TRACKING,
 	SettingsProfile,
 	DEFAULT_REPOSITORY_PROFILE,
 	DEFAULT_PROJECT_PROFILE,
+	ProviderConfig,
+	ProviderId,
+	ProviderType,
 } from "./types";
-import { GitHubClient } from "./github-client";
+import { IssueProvider, ProviderExtraParams } from "./providers/provider";
+import { ProviderRegistry } from "./providers/provider-registry";
+import { GitHubProvider } from "./providers/github/github-provider";
+import { GitLabProvider } from "./providers/gitlab/gitlab-provider";
 import { FileManager } from "./file-manager";
-import { GitHubTrackerSettingTab } from "./settings-tab";
+import { IssueTrackerSettingTab } from "./settings-tab";
 import { NoticeManager } from "./notice-manager";
 import { GitHubKanbanView, KANBAN_VIEW_TYPE } from "./kanban-view";
 import {
@@ -17,41 +23,45 @@ import {
 	stripProfileFieldsFromRepo,
 } from "./util/settingsUtils";
 
-export default class GitHubTrackerPlugin extends Plugin {
-	settings: GitHubTrackerSettings = DEFAULT_SETTINGS;
-	public gitHubClient: GitHubClient | null = null;
-	private fileManager: FileManager | null = null;
+export default class IssueTrackerPlugin extends Plugin {
+	settings: IssueTrackerSettings = DEFAULT_SETTINGS;
+	public providerRegistry: ProviderRegistry = new ProviderRegistry();
+	/** @deprecated Use providerRegistry.get("github") instead */
+	public gitHubClient: IssueProvider | null = null;
+	private fileManagers: Map<string, FileManager> = new Map();
 	private noticeManager!: NoticeManager;
 	private isSyncing: boolean = false;
 	currentUser: string = "";
 	private backgroundSyncIntervalId: number | null = null;
 
 	/**
-	 * Get the GitHub token, either from SecretStorage or from settings
-	 * @returns The GitHub token or empty string if not available
+	 * Get the token for a specific provider, either from SecretStorage or from settings
 	 */
-	getGitHubToken(): string {
-		if (this.settings.useSecretStorage && this.settings.secretTokenName) {
+	getProviderToken(providerId: ProviderId): string {
+		const config = this.settings.providers.find((p) => p.id === providerId);
+		if (!config) return "";
+		if (config.useSecretStorage && config.secretTokenName) {
 			try {
 				const secret = this.app.secretStorage?.getSecret(
-					this.settings.secretTokenName,
+					config.secretTokenName,
 				);
-				if (secret) {
-					return secret;
-				}
-				// If secret not found but useSecretStorage is enabled, warn user
+				if (secret) return secret;
 				console.warn(
-					`Secret "${this.settings.secretTokenName}" not found in SecretStorage`,
+					`Secret "${config.secretTokenName}" not found in SecretStorage for provider ${providerId}`,
 				);
 			} catch (error) {
 				console.error(
-					"Error retrieving secret from SecretStorage:",
+					`Error retrieving secret for provider ${providerId}:`,
 					error,
 				);
 			}
 		}
-		// Fallback to legacy token in settings
-		return this.settings.githubToken || "";
+		return config.token || "";
+	}
+
+	/** @deprecated Use getProviderToken("github") instead */
+	getGitHubToken(): string {
+		return this.getProviderToken("github");
 	}
 
 	/**
@@ -63,20 +73,16 @@ export default class GitHubTrackerPlugin extends Plugin {
 
 	/**
 	 * Validate that the configured secret exists and has a value
-	 * @returns true if secret is valid or not using SecretStorage, false if secret is missing/invalid
 	 */
-	validateSecretStorage(): boolean {
-		if (!this.settings.useSecretStorage) {
-			return true;
-		}
-
-		if (!this.settings.secretTokenName) {
-			return false;
-		}
-
+	validateSecretStorage(providerId?: ProviderId): boolean {
+		const config = this.settings.providers.find(
+			(p) => p.id === (providerId ?? "github"),
+		);
+		if (!config || !config.useSecretStorage) return true;
+		if (!config.secretTokenName) return false;
 		try {
 			const secret = this.app.secretStorage?.getSecret(
-				this.settings.secretTokenName,
+				config.secretTokenName,
 			);
 			return !!secret;
 		} catch (error) {
@@ -87,49 +93,112 @@ export default class GitHubTrackerPlugin extends Plugin {
 
 	/**
 	 * Migrate token from settings to SecretStorage
-	 * @param secretName The name to use for the secret
-	 * @returns true if migration was successful
 	 */
-	async migrateTokenToSecretStorage(secretName: string): Promise<boolean> {
+	async migrateTokenToSecretStorage(
+		secretName: string,
+		providerId?: ProviderId,
+	): Promise<boolean> {
+		const pid = providerId ?? "github";
 		if (!this.isSecretStorageAvailable()) {
 			new Notice(
 				"SecretStorage is not available. Please update Obsidian to version 1.11 or later.",
 			);
 			return false;
 		}
-
 		if (!this.app.secretStorage) {
 			new Notice("SecretStorage is not initialized.");
 			return false;
 		}
-
-		if (!this.settings.githubToken) {
+		const config = this.settings.providers.find((p) => p.id === pid);
+		if (!config || !config.token) {
 			new Notice("No token to migrate. Please enter a token first.");
 			return false;
 		}
-
 		try {
-			// Store the token in SecretStorage
-			this.app.secretStorage.setSecret(
-				secretName,
-				this.settings.githubToken,
-			);
-
-			// Update settings
-			this.settings.useSecretStorage = true;
-			this.settings.secretTokenName = secretName;
-
-			// Clear the plaintext token from settings
-			this.settings.githubToken = "";
-
+			this.app.secretStorage.setSecret(secretName, config.token);
+			config.useSecretStorage = true;
+			config.secretTokenName = secretName;
+			config.token = "";
 			await this.saveSettings();
-
 			new Notice("Token successfully migrated to SecretStorage!");
 			return true;
 		} catch (error) {
 			console.error("Failed to migrate token to SecretStorage:", error);
 			new Notice("Failed to migrate token. See console for details.");
 			return false;
+		}
+	}
+
+	/**
+	 * Get the provider for a specific repository
+	 */
+	private getProviderForRepo(repo: {
+		provider?: ProviderId;
+	}): IssueProvider | undefined {
+		return this.providerRegistry.get(repo.provider ?? "github");
+	}
+
+	/**
+	 * Get a FileManager bound to a specific provider
+	 */
+	private getFileManagerForProvider(provider: IssueProvider): FileManager {
+		let fm = this.fileManagers.get(provider.id);
+		if (!fm) {
+			fm = new FileManager(
+				this.app,
+				this.settings,
+				this.noticeManager,
+				provider,
+			);
+			this.fileManagers.set(provider.id, fm);
+		}
+		return fm;
+	}
+
+	/**
+	 * Build ProviderExtraParams for the given repository.
+	 */
+	private getExtraParams(repo: any): ProviderExtraParams | undefined {
+		const provider = this.getProviderForRepo(repo);
+		if (provider?.type === "gitlab" && repo.gitlabProjectId) {
+			return { gitlabProjectId: repo.gitlabProjectId };
+		}
+		return undefined;
+	}
+
+	/**
+	 * For GitLab repos without a cached numeric project ID, resolve it once
+	 * and persist it so subsequent API calls avoid %2F encoding issues.
+	 */
+	private async resolveGitLabProjectIds(): Promise<void> {
+		// Resolve for all GitLab provider instances
+		const glProviders = this.providerRegistry.getByType("gitlab");
+
+		let changed = false;
+		for (const glProvider of glProviders) {
+			if (!glProvider.isReady()) continue;
+
+			for (const repo of this.settings.repositories) {
+				if (repo.provider !== glProvider.id || repo.gitlabProjectId)
+					continue;
+
+				const [owner, repoName] = repo.repository.split("/");
+				if (!owner || !repoName) continue;
+
+				const id = await (
+					glProvider as GitLabProvider
+				).resolveProjectId(owner, repoName);
+				if (id !== undefined) {
+					repo.gitlabProjectId = id;
+					changed = true;
+					this.noticeManager.debug(
+						`Resolved GitLab project ID ${id} for ${repo.repository}`,
+					);
+				}
+			}
+		}
+		if (changed) {
+			await this.saveSettings();
 		}
 	}
 
@@ -142,10 +211,14 @@ export default class GitHubTrackerPlugin extends Plugin {
 		this.isSyncing = true;
 		try {
 			this.noticeManager.info("Syncing issues and pull requests");
+			await this.resolveGitLabProjectIds();
 			await this.fetchIssues();
 			await this.fetchPullRequests();
 			await this.syncProjects();
-			await this.fileManager?.cleanupEmptyFolders();
+			// Cleanup empty folders for each provider's file manager
+			for (const fm of this.fileManagers.values()) {
+				await fm.cleanupEmptyFolders();
+			}
 
 			this.noticeManager.success("Synced issues and pull requests");
 		} catch (error: unknown) {
@@ -159,16 +232,22 @@ export default class GitHubTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * Sync items from tracked GitHub Projects
+	 * Sync items from tracked GitHub Projects (GitHub-only feature)
 	 */
 	private async syncProjects() {
 		if (!this.settings.enableProjectTracking) {
 			return;
 		}
 
-		if (!this.gitHubClient || !this.fileManager) {
+		const ghProvider =
+			this.providerRegistry.get("github") ??
+			this.providerRegistry.getByType("github")[0];
+		if (!ghProvider?.isReady() || !ghProvider.supportsProjects()) {
 			return;
 		}
+		this.noticeManager.setProviderPrefix(ghProvider.displayName);
+
+		const ghFileManager = this.getFileManagerForProvider(ghProvider);
 
 		const hasAnyFolderConfigured = (p: any) =>
 			p.issueFolder ||
@@ -189,9 +268,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 			try {
 				this.noticeManager.debug(`Syncing project: ${project.title}`);
 
-				const items = await this.gitHubClient.fetchProjectItems(
-					project.id,
-				);
+				const items = await ghProvider.fetchProjectItems!(project.id);
 
 				if (items.length === 0) {
 					this.noticeManager.debug(
@@ -200,7 +277,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 					continue;
 				}
 
-				await this.fileManager.createProjectItemFiles(project, items);
+				await ghFileManager.createProjectItemFiles(project, items);
 
 				this.noticeManager.debug(
 					`Processed ${items.length} items for project ${project.title}`,
@@ -220,13 +297,6 @@ export default class GitHubTrackerPlugin extends Plugin {
 			return;
 		}
 
-		if (!this.gitHubClient || !this.fileManager) {
-			this.noticeManager.error(
-				"GitHub client or file manager not initialized",
-			);
-			return;
-		}
-
 		const repo = this.settings.repositories.find(
 			(r) => r.repository === repositoryName,
 		);
@@ -237,6 +307,18 @@ export default class GitHubTrackerPlugin extends Plugin {
 			);
 			return;
 		}
+
+		const provider = this.getProviderForRepo(repo);
+		if (!provider?.isReady()) {
+			this.noticeManager.error(
+				`Provider ${repo.provider ?? "github"} is not initialized or not ready`,
+			);
+			return;
+		}
+		this.noticeManager.setProviderPrefix(provider.displayName);
+
+		const fileManager = this.getFileManagerForProvider(provider);
+		const extra = this.getExtraParams(repo);
 
 		this.isSyncing = true;
 		try {
@@ -256,23 +338,23 @@ export default class GitHubTrackerPlugin extends Plugin {
 					`Fetching issues for ${effectiveRepo.repository}`,
 				);
 				const allIssuesIncludingRecentlyClosed =
-					await this.gitHubClient.fetchRepositoryIssues(
+					await provider.fetchRepositoryIssues(
 						owner,
 						repoName,
 						true,
 						this.settings.cleanupClosedIssuesDays,
+						extra,
 					);
 
 				const openIssues = allIssuesIncludingRecentlyClosed.filter(
 					(issue: { state: string }) => issue.state === "open",
 				);
 
-				// Decide which issues to filter based on settings
 				const issuesToFilter = effectiveRepo.includeClosedIssues
 					? allIssuesIncludingRecentlyClosed
 					: openIssues;
 
-				const filteredIssues = this.fileManager.filterIssues(
+				const filteredIssues = fileManager.filterIssues(
 					effectiveRepo,
 					issuesToFilter,
 				);
@@ -285,7 +367,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 					filteredIssues.map((issue: any) => issue.number.toString()),
 				);
 
-				await this.fileManager.createIssueFiles(
+				await fileManager.createIssueFiles(
 					effectiveRepo,
 					filteredIssues,
 					allIssuesIncludingRecentlyClosed,
@@ -300,11 +382,12 @@ export default class GitHubTrackerPlugin extends Plugin {
 				);
 
 				const allPullRequestsIncludingRecentlyClosed =
-					await this.gitHubClient.fetchRepositoryPullRequests(
+					await provider.fetchRepositoryPullRequests(
 						owner,
 						repoName,
 						true,
 						this.settings.cleanupClosedIssuesDays,
+						extra,
 					);
 
 				const openPullRequests =
@@ -312,13 +395,12 @@ export default class GitHubTrackerPlugin extends Plugin {
 						(pr: { state: string }) => pr.state === "open",
 					);
 
-				// Decide which pull requests to filter based on settings
 				const pullRequestsToFilter =
 					effectiveRepo.includeClosedPullRequests
 						? allPullRequestsIncludingRecentlyClosed
 						: openPullRequests;
 
-				const filteredPRs = this.fileManager.filterPullRequests(
+				const filteredPRs = fileManager.filterPullRequests(
 					effectiveRepo,
 					pullRequestsToFilter,
 				);
@@ -331,7 +413,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 					filteredPRs.map((pr: any) => pr.number.toString()),
 				);
 
-				await this.fileManager.createPullRequestFiles(
+				await fileManager.createPullRequestFiles(
 					effectiveRepo,
 					filteredPRs,
 					allPullRequestsIncludingRecentlyClosed,
@@ -339,7 +421,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 				);
 			}
 
-			await this.fileManager?.cleanupEmptyFolders();
+			await fileManager.cleanupEmptyFolders();
 			this.noticeManager.success(`Successfully synced ${repositoryName}`);
 		} catch (error: unknown) {
 			this.noticeManager.error(
@@ -352,7 +434,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * Sync a single project by ID
+	 * Sync a single project by ID (GitHub-only)
 	 */
 	async syncSingleProject(projectId: string) {
 		if (this.isSyncing) {
@@ -360,9 +442,12 @@ export default class GitHubTrackerPlugin extends Plugin {
 			return;
 		}
 
-		if (!this.gitHubClient || !this.fileManager) {
+		const ghProvider =
+			this.providerRegistry.get("github") ??
+			this.providerRegistry.getByType("github")[0];
+		if (!ghProvider?.isReady() || !ghProvider.supportsProjects()) {
 			this.noticeManager.error(
-				"GitHub client or file manager not initialized",
+				"GitHub provider not initialized or doesn't support projects",
 			);
 			return;
 		}
@@ -395,14 +480,16 @@ export default class GitHubTrackerPlugin extends Plugin {
 		try {
 			this.noticeManager.info(`Syncing project: ${project.title}`);
 
-			const items = await this.gitHubClient.fetchProjectItems(project.id);
+			const items = await ghProvider.fetchProjectItems!(project.id);
 
 			if (items.length === 0) {
 				this.noticeManager.info(
 					`No items found in project ${project.title}`,
 				);
 			} else {
-				await this.fileManager.createProjectItemFiles(project, items);
+				const ghFileManager =
+					this.getFileManagerForProvider(ghProvider);
+				await ghFileManager.createProjectItemFiles(project, items);
 				this.noticeManager.success(
 					`Successfully synced ${items.length} items from ${project.title}`,
 				);
@@ -421,23 +508,20 @@ export default class GitHubTrackerPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.noticeManager = new NoticeManager(this.settings);
-		this.gitHubClient = new GitHubClient(
-			this.settings,
-			this.noticeManager,
-			() => this.getGitHubToken(),
-		);
-		if (this.gitHubClient.isReady()) {
-			this.currentUser = await this.gitHubClient.fetchAuthenticatedUser();
+		this.initializeProviders();
+
+		// Check if any provider is ready and fetch current user
+		for (const provider of this.providerRegistry.getEnabled()) {
+			if (provider.type === "github") {
+				this.currentUser = await provider.fetchAuthenticatedUser();
+				break;
+			}
 		}
 
-		this.fileManager = new FileManager(
-			this.app,
-			this.settings,
-			this.noticeManager,
-			this.gitHubClient,
-		);
-
-		if (this.settings.syncOnStartup && this.gitHubClient?.isReady()) {
+		if (
+			this.settings.syncOnStartup &&
+			this.providerRegistry.getEnabled().length > 0
+		) {
 			new Promise((resolve) => setTimeout(resolve, 750)).then(
 				async () => {
 					await this.sync();
@@ -446,32 +530,38 @@ export default class GitHubTrackerPlugin extends Plugin {
 		}
 		const ribbonIconEl = this.addRibbonIcon(
 			"refresh-cw",
-			"GitHub",
+			"Issue Tracker",
 			async (evt: MouseEvent) => {
-				if (!this.gitHubClient?.isReady()) {
+				if (this.providerRegistry.getEnabled().length === 0) {
 					new Notice(
-						"Please set your GitHub token in settings first",
+						"Please set your provider token in settings first",
 					);
 					return;
 				}
 				await this.sync();
 			},
 		);
-		ribbonIconEl.addClass("github-issues-ribbon-class");
+		ribbonIconEl.addClass("issue-tracker-ribbon-class");
 
 		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText("GitHub");
+		statusBarItemEl.setText("Issue Tracker");
 		this.addCommand({
 			id: "sync-issues-and-pull-requests",
-			name: "Sync GitHub issues & pull requests",
+			name: "Sync all issues & pull requests",
 			callback: () => this.sync(),
 		});
 
-		// Register Kanban View
+		// Register Kanban View (GitHub-only)
 		this.registerView(
 			KANBAN_VIEW_TYPE,
 			(leaf) =>
-				new GitHubKanbanView(leaf, this.settings, this.gitHubClient),
+				new GitHubKanbanView(
+					leaf,
+					this.settings,
+					this.providerRegistry.get("github") ??
+						this.providerRegistry.getByType("github")[0] ??
+						null,
+				),
 		);
 
 		this.addCommand({
@@ -480,8 +570,44 @@ export default class GitHubTrackerPlugin extends Plugin {
 			callback: () => this.openKanbanView(),
 		});
 
-		this.addSettingTab(new GitHubTrackerSettingTab(this.app, this));
+		this.addSettingTab(new IssueTrackerSettingTab(this.app, this));
 		this.startBackgroundSync();
+	}
+
+	/**
+	 * Initialize or re-initialize all configured providers.
+	 */
+	private initializeProviders(): void {
+		this.providerRegistry.dispose();
+		this.fileManagers.clear();
+
+		for (const config of this.settings.providers) {
+			if (!config.enabled) continue;
+
+			let provider: IssueProvider;
+			if (config.type === "github") {
+				provider = new GitHubProvider(
+					this.settings,
+					this.noticeManager,
+					() => this.getProviderToken(config.id),
+					config,
+				);
+			} else if (config.type === "gitlab") {
+				provider = new GitLabProvider(
+					this.settings,
+					this.noticeManager,
+					() => this.getProviderToken(config.id),
+					config,
+				);
+			} else {
+				continue;
+			}
+
+			this.providerRegistry.register(provider);
+		}
+
+		// Keep legacy alias
+		this.gitHubClient = this.providerRegistry.get("github") ?? null;
 	}
 
 	private async openKanbanView(): Promise<void> {
@@ -501,7 +627,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 
 	onunload() {
 		this.stopBackgroundSync();
-		this.gitHubClient?.dispose();
+		this.providerRegistry.dispose();
 	}
 
 	stopBackgroundSync(): void {
@@ -521,12 +647,12 @@ export default class GitHubTrackerPlugin extends Plugin {
 			const intervalMillis =
 				this.settings.backgroundSyncInterval * 60 * 1000;
 			this.backgroundSyncIntervalId = window.setInterval(async () => {
-				if (this.gitHubClient?.isReady()) {
+				if (this.providerRegistry.getEnabled().length > 0) {
 					this.noticeManager.debug("Triggering background sync.");
 					await this.sync();
 				} else {
 					this.noticeManager.debug(
-						"Skipping background sync: GitHub client not ready or token not set.",
+						"Skipping background sync: no providers ready.",
 					);
 				}
 			}, intervalMillis);
@@ -539,6 +665,66 @@ export default class GitHubTrackerPlugin extends Plugin {
 	async loadSettings() {
 		const loadedData = await this.loadData();
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
+
+		// === Provider Migration: migrate old single-token format to providers array ===
+		const legacy = loadedData as any;
+		if (!legacy?.providers || legacy.providers.length === 0) {
+			this.settings.providers = [
+				{
+					id: "github",
+					type: "github" as ProviderType,
+					enabled: true,
+					token: legacy?.githubToken ?? "",
+					useSecretStorage: legacy?.useSecretStorage ?? false,
+					secretTokenName: legacy?.secretTokenName ?? "",
+				},
+				{
+					id: "gitlab",
+					type: "gitlab" as ProviderType,
+					enabled: false,
+					token: "",
+					useSecretStorage: false,
+					secretTokenName: "",
+					baseUrl: "",
+				},
+			];
+			// Clear legacy fields
+			delete (this.settings as any).githubToken;
+			delete (this.settings as any).useSecretStorage;
+			delete (this.settings as any).secretTokenName;
+			await this.saveData(this.settings);
+		}
+
+		// === Provider type migration: add 'type' field to existing ProviderConfigs ===
+		let needsProviderTypeMigration = false;
+		for (const pc of this.settings.providers) {
+			if (!pc.type) {
+				// Derive type from id for legacy configs
+				if (pc.id === "github") {
+					pc.type = "github";
+				} else if (pc.id === "gitlab" || pc.id.startsWith("gitlab")) {
+					pc.type = "gitlab";
+				} else {
+					pc.type = "github"; // safe fallback
+				}
+				needsProviderTypeMigration = true;
+			}
+		}
+		if (needsProviderTypeMigration) {
+			await this.saveData(this.settings);
+		}
+
+		// Ensure each repo has a provider field
+		let needsProviderMigration = false;
+		for (const repo of this.settings.repositories) {
+			if (!repo.provider) {
+				repo.provider = "github";
+				needsProviderMigration = true;
+			}
+		}
+		if (needsProviderMigration) {
+			await this.saveData(this.settings);
+		}
 
 		// Ensure globalDefaults exists (migration for existing users)
 		if (!this.settings.globalDefaults) {
@@ -946,10 +1132,15 @@ export default class GitHubTrackerPlugin extends Plugin {
 			Object.assign(repo, effective);
 		}
 
-		const token = this.getGitHubToken();
+		const token = this.getProviderToken("github");
 		if (token) {
-			this.gitHubClient?.initializeClient();
+			(
+				this.providerRegistry.get("github") ??
+				this.providerRegistry.getByType("github")[0]
+			)?.initializeClient();
 		}
+		// Re-initialize providers if config changed
+		this.initializeProviders();
 		if (this.noticeManager) {
 			this.noticeManager = new NoticeManager(this.settings);
 		}
@@ -957,31 +1148,32 @@ export default class GitHubTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * Fetch available repositories from GitHub
+	 * Fetch available repositories from a specific provider
 	 */
-	async fetchAvailableRepositories() {
-		if (!this.gitHubClient) {
-			this.noticeManager.error("GitHub client not initialized");
+	async fetchAvailableRepositories(providerId?: ProviderId) {
+		const pid = providerId ?? "github";
+		const provider = this.providerRegistry.get(pid);
+		if (!provider) {
+			this.noticeManager.error(`${pid} provider not initialized`);
 			return [];
 		}
 
-		const token = this.getGitHubToken();
+		const token = this.getProviderToken(pid);
 		if (!token) {
 			this.noticeManager.error(
-				"No GitHub token provided. Please add your GitHub token in the settings.",
+				`No ${pid} token provided. Please add your token in the settings.`,
 			);
 			return [];
 		}
 
 		try {
-			this.gitHubClient.initializeClient();
+			provider.initializeClient();
 
-			if (!this.currentUser) {
-				this.currentUser =
-					await this.gitHubClient.fetchAuthenticatedUser();
+			if (provider.type === "github" && !this.currentUser) {
+				this.currentUser = await provider.fetchAuthenticatedUser();
 			}
 
-			return await this.gitHubClient.fetchAvailableRepositories();
+			return await provider.fetchAvailableRepositories();
 		} catch (error: unknown) {
 			this.noticeManager.error(
 				"Error fetching available repositories",
@@ -992,20 +1184,20 @@ export default class GitHubTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * Fetch and process issues from GitHub
+	 * Fetch and process issues for all repositories
 	 */
 	private async fetchIssues() {
-		if (!this.gitHubClient || !this.fileManager) {
-			this.noticeManager.error(
-				"GitHub client or file manager not initialized",
-			);
-			return;
-		}
-
 		try {
 			for (const repo of this.settings.repositories) {
 				const [owner, repoName] = repo.repository.split("/");
 				if (!owner || !repoName) continue;
+
+				const provider = this.getProviderForRepo(repo);
+				if (!provider?.isReady()) continue;
+				this.noticeManager.setProviderPrefix(provider.displayName);
+
+				const fileManager = this.getFileManagerForProvider(provider);
+				const extra = this.getExtraParams(repo);
 
 				try {
 					const effectiveRepo = getEffectiveRepoSettings(
@@ -1017,23 +1209,23 @@ export default class GitHubTrackerPlugin extends Plugin {
 						`Fetching issues for ${effectiveRepo.repository}`,
 					);
 					const allIssuesIncludingRecentlyClosed =
-						await this.gitHubClient.fetchRepositoryIssues(
+						await provider.fetchRepositoryIssues(
 							owner,
 							repoName,
 							true,
 							this.settings.cleanupClosedIssuesDays,
+							extra,
 						);
 
 					const openIssues = allIssuesIncludingRecentlyClosed.filter(
 						(issue: { state: string }) => issue.state === "open",
 					);
 
-					// Decide which issues to filter based on settings
 					const issuesToFilter = effectiveRepo.includeClosedIssues
 						? allIssuesIncludingRecentlyClosed
 						: openIssues;
 
-					const filteredIssues = this.fileManager.filterIssues(
+					const filteredIssues = fileManager.filterIssues(
 						effectiveRepo,
 						issuesToFilter,
 					);
@@ -1047,7 +1239,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 						),
 					);
 
-					await this.fileManager.createIssueFiles(
+					await fileManager.createIssueFiles(
 						effectiveRepo,
 						filteredIssues,
 						allIssuesIncludingRecentlyClosed,
@@ -1062,29 +1254,28 @@ export default class GitHubTrackerPlugin extends Plugin {
 						`Error processing issues for repository ${repo.repository}`,
 						repoError,
 					);
-					// Continue with next repository
 				}
 			}
 		} catch (error: unknown) {
-			this.noticeManager.error("Error fetching GitHub issues", error);
+			this.noticeManager.error("Error fetching issues", error);
 		}
 	}
 
 	/**
-	 * Fetch and process pull requests from GitHub
+	 * Fetch and process pull requests for all repositories
 	 */
 	private async fetchPullRequests() {
-		if (!this.gitHubClient || !this.fileManager) {
-			this.noticeManager.error(
-				"GitHub client or file manager not initialized",
-			);
-			return;
-		}
-
 		try {
 			for (const repo of this.settings.repositories) {
 				const [owner, repoName] = repo.repository.split("/");
 				if (!owner || !repoName) continue;
+
+				const provider = this.getProviderForRepo(repo);
+				if (!provider?.isReady()) continue;
+				this.noticeManager.setProviderPrefix(provider.displayName);
+
+				const fileManager = this.getFileManagerForProvider(provider);
+				const extra = this.getExtraParams(repo);
 
 				try {
 					const effectiveRepo = getEffectiveRepoSettings(
@@ -1097,11 +1288,12 @@ export default class GitHubTrackerPlugin extends Plugin {
 					);
 
 					const allPullRequestsIncludingRecentlyClosed =
-						await this.gitHubClient.fetchRepositoryPullRequests(
+						await provider.fetchRepositoryPullRequests(
 							owner,
 							repoName,
 							true,
 							this.settings.cleanupClosedIssuesDays,
+							extra,
 						);
 
 					const openPullRequests =
@@ -1109,13 +1301,12 @@ export default class GitHubTrackerPlugin extends Plugin {
 							(pr: { state: string }) => pr.state === "open",
 						);
 
-					// Decide which pull requests to filter based on settings
 					const pullRequestsToFilter =
 						effectiveRepo.includeClosedPullRequests
 							? allPullRequestsIncludingRecentlyClosed
 							: openPullRequests;
 
-					const filteredPRs = this.fileManager.filterPullRequests(
+					const filteredPRs = fileManager.filterPullRequests(
 						effectiveRepo,
 						pullRequestsToFilter,
 					);
@@ -1130,7 +1321,7 @@ export default class GitHubTrackerPlugin extends Plugin {
 						),
 					);
 
-					await this.fileManager.createPullRequestFiles(
+					await fileManager.createPullRequestFiles(
 						effectiveRepo,
 						filteredPRs,
 						allPullRequestsIncludingRecentlyClosed,
@@ -1145,14 +1336,10 @@ export default class GitHubTrackerPlugin extends Plugin {
 						`Error processing pull requests for repository ${repo.repository}`,
 						repoError,
 					);
-					// Continue with next repository
 				}
 			}
 		} catch (error: unknown) {
-			this.noticeManager.error(
-				"Error fetching GitHub pull requests",
-				error,
-			);
+			this.noticeManager.error("Error fetching pull requests", error);
 		}
 	}
 

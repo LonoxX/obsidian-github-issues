@@ -1,7 +1,7 @@
 {
 	"name": "github-issues",
 	"version": "1.5.0",
-	"description": "Track GitHub issues and pull requests in Obsidian",
+	"description": "Track GitHub and GitLab issues and pull/merge requests in Obsidian",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -12,9 +12,11 @@
 	"keywords": [
 		"obsidian",
 		"github",
+		"gitlab",
 		"tracker",
 		"issues",
-		"pull-requests"
+		"pull-requests",
+		"merge-requests"
 	],
 	"author": "LonoxX",
 	"license": "MIT",

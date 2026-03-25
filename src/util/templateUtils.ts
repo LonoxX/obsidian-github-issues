@@ -217,7 +217,7 @@ function buildReplacements(
 			.map((a) => `- ${a}`)
 			.join("\n");
 		replacements["{assignees_yaml}"] =
-			`[${data.assignees.map((a) => `'${a}'`).join(", ")}]`;
+			`[${data.assignees.map((a) => `"${escapeYamlString(a)}"`).join(", ")}]`;
 	} else {
 		replacements["{assignees}"] = "";
 		replacements["{assignees_list}"] = "";
@@ -233,7 +233,7 @@ function buildReplacements(
 			.map((l) => `#${l.replace(/\s/g, "_")}`)
 			.join(" ");
 		replacements["{labels_yaml}"] =
-			`[${data.labels.map((l) => `'${l}'`).join(", ")}]`;
+			`[${data.labels.map((l) => `"${escapeYamlString(l)}"`).join(", ")}]`;
 	} else {
 		replacements["{labels}"] = "";
 		replacements["{labels_list}"] = "";
@@ -269,7 +269,7 @@ function buildReplacements(
 			.map((p) => p.projectTitle)
 			.join(", ");
 		replacements["{projects_yaml}"] =
-			`[${data.projectData.map((p) => `'${p.projectTitle}'`).join(", ")}]`;
+			`[${data.projectData.map((p) => `"${escapeYamlString(p.projectTitle)}"`).join(", ")}]`;
 
 		const customFieldsYaml = Object.entries(firstProject.customFields)
 			.map(([name, field]) => `  ${name}: "${field.value}"`)

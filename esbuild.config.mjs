@@ -11,6 +11,8 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = process.argv[2] === "production";
+const devVaultPath =
+	"/home/lonoxx/Nextcloud/Obsidian/.obsidian/plugins/github-issues/";
 
 // Function to copy files to dist folder
 function copyToDist(files) {
@@ -27,6 +29,33 @@ function copyToDist(files) {
 			console.log(`Copied ${file} to ${destPath}`);
 		} else {
 			console.warn(`Warning: ${file} not found, skipping copy`);
+		}
+	});
+}
+
+// Function to copy files from dist to dev vault
+function copyToDevVault() {
+	if (!fs.existsSync(devVaultPath)) {
+		fs.mkdirSync(devVaultPath, { recursive: true });
+	}
+
+	const distFiles = [
+		"dist/main.js",
+		"manifest.json",
+		"styles.css",
+		"versions.json",
+	];
+
+	distFiles.forEach((file) => {
+		if (fs.existsSync(file)) {
+			const fileName = path.basename(file);
+			const destPath = path.join(devVaultPath, fileName);
+			fs.copyFileSync(file, destPath);
+			console.log(`Copied ${file} to ${destPath}`);
+		} else {
+			console.warn(
+				`Warning: ${file} not found, skipping copy to dev vault`,
+			);
 		}
 	});
 }
@@ -60,11 +89,36 @@ const context = await esbuild.context({
 	treeShaking: true,
 	outfile: "dist/main.js",
 	minify: prod,
+	plugins: prod
+		? []
+		: [
+				{
+					name: "copy-to-dev-vault",
+					setup(build) {
+						build.onEnd((result) => {
+							if (result.errors.length === 0) {
+								console.log("Copying to dev vault...");
+								const mainJsPath = path.join(
+									devVaultPath,
+									"main.js",
+								);
+								if (fs.existsSync("dist/main.js")) {
+									fs.copyFileSync("dist/main.js", mainJsPath);
+									console.log(
+										`Copied dist/main.js → ${mainJsPath}`,
+									);
+								}
+							}
+						});
+					},
+				},
+			],
 });
 
 if (prod) {
 	await context.rebuild();
 	copyToDist(["versions.json", "manifest.json", "styles.css"]);
+	copyToDevVault();
 	process.exit(0);
 } else {
 	await context.watch();

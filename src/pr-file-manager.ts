@@ -113,8 +113,10 @@ export class PullRequestFileManager {
 			);
 		}
 
+		// Normalize folder path to use forward slashes for consistent vault lookups
+		const normalizedPullRequestFolderPath = pullRequestFolderPath.replace(/\\/g, "/");
 		const file = this.app.vault.getAbstractFileByPath(
-			`${pullRequestFolderPath}/${fileName}`,
+			`${normalizedPullRequestFolderPath}/${fileName}`,
 		);
 
 		const [owner, repoName] = repo.repository.split("/");
@@ -246,11 +248,30 @@ export class PullRequestFileManager {
 				}
 			}
 		} else {
-			await this.app.vault.create(
-				`${pullRequestFolderPath}/${fileName}`,
-				content,
-			);
-			this.noticeManager.debug(`Created PR file for ${pr.number}`);
+			// Normalize path to use forward slashes consistently
+			const normalizedFolderPath = pullRequestFolderPath.replace(/\\/g, "/");
+			const filePathToCreate = `${normalizedFolderPath}/${fileName}`;
+			
+			try {
+				await this.app.vault.create(filePathToCreate, content);
+				this.noticeManager.debug(`Created PR file for ${pr.number}`);
+			} catch (fileCreateError: unknown) {
+				const errorMsg = fileCreateError instanceof Error ? fileCreateError.message : String(fileCreateError);
+				
+				// Check if file exists due to stale cache
+				const fileCheck = this.app.vault.getAbstractFileByPath(filePathToCreate);
+				
+				if (fileCheck instanceof TFile) {
+					// File exists but wasn't detected before - update it
+					const existingContent = await this.app.vault.read(fileCheck);
+					await this.app.vault.modify(fileCheck, content);
+					this.noticeManager.debug(`Updated existing PR file for ${pr.number} (file existed but cache was stale)`);
+					return;
+				}
+				
+				// File creation genuinely failed - rethrow
+				throw fileCreateError;
+			}
 		}
 	}
 

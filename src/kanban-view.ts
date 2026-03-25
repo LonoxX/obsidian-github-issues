@@ -7,7 +7,7 @@ export const KANBAN_VIEW_TYPE = "github-kanban-view";
 
 export class GitHubKanbanView extends ItemView {
 	private settings: IssueTrackerSettings;
-	private refreshInterval: NodeJS.Timeout | null = null;
+	private refreshInterval: ReturnType<typeof setInterval> | null = null;
 	private projectDataCache: Map<string, any[]> = new Map();
 	private activeProjectId: string | null = null;
 	private loadedProjects: Set<string> = new Set(); // Track which projects have been loaded
@@ -139,7 +139,7 @@ export class GitHubKanbanView extends ItemView {
 				// Update tab styles
 				tabBar
 					.querySelectorAll(".github-kanban-tab")
-					.forEach((t: HTMLElement) => {
+					.forEach((t: Element) => {
 						t.removeClass("active");
 					});
 				tab.addClass("active");

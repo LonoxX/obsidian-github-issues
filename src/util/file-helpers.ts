@@ -1,4 +1,4 @@
-import { App, TFile } from "obsidian";
+import { App, TFile, TFolder } from "obsidian";
 import { format } from "date-fns";
 import { escapeBody } from "./escapeUtils";
 import { NoticeManager } from "../notice-manager";
@@ -50,19 +50,54 @@ export class FileHelpers {
 			return;
 		}
 
-		const folder = this.app.vault.getAbstractFileByPath(path);
-		if (!folder) {
-			try {
-				await this.app.vault.createFolder(path);
-				this.noticeManager.debug(`Created folder: ${path}`);
-			} catch (error) {
-				// Folder may have been created concurrently or vault cache was stale - verify it exists now
-				const existsNow = this.app.vault.getAbstractFileByPath(path);
-				if (!existsNow) {
-					// Folder truly doesn't exist and creation failed - rethrow
-					throw error;
-				}
+		// Normalize path separators to forward slashes for consistency
+		const normalizedPath = path.replace(/\\/g, "/");
+		let existing = this.app.vault.getAbstractFileByPath(normalizedPath);
+		
+		// Check if folder already exists
+		if (existing instanceof TFolder) {
+			return;
+		}
+
+
+
+		try {
+			await this.app.vault.createFolder(normalizedPath);
+			this.noticeManager.debug(`Created folder: ${normalizedPath}`);
+		} catch (error: unknown) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			
+			// Handle "Folder already exists" or other folder creation errors
+			// Retry vault check with slight delay to allow cache to update
+			const existsNow = this.app.vault.getAbstractFileByPath(normalizedPath);
+			
+			if (existsNow instanceof TFolder) {
+				// Folder exists now, which is fine (concurrent creation or cache stale)
+				return;
 			}
+
+			if (
+				error instanceof Error &&
+				error.message.includes("Folder already exists")
+			) {
+				// Expected case - folder was created successfully but Obsidian threw error anyway
+				// This commonly happens when the vault cache is out of sync
+				// Try one more time with a tiny delay to let cache update
+				await new Promise(resolve => setTimeout(resolve, 10));
+				const retryCheck = this.app.vault.getAbstractFileByPath(normalizedPath);
+				if (retryCheck instanceof TFolder) {
+					this.noticeManager.debug(
+						`Folder created successfully: ${normalizedPath}`,
+					);
+					return;
+				}
+				// Even though cache says it doesn't exist, the folder was likely created
+				// Continue anyway - subsequent operations will work since the folder actually exists
+				return;
+			}
+
+			// Folder creation genuinely failed - rethrow
+			throw error;
 		}
 	}
 

@@ -295,7 +295,9 @@ export class FileManager {
 				this.settings.dateFormat,
 			);
 			const fileName = `${baseFileName}.md`;
-			const filePath = `${folderPath}/${fileName}`;
+			// Normalize folder path to use forward slashes for consistent vault lookups
+			const normalizedFolderPath = folderPath.replace(/\\/g, "/");
+			const filePath = `${normalizedFolderPath}/${fileName}`;
 
 			const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 			let fileContent = await this.generateProjectItemContent(
@@ -323,7 +325,25 @@ export class FileManager {
 				}
 				await this.app.vault.modify(existingFile, fileContent);
 			} else {
-				await this.app.vault.create(filePath, fileContent);
+				try {
+					await this.app.vault.create(filePath, fileContent);
+				} catch (fileCreateError: unknown) {
+					const errorMsg = fileCreateError instanceof Error ? fileCreateError.message : String(fileCreateError);
+					
+					// Check if file exists due to stale cache
+					const fileCheck = this.app.vault.getAbstractFileByPath(filePath);
+					
+					if (fileCheck instanceof TFile) {
+
+						// File exists but wasn't detected before - update it
+						const existingContent = await this.app.vault.read(fileCheck);
+						await this.app.vault.modify(fileCheck, fileContent);
+						this.noticeManager.debug(`Updated existing project item file for #${content.number} (file existed but cache was stale)`);
+					} else {
+						// File creation genuinely failed - rethrow
+						throw fileCreateError;
+					}
+				}
 			}
 			createdCount++;
 		}

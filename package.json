@@ -1,6 +1,6 @@
 {
 	"name": "github-issues",
-	"version": "1.9.1",
+	"version": "1.9.2",
 	"description": "Track GitHub and GitLab issues and pull/merge requests in Obsidian",
 	"main": "main.js",
 	"scripts": {

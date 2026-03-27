@@ -79,12 +79,12 @@ url: "${issue.html_url}"
 opened_by: "${issue.user?.login}"
 assignees: [${(
 			issue.assignees?.map(
-				(assignee: { login: string }) => '"' + assignee.login + '"',
+				(assignee: { login: string }) => '"' + escapeYamlString(assignee.login) + '"',
 			) || []
 		).join(", ")}]
 labels: [${(
 			issue.labels?.map(
-				(label: { name: string }) => '"' + label.name + '"',
+				(label: { name: string }) => '"' + escapeYamlString(label.name) + '"',
 			) || []
 		).join(", ")}]
 updateMode: "${repo.issueUpdateMode}"
@@ -225,17 +225,17 @@ url: "${pr.html_url}"
 opened_by: "${pr.user?.login}"
 assignees: [${(
 			pr.assignees?.map(
-				(assignee: { login: string }) => '"' + assignee.login + '"',
+				(assignee: { login: string }) => '"' + escapeYamlString(assignee.login) + '"',
 			) || []
 		).join(", ")}]
 requested_reviewers: [${(
 			pr.requested_reviewers?.map(
-				(reviewer: { login: string }) => '"' + reviewer.login + '"',
+				(reviewer: { login: string }) => '"' + escapeYamlString(reviewer.login) + '"',
 			) || []
 		).join(", ")}]
 labels: [${(
 			pr.labels?.map(
-				(label: { name: string }) => '"' + label.name + '"',
+				(label: { name: string }) => '"' + escapeYamlString(label.name) + '"',
 			) || []
 		).join(", ")}]`;
 

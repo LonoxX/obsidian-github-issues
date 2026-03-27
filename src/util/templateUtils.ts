@@ -162,7 +162,7 @@ function buildReplacements(
 ): Record<string, string> {
 	const replacements: Record<string, string> = {
 		"{title}": data.title || "Untitled",
-		"{title_yaml}": data.title_yaml || "Untitled",
+		"{title_yaml}": `"${data.title_yaml || "Untitled"}"`,
 		"{number}": data.number.toString(),
 		"{status}": data.status || "unknown",
 		"{state}": data.state || data.status || "unknown",

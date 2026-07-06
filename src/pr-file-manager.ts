@@ -1,5 +1,6 @@
 import { App, TFile } from "obsidian";
 import { IssueTrackerSettings, RepositoryTracking } from "./types";
+import { IssueComment, PullRequest } from "./providers/domain";
 import { escapeBody } from "./util/escapeUtils";
 import { NoticeManager } from "./notice-manager";
 import { IssueProvider, ProviderExtraParams } from "./providers/provider";
@@ -38,8 +39,8 @@ export class PullRequestFileManager {
 	 */
 	public async createPullRequestFiles(
 		repo: RepositoryTracking,
-		openPullRequests: any[],
-		allPullRequestsIncludingRecentlyClosed: any[],
+		openPullRequests: PullRequest[],
+		allPullRequestsIncludingRecentlyClosed: PullRequest[],
 		_currentPRNumbers: Set<string>,
 	): Promise<void> {
 		// Apply global defaults to repository settings
@@ -73,7 +74,7 @@ export class PullRequestFileManager {
 		repo: RepositoryTracking,
 		ownerCleaned: string,
 		repoCleaned: string,
-		pr: any,
+		pr: PullRequest,
 	): Promise<void> {
 		// Generate filename using template
 		const templateData = createPullRequestTemplateData(pr, repo.repository);
@@ -114,7 +115,10 @@ export class PullRequestFileManager {
 		}
 
 		// Normalize folder path to use forward slashes for consistent vault lookups
-		const normalizedPullRequestFolderPath = pullRequestFolderPath.replace(/\\/g, "/");
+		const normalizedPullRequestFolderPath = pullRequestFolderPath.replace(
+			/\\/g,
+			"/",
+		);
 		const file = this.app.vault.getAbstractFileByPath(
 			`${normalizedPullRequestFolderPath}/${fileName}`,
 		);
@@ -125,7 +129,7 @@ export class PullRequestFileManager {
 			: undefined;
 
 		// Only fetch comments if they should be included
-		let comments: any[] = [];
+		let comments: IssueComment[] = [];
 		if (repo.includePullRequestComments) {
 			comments = await this.provider.fetchPullRequestComments(
 				owner,
@@ -157,7 +161,7 @@ export class PullRequestFileManager {
 				// Check if status has changed (e.g., open -> closed)
 				const statusHasChanged = hasStatusChanged(
 					existingContent,
-					pr.state,
+					pr.state ?? "",
 				);
 
 				// If status changed, always update regardless of updateMode
@@ -166,7 +170,7 @@ export class PullRequestFileManager {
 					// Check if content needs updating based on updated_at field
 					if (
 						!statusHasChanged &&
-						!shouldUpdateContent(existingContent, pr.updated_at)
+						!shouldUpdateContent(existingContent, pr.updated_at ?? "")
 					) {
 						this.noticeManager.debug(
 							`Skipped update for PR ${pr.number}: no changes detected (updated_at match)`,
@@ -212,9 +216,9 @@ export class PullRequestFileManager {
 							? repo.escapeHashTags
 							: this.settings.escapeHashTags;
 					content = `---\n### New status: "${
-						pr.state
+						pr.state ?? ""
 					}"\n\n# ${escapeBody(
-						pr.title,
+						pr.title ?? "",
 						this.settings.escapeMode,
 						false,
 					)}\n${
@@ -249,26 +253,29 @@ export class PullRequestFileManager {
 			}
 		} else {
 			// Normalize path to use forward slashes consistently
-			const normalizedFolderPath = pullRequestFolderPath.replace(/\\/g, "/");
+			const normalizedFolderPath = pullRequestFolderPath.replace(
+				/\\/g,
+				"/",
+			);
 			const filePathToCreate = `${normalizedFolderPath}/${fileName}`;
-			
+
 			try {
 				await this.app.vault.create(filePathToCreate, content);
 				this.noticeManager.debug(`Created PR file for ${pr.number}`);
 			} catch (fileCreateError: unknown) {
-				const errorMsg = fileCreateError instanceof Error ? fileCreateError.message : String(fileCreateError);
-				
 				// Check if file exists due to stale cache
-				const fileCheck = this.app.vault.getAbstractFileByPath(filePathToCreate);
-				
+				const fileCheck =
+					this.app.vault.getAbstractFileByPath(filePathToCreate);
+
 				if (fileCheck instanceof TFile) {
 					// File exists but wasn't detected before - update it
-					const existingContent = await this.app.vault.read(fileCheck);
 					await this.app.vault.modify(fileCheck, content);
-					this.noticeManager.debug(`Updated existing PR file for ${pr.number} (file existed but cache was stale)`);
+					this.noticeManager.debug(
+						`Updated existing PR file for ${pr.number} (file existed but cache was stale)`,
+					);
 					return;
 				}
-				
+
 				// File creation genuinely failed - rethrow
 				throw fileCreateError;
 			}

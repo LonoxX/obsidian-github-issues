@@ -3,12 +3,12 @@ import {
 	IssueTrackerSettings,
 	DEFAULT_SETTINGS,
 	DEFAULT_REPOSITORY_TRACKING,
+	RepositoryTracking,
+	TrackedProject,
 	SettingsProfile,
 	DEFAULT_REPOSITORY_PROFILE,
 	DEFAULT_PROJECT_PROFILE,
-	ProviderConfig,
 	ProviderId,
-	ProviderType,
 } from "./types";
 import { IssueProvider, ProviderExtraParams } from "./providers/provider";
 import { ProviderRegistry } from "./providers/provider-registry";
@@ -26,8 +26,6 @@ import {
 export default class IssueTrackerPlugin extends Plugin {
 	settings: IssueTrackerSettings = DEFAULT_SETTINGS;
 	public providerRegistry: ProviderRegistry = new ProviderRegistry();
-	/** @deprecated Use providerRegistry.get("github") instead */
-	public gitHubClient: IssueProvider | null = null;
 	private fileManagers: Map<string, FileManager> = new Map();
 	private noticeManager!: NoticeManager;
 	private isSyncing: boolean = false;
@@ -158,7 +156,7 @@ export default class IssueTrackerPlugin extends Plugin {
 	/**
 	 * Build ProviderExtraParams for the given repository.
 	 */
-	private getExtraParams(repo: any): ProviderExtraParams | undefined {
+	private getExtraParams(repo: RepositoryTracking): ProviderExtraParams | undefined {
 		const provider = this.getProviderForRepo(repo);
 		if (provider?.type === "gitlab" && repo.gitlabProjectId) {
 			return { gitlabProjectId: repo.gitlabProjectId };
@@ -249,7 +247,7 @@ export default class IssueTrackerPlugin extends Plugin {
 
 		const ghFileManager = this.getFileManagerForProvider(ghProvider);
 
-		const hasAnyFolderConfigured = (p: any) =>
+		const hasAnyFolderConfigured = (p: TrackedProject) =>
 			p.issueFolder ||
 			p.pullRequestFolder ||
 			p.customIssueFolder ||
@@ -347,7 +345,7 @@ export default class IssueTrackerPlugin extends Plugin {
 					);
 
 				const openIssues = allIssuesIncludingRecentlyClosed.filter(
-					(issue: { state: string }) => issue.state === "open",
+					(issue) => issue.state === "open",
 				);
 
 				const issuesToFilter = effectiveRepo.includeClosedIssues
@@ -364,7 +362,7 @@ export default class IssueTrackerPlugin extends Plugin {
 				);
 
 				const currentIssueNumbers = new Set(
-					filteredIssues.map((issue: any) => issue.number.toString()),
+					filteredIssues.map((issue) => issue.number.toString()),
 				);
 
 				await fileManager.createIssueFiles(
@@ -392,7 +390,7 @@ export default class IssueTrackerPlugin extends Plugin {
 
 				const openPullRequests =
 					allPullRequestsIncludingRecentlyClosed.filter(
-						(pr: { state: string }) => pr.state === "open",
+						(pr) => pr.state === "open",
 					);
 
 				const pullRequestsToFilter =
@@ -410,7 +408,7 @@ export default class IssueTrackerPlugin extends Plugin {
 				);
 
 				const currentPRNumbers = new Set(
-					filteredPRs.map((pr: any) => pr.number.toString()),
+					filteredPRs.map((pr) => pr.number.toString()),
 				);
 
 				await fileManager.createPullRequestFiles(
@@ -522,7 +520,7 @@ export default class IssueTrackerPlugin extends Plugin {
 			this.settings.syncOnStartup &&
 			this.providerRegistry.getEnabled().length > 0
 		) {
-			new Promise((resolve) => setTimeout(resolve, 750)).then(
+			void new Promise((resolve) => window.setTimeout(resolve, 750)).then(
 				async () => {
 					await this.sync();
 				},
@@ -531,7 +529,7 @@ export default class IssueTrackerPlugin extends Plugin {
 		const ribbonIconEl = this.addRibbonIcon(
 			"refresh-cw",
 			"Issue Tracker",
-			async (evt: MouseEvent) => {
+			async (_evt: MouseEvent) => {
 				if (this.providerRegistry.getEnabled().length === 0) {
 					new Notice(
 						"Please set your provider token in settings first",
@@ -605,15 +603,12 @@ export default class IssueTrackerPlugin extends Plugin {
 
 			this.providerRegistry.register(provider);
 		}
-
-		// Keep legacy alias
-		this.gitHubClient = this.providerRegistry.get("github") ?? null;
 	}
 
 	private async openKanbanView(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(KANBAN_VIEW_TYPE);
 		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
+			await this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 
@@ -622,7 +617,7 @@ export default class IssueTrackerPlugin extends Plugin {
 			type: KANBAN_VIEW_TYPE,
 			active: true,
 		});
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 	}
 
 	onunload() {
@@ -632,7 +627,7 @@ export default class IssueTrackerPlugin extends Plugin {
 
 	stopBackgroundSync(): void {
 		if (this.backgroundSyncIntervalId !== null) {
-			clearInterval(this.backgroundSyncIntervalId);
+			window.clearInterval(this.backgroundSyncIntervalId);
 			this.backgroundSyncIntervalId = null;
 			this.noticeManager.debug("Background sync stopped.");
 		}
@@ -667,12 +662,12 @@ export default class IssueTrackerPlugin extends Plugin {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
 
 		// === Provider Migration: migrate old single-token format to providers array ===
-		const legacy = loadedData as any;
+		const legacy = loadedData;
 		if (!legacy?.providers || legacy.providers.length === 0) {
 			this.settings.providers = [
 				{
 					id: "github",
-					type: "github" as ProviderType,
+					type: "github",
 					enabled: true,
 					token: legacy?.githubToken ?? "",
 					useSecretStorage: legacy?.useSecretStorage ?? false,
@@ -680,7 +675,7 @@ export default class IssueTrackerPlugin extends Plugin {
 				},
 				{
 					id: "gitlab",
-					type: "gitlab" as ProviderType,
+					type: "gitlab",
 					enabled: false,
 					token: "",
 					useSecretStorage: false,
@@ -689,9 +684,10 @@ export default class IssueTrackerPlugin extends Plugin {
 				},
 			];
 			// Clear legacy fields
-			delete (this.settings as any).githubToken;
-			delete (this.settings as any).useSecretStorage;
-			delete (this.settings as any).secretTokenName;
+			const legacySettings = this.settings as unknown as Record<string, unknown>;
+			delete legacySettings.githubToken;
+			delete legacySettings.useSecretStorage;
+			delete legacySettings.secretTokenName;
 			await this.saveData(this.settings);
 		}
 
@@ -788,7 +784,8 @@ export default class IssueTrackerPlugin extends Plugin {
 						repo,
 					);
 
-					if ((repo as any).ignoreGlobalSettings) {
+					const legacyRepo = repo as unknown as Record<string, unknown>;
+					if (legacyRepo.ignoreGlobalSettings) {
 						// Repo had custom settings - create a dedicated profile
 						const customProfileId = `migrated-${repo.repository.replace(/\//g, "-")}-${Date.now()}`;
 						const customProfile: SettingsProfile = {
@@ -826,7 +823,7 @@ export default class IssueTrackerPlugin extends Plugin {
 					}
 
 					// Clean up deprecated field
-					delete (merged as any).ignoreGlobalSettings;
+					delete (merged as unknown as Record<string, unknown>).ignoreGlobalSettings;
 
 					return merged;
 				},
@@ -891,26 +888,27 @@ export default class IssueTrackerPlugin extends Plugin {
 			DEFAULT_REPOSITORY_PROFILE;
 		let needsSave = false;
 		this.settings.repositories = this.settings.repositories.map((repo) => {
+			const lr = repo as unknown as Record<string, unknown>;
 			// Skip repos that already have a non-default profile assigned
 			if (repo.profileId && repo.profileId !== "default") {
-				delete (repo as any).ignoreGlobalSettings;
+				delete lr.ignoreGlobalSettings;
 				return repo;
 			}
 
 			// Check if repo actually has any profile-managed fields to migrate
 			// (after stripProfileFieldsFromRepo they won't exist anymore)
 			const hasProfileFields =
-				(repo as any).issueUpdateMode !== undefined ||
-				(repo as any).issueFolder !== undefined ||
-				(repo as any).issueNoteTemplate !== undefined ||
-				(repo as any).pullRequestUpdateMode !== undefined ||
-				(repo as any).pullRequestFolder !== undefined ||
-				(repo as any).pullRequestNoteTemplate !== undefined;
+				lr.issueUpdateMode !== undefined ||
+				lr.issueFolder !== undefined ||
+				lr.issueNoteTemplate !== undefined ||
+				lr.pullRequestUpdateMode !== undefined ||
+				lr.pullRequestFolder !== undefined ||
+				lr.pullRequestNoteTemplate !== undefined;
 
 			if (!hasProfileFields) {
 				// No profile-managed fields on repo-  nothing to migrate
 				if (!repo.profileId) repo.profileId = "default";
-				delete (repo as any).ignoreGlobalSettings;
+				delete lr.ignoreGlobalSettings;
 				return repo;
 			}
 
@@ -987,7 +985,7 @@ export default class IssueTrackerPlugin extends Plugin {
 				repo.profileId = "default";
 			}
 
-			delete (repo as any).ignoreGlobalSettings;
+			delete lr.ignoreGlobalSettings;
 			return repo;
 		});
 		if (needsSave) {
@@ -997,7 +995,7 @@ export default class IssueTrackerPlugin extends Plugin {
 		// Migrate assigneeFilterMode/prAssigneeFilterMode/prReviewerFilterMode from string to array
 		let needsFilterMigration = false;
 		this.settings.repositories = this.settings.repositories.map((repo) => {
-			const r = repo as any;
+			const r = repo as unknown as Record<string, unknown>;
 			if (r.assigneeFilterMode !== undefined && !r.assigneeFilterModes) {
 				r.assigneeFilterModes = [r.assigneeFilterMode];
 				needsFilterMigration = true;
@@ -1033,11 +1031,12 @@ export default class IssueTrackerPlugin extends Plugin {
 		// Migrate trackIssues/trackPullRequest from repos into their profiles
 		let needsTrackMigration = false;
 		for (const repo of this.settings.repositories) {
+			const lrTrack = repo as unknown as Record<string, unknown>;
 			// Check if repo still has trackIssues/trackPullRequest explicitly set
 			// (they are now optional and profile-managed)
 			if (
-				(repo as any).trackIssues !== undefined ||
-				(repo as any).trackPullRequest !== undefined
+				lrTrack.trackIssues !== undefined ||
+				lrTrack.trackPullRequest !== undefined
 			) {
 				const profileId = repo.profileId || "default";
 				// Only migrate into non-default profiles (default profile would affect all repos)
@@ -1048,23 +1047,21 @@ export default class IssueTrackerPlugin extends Plugin {
 					if (profile && profile.type === "repository") {
 						if (
 							profile.trackIssues === undefined &&
-							(repo as any).trackIssues !== undefined
+							lrTrack.trackIssues !== undefined
 						) {
-							profile.trackIssues = (repo as any).trackIssues;
+							profile.trackIssues = lrTrack.trackIssues as boolean;
 						}
 						if (
 							profile.trackPullRequest === undefined &&
-							(repo as any).trackPullRequest !== undefined
+							lrTrack.trackPullRequest !== undefined
 						) {
-							profile.trackPullRequest = (
-								repo as any
-							).trackPullRequest;
+							profile.trackPullRequest = lrTrack.trackPullRequest as boolean;
 						}
 					}
 				}
 				// Remove migrated fields from repo so migration doesn't re-trigger
-				delete (repo as any).trackIssues;
-				delete (repo as any).trackPullRequest;
+				delete lrTrack.trackIssues;
+				delete lrTrack.trackPullRequest;
 				needsTrackMigration = true;
 			}
 		}
@@ -1218,7 +1215,7 @@ export default class IssueTrackerPlugin extends Plugin {
 						);
 
 					const openIssues = allIssuesIncludingRecentlyClosed.filter(
-						(issue: { state: string }) => issue.state === "open",
+						(issue) => issue.state === "open",
 					);
 
 					const issuesToFilter = effectiveRepo.includeClosedIssues
@@ -1298,7 +1295,7 @@ export default class IssueTrackerPlugin extends Plugin {
 
 					const openPullRequests =
 						allPullRequestsIncludingRecentlyClosed.filter(
-							(pr: { state: string }) => pr.state === "open",
+							(pr) => pr.state === "open",
 						);
 
 					const pullRequestsToFilter =

@@ -1,6 +1,11 @@
 import { format } from "date-fns";
 import { escapeBody, escapeYamlString } from "./escapeUtils";
 import { ProjectData } from "../types";
+import {
+	Issue,
+	IssueComment,
+	PullRequest,
+} from "../providers/domain";
 
 interface SubIssueData {
 	number: number;
@@ -63,7 +68,7 @@ export function sanitizeFilename(filename: string): string {
 	// Unix: /
 	// Also remove leading/trailing spaces and dots
 	return filename
-		.replace(/[<>:"|?*\\\/]/g, "-")
+		.replace(/[<>:"|?*\\/]/g, "-")
 		.replace(/\n/g, " ")
 		.replace(/\r/g, "")
 		.replace(/\t/g, " ")
@@ -82,7 +87,7 @@ export function sanitizeFilename(filename: string): string {
  * @returns Formatted comments string
  */
 export function formatComments(
-	comments: any[],
+	comments: IssueComment[],
 	dateFormat: string = "",
 	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
 	escapeHashTags: boolean = false,
@@ -703,15 +708,15 @@ function getVariableValue(
  * @returns TemplateData object
  */
 export function createIssueTemplateData(
-	issue: any,
+	issue: Issue,
 	repository: string,
-	comments: any[] = [],
+	comments: IssueComment[] = [],
 	dateFormat: string = "",
 	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
 	escapeHashTags: boolean = false,
 	projectData?: ProjectData[],
-	subIssues?: any[],
-	parentIssue?: any,
+	subIssues?: Issue[],
+	parentIssue?: Issue | null,
 ): TemplateData {
 	const [owner, repoName] = repository.split("/");
 
@@ -720,7 +725,7 @@ export function createIssueTemplateData(
 
 	const subIssueData: SubIssueData[] | undefined = subIssues?.map((si) => ({
 		number: si.number,
-		title: si.title,
+		title: si.title ?? "",
 		state: si.state || "open",
 		url: si.html_url || si.url || "",
 		vaultPath: si.vaultPath,
@@ -729,7 +734,7 @@ export function createIssueTemplateData(
 	const parentIssueData: ParentIssueData | undefined = parentIssue
 		? {
 				number: parentIssue.number,
-				title: parentIssue.title,
+				title: parentIssue.title ?? "",
 				state: parentIssue.state || "open",
 				url: parentIssue.html_url || parentIssue.url || "",
 			}
@@ -743,9 +748,9 @@ export function createIssueTemplateData(
 		state: issue.state || "unknown",
 		author: issue.user?.login || "unknown",
 		assignee: issue.assignee?.login,
-		assignees: issue.assignees?.map((a: any) => a.login) || [],
-		labels: issue.labels?.map((l: any) => l.name) || [],
-		created: new Date(issue.created_at),
+		assignees: issue.assignees?.map((a) => a.login) || [],
+		labels: issue.labels?.map((l) => l.name) || [],
+		created: issue.created_at ? new Date(issue.created_at) : new Date(),
 		updated: issue.updated_at ? new Date(issue.updated_at) : undefined,
 		closed: issue.closed_at ? new Date(issue.closed_at) : undefined,
 		repository,
@@ -782,9 +787,9 @@ export function createIssueTemplateData(
  * @returns TemplateData object
  */
 export function createPullRequestTemplateData(
-	pr: any,
+	pr: PullRequest,
 	repository: string,
-	comments: any[] = [],
+	comments: IssueComment[] = [],
 	dateFormat: string = "",
 	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
 	escapeHashTags: boolean = false,
@@ -802,9 +807,9 @@ export function createPullRequestTemplateData(
 		state: pr.state || "unknown",
 		author: pr.user?.login || "unknown",
 		assignee: pr.assignee?.login,
-		assignees: pr.assignees?.map((a: any) => a.login) || [],
-		labels: pr.labels?.map((l: any) => l.name) || [],
-		created: new Date(pr.created_at),
+		assignees: pr.assignees?.map((a) => a.login) || [],
+		labels: pr.labels?.map((l) => l.name) || [],
+		created: pr.created_at ? new Date(pr.created_at) : new Date(),
 		updated: pr.updated_at ? new Date(pr.updated_at) : undefined,
 		closed: pr.closed_at ? new Date(pr.closed_at) : undefined,
 		repository,
@@ -818,7 +823,7 @@ export function createPullRequestTemplateData(
 		isLocked: pr.locked || false,
 		lockReason: pr.active_lock_reason || "",
 		mergedAt: pr.merged_at ? new Date(pr.merged_at) : undefined,
-		mergeable: pr.mergeable,
+		mergeable: pr.mergeable ?? undefined,
 		merged: pr.merged || false,
 		baseBranch: pr.base?.ref,
 		headBranch: pr.head?.ref,

@@ -1,5 +1,6 @@
 import { App, TFile } from "obsidian";
 import { IssueTrackerSettings, RepositoryTracking } from "./types";
+import { Issue, IssueComment } from "./providers/domain";
 import { escapeBody } from "./util/escapeUtils";
 import { NoticeManager } from "./notice-manager";
 import { IssueProvider, ProviderExtraParams } from "./providers/provider";
@@ -38,8 +39,8 @@ export class IssueFileManager {
 	 */
 	public async createIssueFiles(
 		repo: RepositoryTracking,
-		openIssues: any[],
-		allIssuesIncludingRecentlyClosed: any[],
+		openIssues: Issue[],
+		allIssuesIncludingRecentlyClosed: Issue[],
 		_currentIssueNumbers: Set<string>,
 	): Promise<void> {
 		// Apply global defaults to repository settings
@@ -72,7 +73,7 @@ export class IssueFileManager {
 		repo: RepositoryTracking,
 		ownerCleaned: string,
 		repoCleaned: string,
-		issue: any,
+		issue: Issue,
 	): Promise<void> {
 		// Generate filename using template
 		const templateData = createIssueTemplateData(issue, repo.repository);
@@ -122,7 +123,7 @@ export class IssueFileManager {
 			: undefined;
 
 		// Only fetch comments if they should be included
-		let comments: any[] = [];
+		let comments: IssueComment[] = [];
 		if (repo.includeIssueComments) {
 			comments = await this.provider.fetchIssueComments(
 				owner,
@@ -137,8 +138,8 @@ export class IssueFileManager {
 		}
 
 		// Fetch sub-issues and parent issue for template support (only if enabled)
-		let subIssues: any[] = [];
-		let parentIssue: any = null;
+		let subIssues: Issue[] = [];
+		let parentIssue: Issue | null = null;
 
 		if (repo.includeSubIssues) {
 			subIssues =
@@ -194,7 +195,7 @@ export class IssueFileManager {
 				// Check if status has changed (e.g., open -> closed)
 				const statusHasChanged = hasStatusChanged(
 					existingContent,
-					issue.state,
+					issue.state ?? "",
 				);
 
 				// If status changed, always update regardless of updateMode
@@ -203,7 +204,7 @@ export class IssueFileManager {
 					// Check if content needs updating based on updated_at field
 					if (
 						!statusHasChanged &&
-						!shouldUpdateContent(existingContent, issue.updated_at)
+						!shouldUpdateContent(existingContent, issue.updated_at ?? "")
 					) {
 						this.noticeManager.debug(
 							`Skipped update for issue ${issue.number}: no changes detected (updated_at match)`,
@@ -254,9 +255,9 @@ export class IssueFileManager {
 							? repo.escapeHashTags
 							: this.settings.escapeHashTags;
 					content = `---\n### New status: "${
-						issue.state
+						issue.state ?? ""
 					}"\n\n# ${escapeBody(
-						issue.title,
+						issue.title ?? "",
 						this.settings.escapeMode,
 						false,
 					)}\n${
@@ -293,24 +294,26 @@ export class IssueFileManager {
 			// Normalize path to use forward slashes consistently
 			const normalizedFolderPath = issueFolderPath.replace(/\\/g, "/");
 			const filePathToCreate = `${normalizedFolderPath}/${fileName}`;
-			
+
 			try {
 				await this.app.vault.create(filePathToCreate, content);
-				this.noticeManager.debug(`Created issue file for ${issue.number}`);
+				this.noticeManager.debug(
+					`Created issue file for ${issue.number}`,
+				);
 			} catch (fileCreateError: unknown) {
-				const errorMsg = fileCreateError instanceof Error ? fileCreateError.message : String(fileCreateError);
-				
 				// Check if file exists due to stale cache
-				const fileCheck = this.app.vault.getAbstractFileByPath(filePathToCreate);
-				
+				const fileCheck =
+					this.app.vault.getAbstractFileByPath(filePathToCreate);
+
 				if (fileCheck instanceof TFile) {
 					// File exists but wasn't detected before - update it
-					const existingContent = await this.app.vault.read(fileCheck);
 					await this.app.vault.modify(fileCheck, content);
-					this.noticeManager.debug(`Updated existing issue file for ${issue.number} (file existed but cache was stale)`);
+					this.noticeManager.debug(
+						`Updated existing issue file for ${issue.number} (file existed but cache was stale)`,
+					);
 					return;
 				}
-				
+
 				// File creation genuinely failed - rethrow
 				throw fileCreateError;
 			}

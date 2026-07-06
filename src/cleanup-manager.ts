@@ -1,5 +1,6 @@
 import { App, TFile, TFolder } from "obsidian";
 import { IssueTrackerSettings, RepositoryTracking } from "./types";
+import { Issue, PullRequest } from "./providers/domain";
 import { extractProperties } from "./util/properties";
 import { NoticeManager } from "./notice-manager";
 import { extractNumberFromFilename } from "./util/templateUtils";
@@ -23,7 +24,7 @@ export class CleanupManager {
 		repo: RepositoryTracking,
 		ownerCleaned: string,
 		repoCleaned: string,
-		allIssuesIncludingRecentlyClosed: any[],
+		allIssuesIncludingRecentlyClosed: Issue[],
 	): Promise<void> {
 		const issueFolderPath = this.folderPathManager.getIssueFolderPath(
 			repo,
@@ -73,7 +74,7 @@ export class CleanupManager {
 
 				const correspondingIssue =
 					allIssuesIncludingRecentlyClosed.find(
-						(issue: any) =>
+						(issue) =>
 							issue.number.toString() === fileNumberString,
 					);
 
@@ -132,7 +133,7 @@ export class CleanupManager {
 		repo: RepositoryTracking,
 		ownerCleaned: string,
 		repoCleaned: string,
-		allPullRequestsIncludingRecentlyClosed: any[],
+		allPullRequestsIncludingRecentlyClosed: PullRequest[],
 	): Promise<void> {
 		const pullRequestFolderPath =
 			this.folderPathManager.getPullRequestFolderPath(
@@ -185,7 +186,7 @@ export class CleanupManager {
 
 				const correspondingPR =
 					allPullRequestsIncludingRecentlyClosed.find(
-						(pr: any) => pr.number.toString() === fileNumberString,
+						(pr) => pr.number.toString() === fileNumberString,
 					);
 
 				let shouldDelete = false;

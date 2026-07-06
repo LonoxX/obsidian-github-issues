@@ -50,7 +50,7 @@ export class ProfileRenderer {
 		const dropdownList = dropdownWrapper.createDiv(
 			"github-issues-profile-dropdown-list",
 		);
-		dropdownList.style.display = "none";
+		dropdownList.addClass("github-issues-hidden");
 
 		const selectedProfile = profiles.find(
 			(p) => p.id === this.selectedProfileId,
@@ -58,7 +58,7 @@ export class ProfileRenderer {
 
 		const updateButtonLabel = (profile: SettingsProfile) => {
 			dropdownButton.empty();
-			dropdownButton.createEl("span", {
+			dropdownButton.createSpan({
 				text: profile.name,
 				cls: "github-issues-profile-dropdown-name",
 			});
@@ -66,11 +66,11 @@ export class ProfileRenderer {
 				profile.type === "repository"
 					? "github-issues-profile-type-tag github-issues-profile-tag-repository"
 					: "github-issues-profile-type-tag github-issues-profile-tag-project";
-			dropdownButton.createEl("span", {
+			dropdownButton.createSpan({
 				text: profile.type === "repository" ? "Repo" : "Project",
 				cls: badgeCls,
 			});
-			const chevron = dropdownButton.createEl("span", {
+			const chevron = dropdownButton.createSpan({
 				cls: "github-issues-profile-dropdown-chevron",
 			});
 			setIcon(chevron, "chevron-down");
@@ -88,7 +88,7 @@ export class ProfileRenderer {
 			if (profile.id === this.selectedProfileId) {
 				item.addClass("is-selected");
 			}
-			item.createEl("span", {
+			item.createSpan({
 				text: profile.name,
 				cls: "github-issues-profile-dropdown-name",
 			});
@@ -96,14 +96,14 @@ export class ProfileRenderer {
 				profile.type === "repository"
 					? "github-issues-profile-type-tag github-issues-profile-tag-repository"
 					: "github-issues-profile-type-tag github-issues-profile-tag-project";
-			item.createEl("span", {
+			item.createSpan({
 				text: profile.type === "repository" ? "Repo" : "Project",
 				cls: badgeCls,
 			});
 			item.onclick = (e) => {
 				e.stopPropagation();
 				this.selectedProfileId = profile.id;
-				dropdownList.style.display = "none";
+				dropdownList.addClass("github-issues-hidden");
 				onRefreshNeeded();
 			};
 		}
@@ -111,25 +111,27 @@ export class ProfileRenderer {
 		// Toggle dropdown
 		dropdownButton.onclick = (e) => {
 			e.stopPropagation();
-			const isOpen = dropdownList.style.display !== "none";
-			dropdownList.style.display = isOpen ? "none" : "block";
+			dropdownList.toggleClass(
+				"github-issues-hidden",
+				!dropdownList.hasClass("github-issues-hidden"),
+			);
 		};
 
 		// Close on outside click
 		const closeDropdown = (e: MouseEvent) => {
 			if (!dropdownWrapper.contains(e.target as Node)) {
-				dropdownList.style.display = "none";
+				dropdownList.addClass("github-issues-hidden");
 			}
 		};
-		document.addEventListener("click", closeDropdown);
+		activeDocument.addEventListener("click", closeDropdown);
 		// Cleanup when container is removed
 		const observer = new MutationObserver(() => {
 			if (!container.isConnected) {
-				document.removeEventListener("click", closeDropdown);
+				activeDocument.removeEventListener("click", closeDropdown);
 				observer.disconnect();
 			}
 		});
-		observer.observe(container.parentElement ?? document.body, {
+		observer.observe(container.parentElement ?? activeDocument.body, {
 			childList: true,
 			subtree: true,
 		});
@@ -180,7 +182,7 @@ export class ProfileRenderer {
 			});
 			setIcon(btn, "trash-2");
 			btn.onclick = () => {
-				this.showDeleteProfileModal(selectedProfile!, onRefreshNeeded);
+				this.showDeleteProfileModal(selectedProfile, onRefreshNeeded);
 			};
 		};
 
@@ -199,10 +201,10 @@ export class ProfileRenderer {
 					"aria-label": "Rename profile",
 				},
 			});
-			renameInput.addEventListener("change", async () => {
+			renameInput.addEventListener("change", () => {
 				if (renameInput.value.trim()) {
 					selectedProfile.name = renameInput.value.trim();
-					await this.plugin.saveSettings();
+					void this.plugin.saveSettings();
 					updateButtonLabel(selectedProfile);
 				}
 			});
@@ -398,7 +400,7 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enableLabelFilter = true;
 						} else {
-							delete (profile as any).enableLabelFilter;
+							delete (profile as unknown as Record<string, unknown>).enableLabelFilter;
 						}
 						issueLabelFilterControls.classList.toggle(
 							"github-issues-hidden",
@@ -466,7 +468,7 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enableAssigneeFilter = true;
 						} else {
-							delete (profile as any).enableAssigneeFilter;
+							delete (profile as unknown as Record<string, unknown>).enableAssigneeFilter;
 						}
 						issueAssigneeFilterControls.classList.toggle(
 							"github-issues-hidden",
@@ -706,7 +708,7 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enablePrLabelFilter = true;
 						} else {
-							delete (profile as any).enablePrLabelFilter;
+							delete (profile as unknown as Record<string, unknown>).enablePrLabelFilter;
 						}
 						prLabelFilterControls.classList.toggle(
 							"github-issues-hidden",
@@ -774,7 +776,7 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enablePrAssigneeFilter = true;
 						} else {
-							delete (profile as any).enablePrAssigneeFilter;
+							delete (profile as unknown as Record<string, unknown>).enablePrAssigneeFilter;
 						}
 						prAssigneeFilterControls.classList.toggle(
 							"github-issues-hidden",
@@ -880,7 +882,7 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enablePrReviewerFilter = true;
 						} else {
-							delete (profile as any).enablePrReviewerFilter;
+							delete (profile as unknown as Record<string, unknown>).enablePrReviewerFilter;
 						}
 						prReviewerFilterControls.classList.toggle(
 							"github-issues-hidden",

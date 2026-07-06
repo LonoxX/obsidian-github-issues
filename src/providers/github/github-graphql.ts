@@ -2,6 +2,8 @@
  * GraphQL queries for GitHub Projects v2 API
  */
 
+import { ProjectItem } from "../domain";
+
 // Shared fragment for project field values - reduces query duplication
 const FIELD_VALUES_FRAGMENT = `
 fieldValues(first: 30) {
@@ -221,6 +223,57 @@ export interface ProjectV2Node {
 	closed: boolean;
 }
 
+interface PageInfo {
+	hasNextPage?: boolean;
+	endCursor?: string | null;
+}
+
+interface ProjectsConnection {
+	nodes?: ProjectV2Node[];
+	pageInfo?: PageInfo;
+}
+
+export interface UserProjectsResponse {
+	user?: { projectsV2?: ProjectsConnection } | null;
+}
+
+export interface OrgProjectsResponse {
+	organization?: { projectsV2?: ProjectsConnection } | null;
+}
+
+export interface RepoProjectsResponse {
+	repository?: { projectsV2?: ProjectsConnection } | null;
+}
+
+export interface ItemProjectDataResponse {
+	node?: RawItemNode | null;
+}
+
+export interface ItemsBatchResponse {
+	nodes?: Array<(RawItemNode & { id?: string }) | null> | null;
+}
+
+export interface ProjectItemsResponse {
+	node?: {
+		items?: { nodes?: ProjectItem[]; pageInfo?: PageInfo };
+	} | null;
+}
+
+export interface ProjectFieldOption {
+	id: string;
+	name: string;
+	color?: string;
+	description?: string;
+}
+
+export interface ProjectFieldsResponse {
+	node?: {
+		fields?: {
+			nodes?: Array<{ name?: string; options?: ProjectFieldOption[] }>;
+		};
+	} | null;
+}
+
 export interface ProjectFieldValue {
 	fieldName: string;
 	type:
@@ -253,10 +306,44 @@ export interface ItemProjectData {
 	projects: ProjectItemData[];
 }
 
+/** Raw GraphQL field-value node (union of ProjectV2ItemField*Value shapes). */
+export interface RawFieldValueNode {
+	field?: { name?: string };
+	text?: string;
+	number?: number;
+	date?: string;
+	name?: string;
+	optionId?: string;
+	title?: string;
+	iterationId?: string;
+	startDate?: string;
+	duration?: number;
+	users?: { nodes?: Array<{ login?: string }> };
+	labels?: { nodes?: Array<{ name?: string }> };
+	[key: string]: unknown;
+}
+
+/** Raw GraphQL issue/PR node carrying its project memberships. */
+export interface RawItemNode {
+	projectItems?: {
+		nodes?: Array<{
+			project?: {
+				id: string;
+				title: string;
+				number: number;
+				url: string;
+			};
+			fieldValues?: { nodes?: RawFieldValueNode[] };
+		}>;
+	};
+}
+
 /**
  * Parse field values from GraphQL response into a normalized format
  */
-export function parseFieldValues(fieldValuesNodes: any[]): ProjectFieldValue[] {
+export function parseFieldValues(
+	fieldValuesNodes: RawFieldValueNode[],
+): ProjectFieldValue[] {
 	const fieldValues: ProjectFieldValue[] = [];
 
 	for (const node of fieldValuesNodes) {
@@ -293,7 +380,7 @@ export function parseFieldValues(fieldValuesNodes: any[]): ProjectFieldValue[] {
 			fieldValues.push({
 				fieldName,
 				type: "single_select",
-				value: node.name,
+				value: node.name ?? null,
 			});
 		}
 		// Iteration field
@@ -301,14 +388,14 @@ export function parseFieldValues(fieldValuesNodes: any[]): ProjectFieldValue[] {
 			fieldValues.push({
 				fieldName,
 				type: "iteration",
-				value: node.title,
+				value: node.title ?? null,
 				startDate: node.startDate,
 				duration: node.duration,
 			});
 		}
 		// User field
 		else if ("users" in node && node.users?.nodes) {
-			const userLogins = node.users.nodes.map((u: any) => u.login);
+			const userLogins = node.users.nodes.map((u) => u.login ?? "");
 			fieldValues.push({
 				fieldName,
 				type: "user",
@@ -318,7 +405,7 @@ export function parseFieldValues(fieldValuesNodes: any[]): ProjectFieldValue[] {
 		}
 		// Labels field
 		else if ("labels" in node && node.labels?.nodes) {
-			const labelNames = node.labels.nodes.map((l: any) => l.name);
+			const labelNames = node.labels.nodes.map((l) => l.name ?? "");
 			fieldValues.push({
 				fieldName,
 				type: "labels",
@@ -334,7 +421,9 @@ export function parseFieldValues(fieldValuesNodes: any[]): ProjectFieldValue[] {
 /**
  * Parse a single item's project data from GraphQL response
  */
-export function parseItemProjectData(itemNode: any): ProjectItemData[] {
+export function parseItemProjectData(
+	itemNode: RawItemNode | null | undefined,
+): ProjectItemData[] {
 	if (!itemNode?.projectItems?.nodes) {
 		return [];
 	}

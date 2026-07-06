@@ -1,3 +1,5 @@
+import { Issue, PullRequest } from "./providers/domain";
+
 // Provider types
 export type ProviderType = "github" | "gitlab";
 /** Unique instance identifier – e.g. "github", "gitlab", "gitlab-2" */
@@ -259,12 +261,12 @@ export interface ProjectData {
 }
 
 export interface IssueWithProjectData {
-	issue: any;
+	issue: Issue;
 	projectData: ProjectData[];
 }
 
 export interface PullRequestWithProjectData {
-	pullRequest: any;
+	pullRequest: PullRequest;
 	projectData: ProjectData[];
 }
 

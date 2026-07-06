@@ -140,12 +140,12 @@ export class RepositoryListManager {
 		const bulkActionsToolbar = reposContainer.createDiv(
 			"github-issues-bulk-actions-toolbar",
 		);
-		bulkActionsToolbar.style.display = "none"; // Hidden by default
+		bulkActionsToolbar.addClass("github-issues-hidden"); // Hidden by default
 
 		const bulkActionInfo = bulkActionsToolbar.createDiv(
 			"github-issues-bulk-action-info",
 		);
-		const selectedCountSpan = bulkActionInfo.createEl("span", {
+		const selectedCountSpan = bulkActionInfo.createSpan({
 			cls: "github-issues-selected-count",
 			text: "0 selected",
 		});
@@ -167,11 +167,11 @@ export class RepositoryListManager {
 		const removeSelectedButton = bulkActionButtons.createEl("button", {
 			cls: "github-issues-remove-selected-button mod-warning",
 		});
-		const removeIcon = removeSelectedButton.createEl("span", {
+		const removeIcon = removeSelectedButton.createSpan({
 			cls: "github-issues-button-icon",
 		});
 		setIcon(removeIcon, "trash-2");
-		removeSelectedButton.createEl("span", {
+		removeSelectedButton.createSpan({
 			cls: "github-issues-button-text",
 			text: "Remove selected",
 		});
@@ -180,7 +180,7 @@ export class RepositoryListManager {
 		const updateBulkActionsUI = () => {
 			const count = this.selectedRepositories.size;
 			selectedCountSpan.setText(`${count} selected`);
-			bulkActionsToolbar.style.display = count > 0 ? "flex" : "none";
+			bulkActionsToolbar.toggleClass("github-issues-hidden", count === 0);
 			removeSelectedButton.disabled = count === 0;
 		};
 
@@ -289,20 +289,20 @@ export class RepositoryListManager {
 				: "Organization";
 
 			// Chevron icon for collapse/expand
-			const chevronIcon = ownerHeader.createEl("span", {
+			const chevronIcon = ownerHeader.createSpan({
 				cls: "github-issues-repo-owner-chevron",
 			});
 			setIcon(chevronIcon, "chevron-right");
 
-			const ownerIcon = ownerHeader.createEl("span", {
+			const ownerIcon = ownerHeader.createSpan({
 				cls: "github-issues-repo-owner-icon",
 			});
 			setIcon(ownerIcon, ownerType === "User" ? "user" : "building");
-			ownerHeader.createEl("span", {
+			ownerHeader.createSpan({
 				cls: "github-issues-repo-owner-name",
 				text: owner,
 			});
-			ownerHeader.createEl("span", {
+			ownerHeader.createSpan({
 				cls: "github-issues-repo-count",
 				text: reposByOwner[owner].repos.length.toString(),
 			});
@@ -385,7 +385,7 @@ export class RepositoryListManager {
 					providerConfig?.type === "gitlab" ? "gitlab" : "github",
 				);
 
-				const repoText = repoInfoContainer.createEl("span");
+				const repoText = repoInfoContainer.createSpan();
 				repoText.setText(repoName);
 				repoText.addClass("github-issues-repo-name");
 
@@ -420,11 +420,11 @@ export class RepositoryListManager {
 				configButton.addClass("github-issues-config-button");
 
 				const deleteButton = actionContainer.createEl("button");
-				deleteButton.createEl("span", {
+				deleteButton.createSpan({
 					cls: "github-issues-button-icon",
 					text: "×",
 				});
-				deleteButton.createEl("span", {
+				deleteButton.createSpan({
 					cls: "github-issues-button-text",
 					text: "Remove",
 				});
@@ -450,7 +450,7 @@ export class RepositoryListManager {
 				new Setting(detailsContainer)
 					.setName("Provider")
 					.setDesc("Which provider hosts this repository")
-					.addDropdown((dropdown: any) => {
+					.addDropdown((dropdown) => {
 						for (const p of enabledProviders) {
 							dropdown.addOption(p.id, this.getProviderLabel(p));
 						}
@@ -477,7 +477,7 @@ export class RepositoryListManager {
 					.setDesc(
 						"Select which profile provides default settings for this repository",
 					)
-					.addDropdown((dropdown: any) => {
+					.addDropdown((dropdown) => {
 						for (const profile of repoProfiles) {
 							dropdown.addOption(profile.id, profile.name);
 						}
@@ -493,7 +493,7 @@ export class RepositoryListManager {
 					.setDesc(
 						"Escape # characters for this repository (overrides global setting if 'Ignore global settings' is enabled)",
 					)
-					.addToggle((toggle: any) =>
+					.addToggle((toggle) =>
 						toggle
 							.setValue(repo.escapeHashTags)
 							.onChange(async (value: boolean) => {

@@ -184,7 +184,7 @@ export class RepositoryRenderer {
 								repo.repository,
 								repo,
 								filtersProp,
-								textArea as HTMLTextAreaElement,
+								textArea,
 							);
 						}
 					}),
@@ -321,7 +321,7 @@ export class RepositoryRenderer {
 								repo.repository,
 								repo,
 								"prReviewerFilters",
-								textArea as HTMLTextAreaElement,
+								textArea,
 							);
 						}
 					}),
@@ -401,13 +401,7 @@ export class RepositoryRenderer {
 			| "assigned-to-specific"
 			| "unassigned"
 			| "any-assigned"
-		> =>
-			(repo[filterModesProp] as Array<
-				| "assigned-to-me"
-				| "assigned-to-specific"
-				| "unassigned"
-				| "any-assigned"
-			>) ?? [];
+		> => repo[filterModesProp] ?? [];
 
 		assigneeSpecificContainer.classList.toggle(
 			"github-issues-hidden",
@@ -429,7 +423,7 @@ export class RepositoryRenderer {
 								const idx = modes.indexOf(option.value);
 								if (idx >= 0) modes.splice(idx, 1);
 							}
-							(repo[filterModesProp] as any) = modes;
+							(repo as unknown as Record<string, unknown>)[filterModesProp] = modes;
 							assigneeSpecificContainer.classList.toggle(
 								"github-issues-hidden",
 								!modes.includes("assigned-to-specific"),
@@ -470,7 +464,7 @@ export class RepositoryRenderer {
 								repo.repository,
 								repo,
 								filtersProp,
-								textArea as HTMLTextAreaElement,
+								textArea,
 							);
 						}
 					}),

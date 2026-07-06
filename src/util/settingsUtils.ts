@@ -39,7 +39,7 @@ const PROFILE_MANAGED_FIELDS: (keyof RepositoryTracking)[] = [
 export function stripProfileFieldsFromRepo(
 	repo: RepositoryTracking,
 ): Partial<RepositoryTracking> {
-	const stripped: any = { ...repo };
+	const stripped: Record<string, unknown> = { ...repo };
 	for (const field of PROFILE_MANAGED_FIELDS) {
 		delete stripped[field];
 	}

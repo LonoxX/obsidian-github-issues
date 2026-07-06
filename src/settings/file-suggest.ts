@@ -3,10 +3,7 @@ import { App, AbstractInputSuggest, TAbstractFile } from "obsidian";
 export class FileSuggest extends AbstractInputSuggest<TAbstractFile> {
 	private inputElement: HTMLInputElement;
 
-	constructor(
-		app: App,
-		inputEl: HTMLInputElement,
-	) {
+	constructor(app: App, inputEl: HTMLInputElement) {
 		super(app, inputEl);
 		this.inputElement = inputEl;
 	}
@@ -18,7 +15,7 @@ export class FileSuggest extends AbstractInputSuggest<TAbstractFile> {
 
 		abstractFiles.forEach((file: TAbstractFile) => {
 			if (
-				file.path.endsWith('.md') &&
+				file.path.endsWith(".md") &&
 				file.path.toLowerCase().contains(lowerCaseInputStr)
 			) {
 				files.push(file);
@@ -37,14 +34,14 @@ export class FileSuggest extends AbstractInputSuggest<TAbstractFile> {
 			if (this.inputElement) {
 				this.inputElement.value = file.path;
 				// Trigger input event to notify onChange handlers
-				const event = new Event('input', { bubbles: true });
+				const event = new Event("input", { bubbles: true });
 				this.inputElement.dispatchEvent(event);
 				this.close();
 			} else {
-				console.error('FileSuggest: Input element is not available');
+				console.error("FileSuggest: Input element is not available");
 			}
 		} catch (error) {
-			console.error('FileSuggest: Error setting file value:', error);
+			console.error("FileSuggest: Error setting file value:", error);
 		}
 	}
 }

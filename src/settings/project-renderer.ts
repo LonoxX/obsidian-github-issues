@@ -64,16 +64,15 @@ export class ProjectRenderer {
 					button.setDisabled(true);
 					button.setButtonText("Loading...");
 					try {
-						const statusOptions =
-							await this.plugin.gitHubClient?.fetchProjectStatusOptions?.(
-								project.id,
-							);
+						const statusOptions = await this.plugin.providerRegistry
+							.get("github")
+							?.fetchProjectStatusOptions?.(project.id);
 						if (statusOptions) {
 							project.statusOptions = statusOptions;
 							// Update custom order if it exists
 							if (project.useCustomStatusOrder) {
 								project.customStatusOrder = statusOptions.map(
-									(opt: any) => opt.name,
+									(opt) => opt.name,
 								);
 							}
 							await this.plugin.saveSettings();
@@ -116,9 +115,7 @@ export class ProjectRenderer {
 			const emptyMessage = container.createEl("p", {
 				text: "No status columns found. Click 'Refresh from GitHub' to load.",
 			});
-			emptyMessage.style.color = "var(--text-muted)";
-			emptyMessage.style.fontStyle = "italic";
-			emptyMessage.style.padding = "8px";
+			emptyMessage.addClass("github-issues-status-empty");
 			return;
 		}
 
@@ -132,13 +129,13 @@ export class ProjectRenderer {
 			statusItem.draggable = true;
 
 			// Drag handle
-			const dragHandle = statusItem.createEl("span", {
+			const dragHandle = statusItem.createSpan({
 				cls: "github-issues-status-drag-handle",
 			});
 			setIcon(dragHandle, "grip-vertical");
 
 			// Status name
-			const statusName = statusItem.createEl("span", {
+			const statusName = statusItem.createSpan({
 				text: status,
 				cls: "github-issues-status-name",
 			});

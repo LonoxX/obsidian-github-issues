@@ -34,7 +34,7 @@ export class NoticeManager {
 			} else if (level === "warning") {
 				console.warn(prefix, message);
 			} else {
-				console.log(prefix, message);
+				console.debug(prefix, message);
 			}
 		}
 
@@ -77,7 +77,7 @@ export class NoticeManager {
 	/**
 	 * Show an error notice
 	 */
-	public error(message: string, error?: Error | unknown): void {
+	public error(message: string, error?: unknown): void {
 		let fullMessage = message;
 
 		if (error instanceof Error) {

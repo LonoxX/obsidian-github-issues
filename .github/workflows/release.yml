@@ -16,11 +16,11 @@ jobs:
             version: ${{ steps.version.outputs.version }}
 
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   fetch-depth: 0
             - name: Get next version
-              uses: thenativeweb/get-next-version@2.6.3
+              uses: thenativeweb/get-next-version@2.7.3
               id: version
 
     build-and-release:
@@ -29,14 +29,9 @@ jobs:
         if: needs.check-version.outputs.hasNextVersion == 'true'
 
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   fetch-depth: 0
-
-            - name: Use Node.js 22
-              uses: actions/setup-node@v2
-              with:
-                  node-version: "22"
 
             - name: Install Dependencies
               run: npm install

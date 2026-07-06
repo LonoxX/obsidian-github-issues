@@ -6,6 +6,82 @@ import {
 } from "../../types";
 import { NoticeManager } from "../../notice-manager";
 import { IssueProvider, ProviderId, ProviderExtraParams } from "../provider";
+import {
+	GitUser,
+	Issue,
+	IssueComment,
+	Label,
+	PullRequest,
+	RepositoryRef,
+} from "../domain";
+
+// --- Raw GitLab REST shapes (only the fields this provider reads) ---
+
+interface RawGitLabUser {
+	username?: string;
+	avatar_url?: string;
+	[key: string]: unknown;
+}
+
+interface RawGitLabIssue {
+	iid: number;
+	web_url?: string;
+	author?: RawGitLabUser;
+	assignees?: RawGitLabUser[];
+	labels?: string[];
+	description?: string | null;
+	state?: string;
+	created_at: string;
+	closed_at?: string | null;
+	title?: string;
+	[key: string]: unknown;
+}
+
+interface RawGitLabMergeRequest extends RawGitLabIssue {
+	reviewers?: RawGitLabUser[];
+	source_branch?: string;
+	target_branch?: string;
+	draft?: boolean;
+	work_in_progress?: boolean;
+	merged_at?: string | null;
+}
+
+interface RawGitLabNote {
+	id?: number;
+	system?: boolean;
+	body?: string;
+	author?: RawGitLabUser;
+	created_at: string;
+	updated_at?: string;
+	[key: string]: unknown;
+}
+
+interface RawGitLabProject {
+	id?: number;
+	path_with_namespace: string;
+	[key: string]: unknown;
+}
+
+interface RawGitLabLink {
+	iid: number;
+	title?: string;
+	state?: string;
+	web_url?: string;
+	link_type?: string;
+	[key: string]: unknown;
+}
+
+interface GitLabWorkItemNode {
+	iid?: string;
+	title?: string;
+	state?: string;
+	webUrl?: string;
+}
+
+interface GitLabWorkItemWidget {
+	children?: { nodes?: GitLabWorkItemNode[] };
+	parent?: GitLabWorkItemNode;
+}
 
 export class GitLabProvider implements IssueProvider {
 	readonly id: ProviderId;
@@ -178,16 +254,16 @@ export class GitLabProvider implements IssueProvider {
 	/**
 	 * Normalize a raw GitLab issue to match the common format
 	 */
-	private normalizeIssue(issue: any): any {
+	private normalizeIssue(issue: RawGitLabIssue): Issue {
 		return {
 			...issue,
 			html_url: issue.web_url,
 			number: issue.iid,
 			user: { login: issue.author?.username ?? "" },
-			assignees: (issue.assignees || []).map((a: any) => ({
+			assignees: (issue.assignees || []).map((a) => ({
 				login: a.username ?? "",
 			})),
-			labels: (issue.labels || []).map((l: string) => ({ name: l })),
+			labels: (issue.labels || []).map((l) => ({ name: l })),
 			body: issue.description,
 			state: issue.state === "opened" ? "open" : issue.state,
 		};
@@ -202,7 +278,7 @@ export class GitLabProvider implements IssueProvider {
 		includeClosed: boolean = false,
 		daysToKeepClosed: number = 30,
 		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+	): Promise<Issue[]> {
 		const projectPath = `${owner}/${repo}`;
 		const encodedId = this.projectApiId(
 			owner,
@@ -212,7 +288,7 @@ export class GitLabProvider implements IssueProvider {
 		const state = includeClosed ? "all" : "opened";
 
 		try {
-			const items = await this.fetchPaginated<any>(
+			const items = await this.fetchPaginated<RawGitLabIssue>(
 				`/projects/${encodedId}/issues`,
 				{ state },
 			);
@@ -221,20 +297,20 @@ export class GitLabProvider implements IssueProvider {
 				const cutoffDate = new Date();
 				cutoffDate.setDate(cutoffDate.getDate() - daysToKeepClosed);
 
-				const filtered = items.filter((issue: any) => {
+				const filtered = items.filter((issue) => {
 					if (issue.state === "opened") return true;
 					if (issue.closed_at) {
 						return new Date(issue.closed_at) > cutoffDate;
 					}
 					return false;
 				});
-				return filtered.map((issue: any) => this.normalizeIssue(issue));
+				return filtered.map((issue) => this.normalizeIssue(issue));
 			}
 
 			this.noticeManager.debug(
 				`Fetched ${items.length} issues for ${projectPath}`,
 			);
-			return items.map((issue: any) => this.normalizeIssue(issue));
+			return items.map((issue) => this.normalizeIssue(issue));
 		} catch (error) {
 			this.noticeManager.error(
 				`Error fetching issues for ${projectPath}`,
@@ -253,7 +329,7 @@ export class GitLabProvider implements IssueProvider {
 		includeClosed: boolean = false,
 		daysToKeepClosed: number = 30,
 		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+	): Promise<PullRequest[]> {
 		const projectPath = `${owner}/${repo}`;
 		const encodedId = this.projectApiId(
 			owner,
@@ -263,24 +339,24 @@ export class GitLabProvider implements IssueProvider {
 		const state = includeClosed ? "all" : "opened";
 
 		try {
-			const items = await this.fetchPaginated<any>(
+			const items = await this.fetchPaginated<RawGitLabMergeRequest>(
 				`/projects/${encodedId}/merge_requests`,
 				{ state },
 			);
 
 			// Normalize to common format
-			const normalized = items.map((mr: any) => ({
+			const normalized: PullRequest[] = items.map((mr) => ({
 				...mr,
 				html_url: mr.web_url,
 				number: mr.iid,
 				user: { login: mr.author?.username ?? "" },
-				assignees: (mr.assignees || []).map((a: any) => ({
+				assignees: (mr.assignees || []).map((a) => ({
 					login: a.username ?? "",
 				})),
-				requested_reviewers: (mr.reviewers || []).map((r: any) => ({
+				requested_reviewers: (mr.reviewers || []).map((r) => ({
 					login: r.username ?? "",
 				})),
-				labels: (mr.labels || []).map((l: string) => ({ name: l })),
+				labels: (mr.labels || []).map((l) => ({ name: l })),
 				body: mr.description,
 				state:
 					mr.state === "opened"
@@ -298,7 +374,7 @@ export class GitLabProvider implements IssueProvider {
 				const cutoffDate = new Date();
 				cutoffDate.setDate(cutoffDate.getDate() - daysToKeepClosed);
 
-				return normalized.filter((mr: any) => {
+				return normalized.filter((mr) => {
 					if (mr.state === "open" || mr.state === "opened")
 						return true;
 					const closedAt = mr.closed_at || mr.merged_at;
@@ -330,7 +406,7 @@ export class GitLabProvider implements IssueProvider {
 		repo: string,
 		issueIid: number,
 		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+	): Promise<IssueComment[]> {
 		const encodedId = this.projectApiId(
 			owner,
 			repo,
@@ -338,18 +414,18 @@ export class GitLabProvider implements IssueProvider {
 		);
 
 		try {
-			const notes = await this.fetchPaginated<any>(
+			const notes = await this.fetchPaginated<RawGitLabNote>(
 				`/projects/${encodedId}/issues/${issueIid}/notes`,
 			);
 
 			// Filter out system notes (events like "closed the issue")
-			const userNotes = notes.filter((note: any) => !note.system);
+			const userNotes = notes.filter((note) => !note.system);
 
 			// Normalize to common comment format
-			return userNotes.map((note: any) => ({
+			return userNotes.map((note) => ({
 				id: note.id,
 				body: note.body,
-				user: { login: note.author.username },
+				user: { login: note.author?.username ?? "" },
 				created_at: note.created_at,
 				updated_at: note.updated_at,
 			}));
@@ -370,7 +446,7 @@ export class GitLabProvider implements IssueProvider {
 		repo: string,
 		mrIid: number,
 		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+	): Promise<IssueComment[]> {
 		const encodedId = this.projectApiId(
 			owner,
 			repo,
@@ -378,18 +454,18 @@ export class GitLabProvider implements IssueProvider {
 		);
 
 		try {
-			const notes = await this.fetchPaginated<any>(
+			const notes = await this.fetchPaginated<RawGitLabNote>(
 				`/projects/${encodedId}/merge_requests/${mrIid}/notes`,
 			);
 
 			// Filter out system notes
-			const userNotes = notes.filter((note: any) => !note.system);
+			const userNotes = notes.filter((note) => !note.system);
 
 			// Normalize to common comment format
-			return userNotes.map((note: any) => ({
+			return userNotes.map((note) => ({
 				id: note.id,
 				body: note.body,
-				user: { login: note.author.username },
+				user: { login: note.author?.username ?? "" },
 				created_at: note.created_at,
 				updated_at: note.updated_at,
 			}));
@@ -409,7 +485,7 @@ export class GitLabProvider implements IssueProvider {
 		owner: string,
 		repo: string,
 		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+	): Promise<Label[]> {
 		const projectPath = `${owner}/${repo}`;
 		const encodedId = this.projectApiId(
 			owner,
@@ -418,7 +494,7 @@ export class GitLabProvider implements IssueProvider {
 		);
 
 		try {
-			const labels = await this.fetchPaginated<any>(
+			const labels = await this.fetchPaginated<Label>(
 				`/projects/${encodedId}/labels`,
 			);
 
@@ -442,7 +518,7 @@ export class GitLabProvider implements IssueProvider {
 		owner: string,
 		repo: string,
 		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+	): Promise<GitUser[]> {
 		const projectPath = `${owner}/${repo}`;
 		const encodedId = this.projectApiId(
 			owner,
@@ -451,13 +527,13 @@ export class GitLabProvider implements IssueProvider {
 		);
 
 		try {
-			const members = await this.fetchPaginated<any>(
+			const members = await this.fetchPaginated<RawGitLabUser>(
 				`/projects/${encodedId}/members/all`,
 			);
 
 			// Normalize to common collaborator format
-			return members.map((member: any) => ({
-				login: member.username,
+			return members.map((member) => ({
+				login: member.username ?? "",
 				avatar_url: member.avatar_url,
 				type: "User",
 			}));
@@ -473,17 +549,18 @@ export class GitLabProvider implements IssueProvider {
 	/**
 	 * Fetch available repositories (projects) for the authenticated user
 	 */
-	public async fetchAvailableRepositories(): Promise<
-		{ owner: { login: string }; name: string; id?: number }[]
-	> {
+	public async fetchAvailableRepositories(): Promise<RepositoryRef[]> {
 		try {
 			this.noticeManager.debug("Fetching projects from GitLab");
-			const projects = await this.fetchPaginated<any>("/projects", {
-				membership: "true",
-				order_by: "last_activity_at",
-			});
+			const projects = await this.fetchPaginated<RawGitLabProject>(
+				"/projects",
+				{
+					membership: "true",
+					order_by: "last_activity_at",
+				},
+			);
 
-			return projects.map((p: any) => {
+			return projects.map((p) => {
 				const parts = p.path_with_namespace.split("/");
 				const name = parts[parts.length - 1];
 				const ownerPath = parts.slice(0, -1).join("/");
@@ -510,7 +587,7 @@ export class GitLabProvider implements IssueProvider {
 		repo: string,
 		issueIid: number,
 		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+	): Promise<Issue[]> {
 		// Try GraphQL work item hierarchy first (GitLab 15.3+)
 		try {
 			const children = await this.fetchChildWorkItems(
@@ -536,19 +613,19 @@ export class GitLabProvider implements IssueProvider {
 		);
 
 		try {
-			const links = await this.fetchPaginated<any>(
+			const links = await this.fetchPaginated<RawGitLabLink>(
 				`/projects/${encodedId}/issues/${issueIid}/links`,
 			);
 
 			const children = links.filter(
-				(link: any) => link.link_type !== "is_blocked_by",
+				(link) => link.link_type !== "is_blocked_by",
 			);
 
 			this.noticeManager.debug(
 				`Found ${children.length} child issues for #${issueIid} (of ${links.length} total links)`,
 			);
 
-			return children.map((link: any) => ({
+			return children.map((link) => ({
 				number: link.iid,
 				title: link.title,
 				state: link.state === "opened" ? "open" : link.state,
@@ -570,7 +647,7 @@ export class GitLabProvider implements IssueProvider {
 		owner: string,
 		repo: string,
 		issueIid: number,
-	): Promise<any[] | null> {
+	): Promise<Issue[] | null> {
 		const token = this.tokenGetter();
 		if (!token) return null;
 
@@ -643,16 +720,16 @@ export class GitLabProvider implements IssueProvider {
 		if (childResponse.status < 200 || childResponse.status >= 300)
 			return null;
 
-		const widgets = childResponse.json?.data?.workItem?.widgets;
+		const widgets = childResponse.json?.data?.workItem?.widgets as
+			| GitLabWorkItemWidget[]
+			| undefined;
 		if (!widgets) return null;
 
-		const hierarchyWidget = widgets.find(
-			(w: any) => w.children !== undefined,
-		);
+		const hierarchyWidget = widgets.find((w) => w.children !== undefined);
 		if (!hierarchyWidget?.children?.nodes) return null;
 
-		return hierarchyWidget.children.nodes.map((child: any) => ({
-			number: parseInt(child.iid, 10),
+		return hierarchyWidget.children.nodes.map((child) => ({
+			number: parseInt(child.iid ?? "", 10),
 			title: child.title,
 			state: child.state === "OPEN" ? "open" : "closed",
 			url: child.webUrl,
@@ -668,7 +745,7 @@ export class GitLabProvider implements IssueProvider {
 		repo: string,
 		issueIid: number,
 		extra?: ProviderExtraParams,
-	): Promise<any | null> {
+	): Promise<Issue | null> {
 		// Try GraphQL work item hierarchy first (GitLab 15.3+)
 		try {
 			const parent = await this.fetchParentWorkItem(
@@ -696,12 +773,12 @@ export class GitLabProvider implements IssueProvider {
 		);
 
 		try {
-			const links = await this.fetchPaginated<any>(
+			const links = await this.fetchPaginated<RawGitLabLink>(
 				`/projects/${encodedId}/issues/${issueIid}/links`,
 			);
 
 			const parent = links.find(
-				(link: any) => link.link_type === "is_blocked_by",
+				(link) => link.link_type === "is_blocked_by",
 			);
 
 			if (parent) {
@@ -733,7 +810,7 @@ export class GitLabProvider implements IssueProvider {
 		owner: string,
 		repo: string,
 		issueIid: number,
-	): Promise<any | undefined> {
+	): Promise<Issue | null | undefined> {
 		const token = this.tokenGetter();
 		if (!token) return undefined;
 
@@ -805,17 +882,18 @@ export class GitLabProvider implements IssueProvider {
 		if (parentResponse.status < 200 || parentResponse.status >= 300)
 			return undefined;
 
-		const widgets = parentResponse.json?.data?.workItem?.widgets;
+		const widgets = parentResponse.json?.data?.workItem
+			?.widgets as GitLabWorkItemWidget[] | undefined;
 		if (!widgets) return undefined;
 
 		const hierarchyWidget = widgets.find(
-			(w: any) => w.parent !== undefined,
+			(w) => w.parent !== undefined,
 		);
 		if (!hierarchyWidget?.parent) return null;
 
 		const p = hierarchyWidget.parent;
 		return {
-			number: parseInt(p.iid, 10),
+			number: parseInt(p.iid ?? "0", 10),
 			title: p.title,
 			state: p.state === "OPEN" ? "open" : "closed",
 			url: p.webUrl,
@@ -844,7 +922,7 @@ export class GitLabProvider implements IssueProvider {
 			if (response.status >= 200 && response.status < 300) {
 				return response.json.id as number;
 			}
-		} catch (error) {
+		} catch {
 			this.noticeManager.debug(
 				`Could not resolve project ID for ${owner}/${repo}`,
 			);

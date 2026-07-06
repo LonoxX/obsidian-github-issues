@@ -11,6 +11,14 @@ import { Octokit } from "octokit";
 import { NoticeManager } from "../../notice-manager";
 import { IssueProvider, ProviderId, ProviderExtraParams } from "../provider";
 import {
+	GitUser,
+	Issue,
+	IssueComment,
+	Label,
+	ProjectItem,
+	PullRequest,
+} from "../domain";
+import {
 	GET_ITEM_PROJECT_DATA,
 	GET_ITEMS_PROJECT_DATA_BATCH,
 	GET_REPOSITORY_PROJECTS,
@@ -20,6 +28,13 @@ import {
 	GET_PROJECT_FIELDS,
 	parseItemProjectData,
 	ProjectItemData,
+	ItemProjectDataResponse,
+	ItemsBatchResponse,
+	UserProjectsResponse,
+	OrgProjectsResponse,
+	RepoProjectsResponse,
+	ProjectItemsResponse,
+	ProjectFieldsResponse,
 } from "./github-graphql";
 
 export class GitHubProvider implements IssueProvider {
@@ -120,14 +135,14 @@ export class GitHubProvider implements IssueProvider {
 		repo: string,
 		includeClosed: boolean = false,
 		daysToKeepClosed: number = 30,
-		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+		_extra?: ProviderExtraParams,
+	): Promise<Issue[]> {
 		if (!this.octokit) {
 			return [];
 		}
 
 		try {
-			let allItems: any[] = [];
+			let allItems: Issue[] = [];
 			let page = 1;
 			let hasMorePages = true;
 			const state = includeClosed ? "all" : "open";
@@ -141,8 +156,8 @@ export class GitHubProvider implements IssueProvider {
 				});
 
 				const issuesOnly = response.data.filter(
-					(item: any) => !item.pull_request,
-				);
+					(item) => !item.pull_request,
+				) as unknown as Issue[];
 				allItems = [...allItems, ...issuesOnly];
 
 				hasMorePages = response.data.length === 100;
@@ -185,14 +200,14 @@ export class GitHubProvider implements IssueProvider {
 		repo: string,
 		includeClosed: boolean = false,
 		daysToKeepClosed: number = 30,
-		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+		_extra?: ProviderExtraParams,
+	): Promise<PullRequest[]> {
 		if (!this.octokit) {
 			return [];
 		}
 
 		try {
-			let allItems: any[] = [];
+			let allItems: PullRequest[] = [];
 			let page = 1;
 			let hasMorePages = true;
 			const state = includeClosed ? "all" : "open";
@@ -208,7 +223,10 @@ export class GitHubProvider implements IssueProvider {
 					sort: "updated",
 				});
 
-				allItems = [...allItems, ...response.data];
+				allItems = [
+					...allItems,
+					...(response.data as unknown as PullRequest[]),
+				];
 				hasMorePages = response.data.length === 100;
 				page++;
 			}
@@ -244,7 +262,10 @@ export class GitHubProvider implements IssueProvider {
 	/**
 	 * Check if a pull request is opened by a specific user
 	 */
-	public isPullRequestByUser(pullRequest: any, username: string): boolean {
+	public isPullRequestByUser(
+		pullRequest: PullRequest,
+		username: string,
+	): boolean {
 		if (!pullRequest || !pullRequest.user) {
 			return false;
 		}
@@ -360,14 +381,14 @@ export class GitHubProvider implements IssueProvider {
 		owner: string,
 		repo: string,
 		issueNumber: number,
-		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+		_extra?: ProviderExtraParams,
+	): Promise<IssueComment[]> {
 		if (!this.octokit) {
 			return [];
 		}
 
 		try {
-			let allComments: any[] = [];
+			let allComments: IssueComment[] = [];
 			let page = 1;
 			let hasMorePages = true;
 
@@ -407,8 +428,8 @@ export class GitHubProvider implements IssueProvider {
 		owner: string,
 		repo: string,
 		prNumber: number,
-		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+		_extra?: ProviderExtraParams,
+	): Promise<IssueComment[]> {
 		if (!this.octokit) {
 			return [];
 		}
@@ -420,7 +441,7 @@ export class GitHubProvider implements IssueProvider {
 				prNumber,
 			);
 
-			let allReviewComments: any[] = [];
+			let allReviewComments: IssueComment[] = [];
 			let page = 1;
 			let hasMorePages = true;
 
@@ -434,7 +455,10 @@ export class GitHubProvider implements IssueProvider {
 						page,
 					});
 
-				allReviewComments = [...allReviewComments, ...response.data];
+				allReviewComments = [
+					...allReviewComments,
+					...(response.data as unknown as IssueComment[]),
+				];
 				hasMorePages = response.data.length === 100;
 				page++;
 			}
@@ -463,14 +487,14 @@ export class GitHubProvider implements IssueProvider {
 	public async fetchRepositoryLabels(
 		owner: string,
 		repo: string,
-		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+		_extra?: ProviderExtraParams,
+	): Promise<Label[]> {
 		if (!this.octokit) {
 			return [];
 		}
 
 		try {
-			let allLabels: any[] = [];
+			let allLabels: Label[] = [];
 			let page = 1;
 			let hasMorePages = true;
 
@@ -483,7 +507,10 @@ export class GitHubProvider implements IssueProvider {
 						page,
 					});
 
-				allLabels = [...allLabels, ...response.data];
+				allLabels = [
+					...allLabels,
+					...(response.data as unknown as Label[]),
+				];
 				hasMorePages = response.data.length === 100;
 				page++;
 			}
@@ -507,14 +534,14 @@ export class GitHubProvider implements IssueProvider {
 	public async fetchRepositoryCollaborators(
 		owner: string,
 		repo: string,
-		extra?: ProviderExtraParams,
-	): Promise<any[]> {
+		_extra?: ProviderExtraParams,
+	): Promise<GitUser[]> {
 		if (!this.octokit) {
 			return [];
 		}
 
 		try {
-			let allCollaborators: any[] = [];
+			let allCollaborators: GitUser[] = [];
 			let page = 1;
 			let hasMorePages = true;
 
@@ -527,7 +554,10 @@ export class GitHubProvider implements IssueProvider {
 						page,
 					});
 
-				allCollaborators = [...allCollaborators, ...response.data];
+				allCollaborators = [
+					...allCollaborators,
+					...(response.data as unknown as GitUser[]),
+				];
 				hasMorePages = response.data.length === 100;
 				page++;
 			}
@@ -536,10 +566,10 @@ export class GitHubProvider implements IssueProvider {
 				`Fetched ${allCollaborators.length} collaborators for ${owner}/${repo}`,
 			);
 			return allCollaborators;
-		} catch (error) {
+		} catch {
 			// If collaborators endpoint fails (permissions), try contributors as fallback
 			try {
-				let allContributors: any[] = [];
+				let allContributors: GitUser[] = [];
 				let page = 1;
 				let hasMorePages = true;
 
@@ -552,7 +582,10 @@ export class GitHubProvider implements IssueProvider {
 							page,
 						});
 
-					allContributors = [...allContributors, ...response.data];
+					allContributors = [
+						...allContributors,
+						...(response.data as unknown as GitUser[]),
+					];
 					hasMorePages = response.data.length === 100;
 					page++;
 				}
@@ -592,7 +625,7 @@ export class GitHubProvider implements IssueProvider {
 				scopes,
 				user: response.data.login,
 			};
-		} catch (error) {
+		} catch {
 			return { valid: false, scopes: [] };
 		}
 	}
@@ -616,7 +649,7 @@ export class GitHubProvider implements IssueProvider {
 				limit: response.data.rate.limit,
 				reset: new Date(response.data.rate.reset * 1000),
 			};
-		} catch (error) {
+		} catch {
 			return null;
 		}
 	}
@@ -632,8 +665,9 @@ export class GitHubProvider implements IssueProvider {
 		}
 
 		try {
-			const response: any = await this.octokit.graphql(
-				GET_ITEM_PROJECT_DATA,
+			const response =
+				await this.octokit.graphql<ItemProjectDataResponse>(
+					GET_ITEM_PROJECT_DATA,
 				{
 					nodeId,
 				},
@@ -672,8 +706,9 @@ export class GitHubProvider implements IssueProvider {
 			const batch = nodeIds.slice(i, i + batchSize);
 
 			try {
-				const response: any = await this.octokit.graphql(
-					GET_ITEMS_PROJECT_DATA_BATCH,
+				const response =
+					await this.octokit.graphql<ItemsBatchResponse>(
+						GET_ITEMS_PROJECT_DATA_BATCH,
 					{ nodeIds: batch },
 				);
 
@@ -783,8 +818,9 @@ export class GitHubProvider implements IssueProvider {
 				let cursor: string | null = null;
 
 				while (hasNextPage) {
-					const userResponse: any = await this.octokit.graphql(
-						GET_USER_PROJECTS,
+					const userResponse: UserProjectsResponse =
+						await this.octokit.graphql<UserProjectsResponse>(
+							GET_USER_PROJECTS,
 						{
 							user: user,
 							first: 50,
@@ -845,7 +881,7 @@ export class GitHubProvider implements IssueProvider {
 						let cursor: string | null = null;
 
 						while (hasNextPage) {
-							const orgResponse: any = await this.octokit.graphql(
+							const orgResponse: OrgProjectsResponse = await this.octokit.graphql<OrgProjectsResponse>(
 								GET_ORGANIZATION_PROJECTS,
 								{
 									org: org.login,
@@ -917,8 +953,9 @@ export class GitHubProvider implements IssueProvider {
 			let cursor: string | null = null;
 
 			while (hasNextPage) {
-				const response: any = await this.octokit.graphql(
-					GET_REPOSITORY_PROJECTS,
+				const response: RepoProjectsResponse =
+					await this.octokit.graphql<RepoProjectsResponse>(
+						GET_REPOSITORY_PROJECTS,
 					{
 						owner,
 						repo,
@@ -953,8 +990,9 @@ export class GitHubProvider implements IssueProvider {
 				cursor = null;
 
 				while (hasNextPage) {
-					const orgResponse: any = await this.octokit.graphql(
-						GET_ORGANIZATION_PROJECTS,
+					const orgResponse: OrgProjectsResponse =
+						await this.octokit.graphql<OrgProjectsResponse>(
+							GET_ORGANIZATION_PROJECTS,
 						{
 							org: owner,
 							first: 50,
@@ -995,8 +1033,9 @@ export class GitHubProvider implements IssueProvider {
 				cursor = null;
 
 				while (hasNextPage) {
-					const userResponse: any = await this.octokit.graphql(
-						GET_USER_PROJECTS,
+					const userResponse: UserProjectsResponse =
+						await this.octokit.graphql<UserProjectsResponse>(
+							GET_USER_PROJECTS,
 						{
 							user: owner,
 							first: 50,
@@ -1057,19 +1096,20 @@ export class GitHubProvider implements IssueProvider {
 	/**
 	 * Fetch all items for a specific project
 	 */
-	public async fetchProjectItems(projectId: string): Promise<any[]> {
+	public async fetchProjectItems(projectId: string): Promise<ProjectItem[]> {
 		if (!this.octokit) {
 			return [];
 		}
 
 		try {
-			let allItems: any[] = [];
+			let allItems: ProjectItem[] = [];
 			let hasNextPage = true;
 			let cursor: string | null = null;
 
 			while (hasNextPage) {
-				const response: any = await this.octokit.graphql(
-					GET_PROJECT_ITEMS,
+				const response: ProjectItemsResponse =
+					await this.octokit.graphql<ProjectItemsResponse>(
+						GET_PROJECT_ITEMS,
 					{
 						projectId,
 						first: 50,
@@ -1110,8 +1150,9 @@ export class GitHubProvider implements IssueProvider {
 		}
 
 		try {
-			const response: any = await this.octokit.graphql(
-				GET_PROJECT_FIELDS,
+			const response =
+				await this.octokit.graphql<ProjectFieldsResponse>(
+					GET_PROJECT_FIELDS,
 				{
 					projectId,
 				},
@@ -1124,7 +1165,7 @@ export class GitHubProvider implements IssueProvider {
 			// Find the Status field (SingleSelectField with name "Status")
 			for (const field of response.node.fields.nodes) {
 				if (field.name === "Status" && field.options) {
-					return field.options.map((opt: any) => ({
+					return field.options.map((opt) => ({
 						id: opt.id,
 						name: opt.name,
 						color: opt.color,
@@ -1150,13 +1191,13 @@ export class GitHubProvider implements IssueProvider {
 		owner: string,
 		repo: string,
 		issueNumber: number,
-	): Promise<any[]> {
+	): Promise<Issue[]> {
 		if (!this.octokit) {
 			return [];
 		}
 
 		try {
-			let allSubIssues: any[] = [];
+			let allSubIssues: Issue[] = [];
 			let page = 1;
 			let hasMorePages = true;
 
@@ -1172,7 +1213,10 @@ export class GitHubProvider implements IssueProvider {
 					},
 				);
 
-				allSubIssues = [...allSubIssues, ...response.data];
+				allSubIssues = [
+					...allSubIssues,
+					...(response.data as unknown as Issue[]),
+				];
 				hasMorePages = response.data.length === 100;
 				page++;
 			}
@@ -1181,13 +1225,14 @@ export class GitHubProvider implements IssueProvider {
 				`Fetched ${allSubIssues.length} sub-issues for issue #${issueNumber}`,
 			);
 			return allSubIssues;
-		} catch (error: any) {
+		} catch (error: unknown) {
 			// 404 means no sub-issues or feature not available
-			if (error.status === 404) {
+			const err = error as { status?: number; message?: string };
+			if (err.status === 404) {
 				return [];
 			}
 			this.noticeManager.debug(
-				`Error fetching sub-issues for issue #${issueNumber}: ${error.message}`,
+				`Error fetching sub-issues for issue #${issueNumber}: ${err.message}`,
 			);
 			return [];
 		}
@@ -1201,7 +1246,7 @@ export class GitHubProvider implements IssueProvider {
 		owner: string,
 		repo: string,
 		issueNumber: number,
-	): Promise<any | null> {
+	): Promise<Issue | null> {
 		if (!this.octokit) {
 			return null;
 		}
@@ -1219,14 +1264,15 @@ export class GitHubProvider implements IssueProvider {
 			this.noticeManager.debug(
 				`Found parent issue #${response.data.number} for issue #${issueNumber}`,
 			);
-			return response.data;
-		} catch (error: any) {
+			return response.data as unknown as Issue;
+		} catch (error: unknown) {
 			// 404 means no parent issue
-			if (error.status === 404) {
+			const err = error as { status?: number; message?: string };
+			if (err.status === 404) {
 				return null;
 			}
 			this.noticeManager.debug(
-				`Error fetching parent issue for #${issueNumber}: ${error.message}`,
+				`Error fetching parent issue for #${issueNumber}: ${err.message}`,
 			);
 			return null;
 		}

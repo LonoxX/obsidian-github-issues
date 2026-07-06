@@ -5,23 +5,11 @@ import {
 	PluginSettingTab,
 	Setting,
 	setIcon,
-	TextComponent,
-	TFolder,
-	AbstractInputSuggest,
-	TAbstractFile,
 	SecretComponent,
 } from "obsidian";
-import {
-	RepositoryTracking,
-	DEFAULT_REPOSITORY_TRACKING,
-	TrackedProject,
-	ProviderConfig,
-	ProviderId,
-	ProviderType,
-} from "./types";
+import { ProviderConfig, ProviderId, ProviderType, ProjectStatusOption } from "./types";
+import { RepositoryRef } from "./providers/domain";
 import IssueTrackerPlugin from "./main";
-import { FolderSuggest } from "./settings/folder-suggest";
-import { FileSuggest } from "./settings/file-suggest";
 import { RepositoryRenderer } from "./settings/repository-renderer";
 import { UIHelpers } from "./settings/ui-helpers";
 import { RepositoryListManager } from "./settings/repository-list-manager";
@@ -123,17 +111,23 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		this.projectRenderer = new ProjectRenderer(this.app, this.plugin);
 		this.profileRenderer = new ProfileRenderer(this.app, this.plugin);
 	}
-	async display(): Promise<void> {
+	display(): void {
+		void this.renderSettings();
+	}
+
+	private async renderSettings(): Promise<void> {
 		const { containerEl } = this;
 
 		containerEl.empty();
 		containerEl.addClass("github-issues");
 
 		// Header
-		const headerEl = containerEl.createEl("div", {
+		const headerEl = containerEl.createDiv({
 			cls: "github-issues-settings-header",
 		});
-		headerEl.createEl("h2", { text: "Git Issues & Pull Requests" });
+		new Setting(headerEl)
+			.setName("Git Issues & Pull Requests")
+			.setHeading();
 
 		const subtitleContainer = headerEl.createDiv({
 			cls: "github-issues-settings-subtitle",
@@ -253,7 +247,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		const syncContainer = containerEl.createDiv(
 			"github-issues-settings-group",
 		);
-		new Setting(syncContainer).setName("Sync Settings").setHeading();
+		new Setting(syncContainer).setName("Sync").setHeading();
 
 		new Setting(syncContainer)
 			.setName("Sync on startup")
@@ -355,9 +349,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		const advancedContainer = containerEl.createDiv(
 			"github-issues-settings-group",
 		);
-		new Setting(advancedContainer)
-			.setName("Advanced Settings")
-			.setHeading();
+		new Setting(advancedContainer).setName("Advanced").setHeading();
 
 		new Setting(advancedContainer)
 			.setName("Date format")
@@ -421,11 +413,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 							continueButton.setText("Continue");
 							continueButton.addClass("mod-warning");
 							continueButton.onclick = async () => {
-								this.plugin.settings.escapeMode = value as
-									| "disabled"
-									| "normal"
-									| "strict"
-									| "veryStrict";
+								this.plugin.settings.escapeMode = value;
 								await this.plugin.saveSettings();
 								modal.close();
 							};
@@ -736,22 +724,19 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			"github-issues-load-repos-container",
 		);
 
-		const projectsLoadDescription = loadProjectsButtonContainer.createEl(
-			"p",
-			{
-				text: "Load your GitHub Projects to add them to tracking.",
-				cls: "github-issues-load-description",
-			},
-		);
+		loadProjectsButtonContainer.createEl("p", {
+			text: "Load your GitHub Projects to add them to tracking.",
+			cls: "github-issues-load-description",
+		});
 
 		const loadProjectsButton =
 			loadProjectsButtonContainer.createEl("button");
 		loadProjectsButton.addClass("github-issues-action-button");
-		const projectsButtonIcon = loadProjectsButton.createEl("span", {
+		const projectsButtonIcon = loadProjectsButton.createSpan({
 			cls: "github-issues-button-icon",
 		});
 		setIcon(projectsButtonIcon, "download");
-		loadProjectsButton.createEl("span", { text: "Load Projects" });
+		loadProjectsButton.createSpan({ text: "Load Projects" });
 
 		const projectsResultsContainer = availableProjectsContent.createDiv(
 			"github-issues-repos-results-container",
@@ -830,9 +815,9 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			"github-issues-manual-add-header",
 		);
 
-		const addRepoHeading = manualAddHeaderContainer.createEl("h4", {
-			text: "Add Repository Manually",
-		});
+		new Setting(manualAddHeaderContainer)
+			.setName("Add Repository Manually")
+			.setHeading();
 
 		const addForm = manualAddContainer.createDiv(
 			"github-issues-manual-add-form",
@@ -855,7 +840,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		const profileSelectContainer = addForm.createDiv(
 			"github-issues-profile-select-container",
 		);
-		const profileLabel = profileSelectContainer.createEl("label", {
+		profileSelectContainer.createEl("label", {
 			text: "Profile: ",
 			cls: "github-issues-profile-select-label",
 		});
@@ -1034,7 +1019,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			"github-issues-load-repos-container",
 		);
 
-		const loadDescription = loadButtonContainer.createEl("p", {
+		loadButtonContainer.createEl("p", {
 			text: "Load your repositories from a provider to add them to tracking.",
 			cls: "github-issues-load-description",
 		});
@@ -1066,11 +1051,11 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 
 		const loadButton = loadButtonContainer.createEl("button");
 		loadButton.addClass("github-issues-action-button");
-		const buttonIcon = loadButton.createEl("span", {
+		const buttonIcon = loadButton.createSpan({
 			cls: "github-issues-button-icon",
 		});
 		setIcon(buttonIcon, "download");
-		loadButton.createEl("span", { text: "Load Repositories" });
+		loadButton.createSpan({ text: "Load Repositories" });
 
 		const reposResultsContainer = availableReposContent.createDiv(
 			"github-issues-repos-results-container",
@@ -1331,7 +1316,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 
 			const reposByOwner: Record<
 				string,
-				{ owner: string; repos: any[] }
+				{ owner: string; repos: RepositoryRef[] }
 			> = {};
 
 			// Sort and group repositories by owner
@@ -1362,15 +1347,15 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 				const ownerHeader = ownerContainer.createDiv(
 					"github-issues-repo-owner-header",
 				);
-				const ownerIcon = ownerHeader.createEl("span", {
+				const ownerIcon = ownerHeader.createSpan({
 					cls: "github-issues-repo-owner-icon",
 				});
 				setIcon(ownerIcon, "user");
-				ownerHeader.createEl("span", {
+				ownerHeader.createSpan({
 					cls: "github-issues-repo-owner-name",
 					text: ownerName,
 				});
-				ownerHeader.createEl("span", {
+				ownerHeader.createSpan({
 					cls: "github-issues-repo-count",
 					text: ownerData.repos.length.toString(),
 				});
@@ -1425,7 +1410,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 						repoIcon,
 						providerId === "gitlab" ? "gitlab" : "github",
 					);
-					const repoText = repoInfoContainer.createEl("span");
+					const repoText = repoInfoContainer.createSpan();
 					repoText.setText(repo.name);
 					repoText.addClass("github-issues-repo-name");
 
@@ -1435,11 +1420,11 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 
 					if (!isTracked) {
 						const addButton = actionContainer.createEl("button");
-						const addIcon = addButton.createEl("span", {
+						addButton.createSpan({
 							cls: "github-issues-button-icon",
 							text: "+",
 						});
-						addButton.createEl("span", {
+						addButton.createSpan({
 							cls: "github-issues-button-text",
 							text: "Add",
 						});
@@ -1458,8 +1443,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 							const trackedContainer = actionContainer.createDiv(
 								"github-issues-tracked-container",
 							);
-							const trackedText =
-								trackedContainer.createEl("span");
+							const trackedText = trackedContainer.createSpan();
 							trackedText.setText("Tracked");
 							trackedText.addClass("github-issues-info-text");
 							this.display();
@@ -1476,7 +1460,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 						const trackedContainer = actionContainer.createDiv(
 							"github-issues-tracked-container",
 						);
-						const trackedText = trackedContainer.createEl("span");
+						const trackedText = trackedContainer.createSpan();
 						trackedText.setText("Tracked");
 						trackedText.addClass("github-issues-info-text");
 					}
@@ -1578,13 +1562,6 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			const repos =
 				await this.plugin.fetchAvailableRepositories(providerId);
 
-			const untrackedRepos = repos.filter((repo) => {
-				const repoName = `${repo.owner.login}/${repo.name}`;
-				return !this.plugin.settings.repositories.some(
-					(r) => r.repository === repoName,
-				);
-			});
-
 			container.empty();
 
 			// Per-repo profile selections
@@ -1641,35 +1618,35 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 				"github-issues-selection-controls",
 			);
 			const selectAllButton = selectionControls.createEl("button");
-			const selectAllIcon = selectAllButton.createEl("span", {
+			const selectAllIcon = selectAllButton.createSpan({
 				cls: "github-issues-button-icon",
 			});
 			setIcon(selectAllIcon, "check");
-			selectAllButton.createEl("span", {
+			selectAllButton.createSpan({
 				cls: "github-issues-button-text",
 				text: "Select all",
 			});
 			selectAllButton.addClass("github-issues-select-all-button");
 			const selectNoneButton = selectionControls.createEl("button");
-			const selectNoneIcon = selectNoneButton.createEl("span", {
+			const selectNoneIcon = selectNoneButton.createSpan({
 				cls: "github-issues-button-icon",
 			});
 			setIcon(selectNoneIcon, "x");
-			selectNoneButton.createEl("span", {
+			selectNoneButton.createSpan({
 				cls: "github-issues-button-text",
 				text: "Select none",
 			});
 			selectNoneButton.addClass("github-issues-select-none-button");
 			const addSelectedButton = bulkActionsContainer.createEl("button");
-			addSelectedButton.createEl("span", {
+			addSelectedButton.createSpan({
 				cls: "github-issues-button-icon",
 				text: "+",
 			});
-			const buttonTextContainer = addSelectedButton.createEl("span", {
+			const buttonTextContainer = addSelectedButton.createSpan({
 				cls: "github-issues-button-text",
 			});
 			buttonTextContainer.setText("Add Selected (");
-			buttonTextContainer.createEl("span", {
+			buttonTextContainer.createSpan({
 				cls: "selected-count",
 				text: "0",
 			});
@@ -1696,7 +1673,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 
 			const reposByOwner: Record<
 				string,
-				{ owner: string; repos: any[] }
+				{ owner: string; repos: RepositoryRef[] }
 			> = {};
 			for (const repo of repos) {
 				const ownerName = repo.owner.login;
@@ -1712,6 +1689,17 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			const sortedOwners = Object.keys(reposByOwner).sort();
 
 			const updateSelectionUI = () => {
+				repoListContainer
+					.querySelectorAll(".github-issues-item")
+					.forEach((item) => {
+						const cb = item.querySelector<HTMLInputElement>(
+							".github-issues-checkbox",
+						);
+						item.classList.toggle(
+							"github-issues-item-selected",
+							!!cb?.checked,
+						);
+					});
 				const selectedCount = this.selectedRepositories.size;
 				const selectedCountSpan = addSelectedButton.querySelector(
 					".selected-count",
@@ -1749,20 +1737,20 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 				);
 
 				// Chevron icon for collapse/expand
-				const chevronIcon = ownerHeader.createEl("span", {
+				const chevronIcon = ownerHeader.createSpan({
 					cls: "github-issues-repo-owner-chevron",
 				});
 				setIcon(chevronIcon, "chevron-right");
 
-				const ownerIcon = ownerHeader.createEl("span", {
+				const ownerIcon = ownerHeader.createSpan({
 					cls: "github-issues-repo-owner-icon",
 				});
 				setIcon(ownerIcon, "user");
-				ownerHeader.createEl("span", {
+				ownerHeader.createSpan({
 					cls: "github-issues-repo-owner-name",
 					text: ownerName,
 				});
-				ownerHeader.createEl("span", {
+				ownerHeader.createSpan({
 					cls: "github-issues-repo-count",
 					text: ownerData.repos.length.toString(),
 				});
@@ -1845,7 +1833,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 						providerId === "gitlab" ? "gitlab" : "github",
 					);
 
-					const repoText = repoInfoContainer.createEl("span");
+					const repoText = repoInfoContainer.createSpan();
 					repoText.setText(repo.name);
 					repoText.addClass("github-issues-repo-name");
 
@@ -1856,7 +1844,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 						const trackedContainer = actionContainer.createDiv(
 							"github-issues-tracked-container",
 						);
-						const trackedText = trackedContainer.createEl("span");
+						const trackedText = trackedContainer.createSpan();
 						trackedText.setText("Tracked");
 						trackedText.addClass("github-issues-info-text");
 					} else {
@@ -1893,15 +1881,15 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			);
 			stickyFooter.addClass("github-issues-hidden");
 			const stickyAddButton = stickyFooter.createEl("button");
-			stickyAddButton.createEl("span", {
+			stickyAddButton.createSpan({
 				cls: "github-issues-button-icon",
 				text: "+",
 			});
-			const stickyButtonText = stickyAddButton.createEl("span", {
+			const stickyButtonText = stickyAddButton.createSpan({
 				cls: "github-issues-button-text",
 			});
 			stickyButtonText.setText("Add Selected (");
-			stickyButtonText.createEl("span", {
+			stickyButtonText.createSpan({
 				cls: "selected-count",
 				text: "0",
 			});
@@ -1924,9 +1912,10 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			};
 
 			selectAllButton.onclick = () => {
-				const checkboxes = repoListContainer.querySelectorAll(
-					'.github-issues-checkbox:not([data-tracked="true"])',
-				) as NodeListOf<HTMLInputElement>;
+				const checkboxes =
+					repoListContainer.querySelectorAll<HTMLInputElement>(
+						'.github-issues-checkbox:not([data-tracked="true"])',
+					);
 				checkboxes.forEach((checkbox) => {
 					const repoItem = checkbox.closest(".github-issues-item");
 					if (
@@ -1953,9 +1942,10 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			};
 
 			selectNoneButton.onclick = () => {
-				const checkboxes = repoListContainer.querySelectorAll(
-					".github-issues-checkbox",
-				) as NodeListOf<HTMLInputElement>;
+				const checkboxes =
+					repoListContainer.querySelectorAll<HTMLInputElement>(
+						".github-issues-checkbox",
+					);
 				checkboxes.forEach((checkbox) => {
 					checkbox.checked = false;
 				});
@@ -2119,13 +2109,13 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		});
 
 		// Chevron for collapse/expand
-		const chevronEl = headerLeft.createEl("span", {
+		const chevronEl = headerLeft.createSpan({
 			cls: "github-issues-provider-card-chevron",
 		});
 		setIcon(chevronEl, "chevron-right");
 
 		// Provider icon (Obsidian built-in)
-		const iconEl = headerLeft.createEl("span", {
+		const iconEl = headerLeft.createSpan({
 			cls: "github-issues-provider-card-icon",
 		});
 		setIcon(iconEl, config.type === "github" ? "github" : "gitlab");
@@ -2327,7 +2317,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		const tokenBadgeContainer = cardBody.createDiv(
 			`github-issues-token-badge-container github-issues-token-badge-${config.id}`,
 		);
-		setTimeout(
+		window.setTimeout(
 			() => this.updateTokenBadge(config.id, tokenBadgeContainer),
 			0,
 		);
@@ -2405,7 +2395,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			text: "Are you sure you want to remove ",
 		});
 		warningText.addClass("github-issues-delete-warning-text");
-		const nameSpan = warningText.createEl("span");
+		const nameSpan = warningText.createSpan();
 		nameSpan.setText(providerLabel);
 		nameSpan.addClass("github-issues-delete-repo-name");
 		warningText.appendText("?");
@@ -2430,11 +2420,11 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		cancelButton.onclick = () => modal.close();
 
 		const confirmButton = buttonContainer.createEl("button");
-		const deleteIcon = confirmButton.createEl("span", {
+		const deleteIcon = confirmButton.createSpan({
 			cls: "github-issues-button-icon",
 		});
 		setIcon(deleteIcon, "trash-2");
-		confirmButton.createEl("span", {
+		confirmButton.createSpan({
 			cls: "github-issues-button-text",
 			text: "Remove",
 		});
@@ -2571,7 +2561,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 				);
 				invalidBadge.setText("Invalid token");
 			}
-		} catch (error) {
+		} catch {
 			badgeContainer.empty();
 			const errorBadge = badgeContainer.createDiv(
 				"github-issues-token-badge github-issues-token-badge-error",
@@ -2586,7 +2576,8 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 	 * Load projects from all tracked repositories
 	 */
 	private async loadProjectsFromRepositories(): Promise<void> {
-		if (!this.plugin.gitHubClient) {
+		const github = this.plugin.providerRegistry.get("github");
+		if (!github) {
 			throw new Error("GitHub client not initialized");
 		}
 
@@ -2622,8 +2613,10 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			reposAttempted++;
 
 			try {
-				const projects = await this.plugin.gitHubClient!
-					.fetchProjectsForRepository!(owner, repoName);
+				const projects = await github.fetchProjectsForRepository!(
+					owner,
+					repoName,
+				);
 
 				for (const project of projects) {
 					if (!allProjects.has(project.id)) {
@@ -2660,8 +2653,9 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			let statusOptions = existing?.statusOptions;
 			if (!statusOptions) {
 				try {
-					statusOptions = await this.plugin.gitHubClient!
-						.fetchProjectStatusOptions!(project.id);
+					statusOptions = await github.fetchProjectStatusOptions!(
+						project.id,
+					);
 				} catch {
 					statusOptions = [];
 				}
@@ -2703,7 +2697,8 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		owner: string,
 		repoName: string,
 	): Promise<void> {
-		if (!this.plugin.gitHubClient) {
+		const github = this.plugin.providerRegistry.get("github");
+		if (!github) {
 			throw new Error("GitHub client not initialized");
 		}
 
@@ -2713,8 +2708,10 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		);
 
 		try {
-			const projects = await this.plugin.gitHubClient!
-				.fetchProjectsForRepository!(owner, repoName);
+			const projects = await github.fetchProjectsForRepository!(
+				owner,
+				repoName,
+			);
 
 			// Merge with existing tracked projects (preserve enabled state)
 			const existingProjects = new Map(
@@ -2742,11 +2739,6 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			this.plugin.settings.trackedProjects = newTrackedProjects;
 			await this.plugin.saveSettings();
 
-			const newProjectsCount =
-				projects.length -
-				(existingProjects.size -
-					newTrackedProjects.length +
-					projects.length);
 			new Notice(
 				`Found ${projects.length} projects from ${owner}/${repoName}`,
 			);
@@ -2769,15 +2761,15 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 	): Promise<void> {
 		container.empty();
 
-		if (!this.plugin.gitHubClient) {
+		const github = this.plugin.providerRegistry.get("github");
+		if (!github) {
 			container.createEl("p", { text: "GitHub client not initialized" });
 			return;
 		}
 
 		try {
 			// Fetch all available projects from user and orgs
-			const fetchedProjects =
-				await this.plugin.gitHubClient!.fetchAllAvailableProjects!();
+			const fetchedProjects = await github.fetchAllAvailableProjects!();
 
 			const projects = fetchedProjects.map((p) => ({
 				id: p.id,
@@ -2836,36 +2828,36 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 				"github-issues-selection-controls",
 			);
 			const selectAllButton = selectionControls.createEl("button");
-			const selectAllIcon = selectAllButton.createEl("span", {
+			const selectAllIcon = selectAllButton.createSpan({
 				cls: "github-issues-button-icon",
 			});
 			setIcon(selectAllIcon, "check");
-			selectAllButton.createEl("span", {
+			selectAllButton.createSpan({
 				cls: "github-issues-button-text",
 				text: "Select all",
 			});
 			selectAllButton.addClass("github-issues-select-all-button");
 			const selectNoneButton = selectionControls.createEl("button");
-			const selectNoneIcon = selectNoneButton.createEl("span", {
+			const selectNoneIcon = selectNoneButton.createSpan({
 				cls: "github-issues-button-icon",
 			});
 			setIcon(selectNoneIcon, "x");
-			selectNoneButton.createEl("span", {
+			selectNoneButton.createSpan({
 				cls: "github-issues-button-text",
 				text: "Select none",
 			});
 			selectNoneButton.addClass("github-issues-select-none-button");
 
 			const addSelectedButton = bulkActionsContainer.createEl("button");
-			addSelectedButton.createEl("span", {
+			addSelectedButton.createSpan({
 				cls: "github-issues-button-icon",
 				text: "+",
 			});
-			const buttonTextContainer = addSelectedButton.createEl("span", {
+			const buttonTextContainer = addSelectedButton.createSpan({
 				cls: "github-issues-button-text",
 			});
 			buttonTextContainer.setText("Add Selected (");
-			buttonTextContainer.createEl("span", {
+			buttonTextContainer.createSpan({
 				cls: "selected-count",
 				text: "0",
 			});
@@ -2907,6 +2899,17 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			const selectedProjects = new Set<string>();
 
 			const updateSelectionUI = () => {
+				projectListContainer
+					.querySelectorAll(".github-issues-item")
+					.forEach((item) => {
+						const cb = item.querySelector<HTMLInputElement>(
+							".github-issues-checkbox",
+						);
+						item.classList.toggle(
+							"github-issues-item-selected",
+							!!cb?.checked,
+						);
+					});
 				const selectedCount = selectedProjects.size;
 				const selectedCountSpan = addSelectedButton.querySelector(
 					".selected-count",
@@ -2944,20 +2947,20 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 					"github-issues-repo-owner-header",
 				);
 
-				const chevronIcon = ownerHeader.createEl("span", {
+				const chevronIcon = ownerHeader.createSpan({
 					cls: "github-issues-repo-owner-chevron",
 				});
 				setIcon(chevronIcon, "chevron-right");
 
-				const ownerIcon = ownerHeader.createEl("span", {
+				const ownerIcon = ownerHeader.createSpan({
 					cls: "github-issues-repo-owner-icon",
 				});
 				setIcon(ownerIcon, "user");
-				ownerHeader.createEl("span", {
+				ownerHeader.createSpan({
 					cls: "github-issues-repo-owner-name",
 					text: ownerName,
 				});
-				ownerHeader.createEl("span", {
+				ownerHeader.createSpan({
 					cls: "github-issues-repo-count",
 					text: ownerProjects.length.toString(),
 				});
@@ -3038,17 +3041,17 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 					);
 					setIcon(projectIcon, "layout-dashboard");
 
-					const projectText = projectInfoContainer.createEl("span");
+					const projectText = projectInfoContainer.createSpan();
 					projectText.setText(project.title);
 					projectText.addClass("github-issues-repo-name");
 
-					projectInfoContainer.createEl("span", {
+					projectInfoContainer.createSpan({
 						text: ` #${project.number}`,
 						cls: "github-issues-project-number",
 					});
 
 					if (project.closed) {
-						projectInfoContainer.createEl("span", {
+						projectInfoContainer.createSpan({
 							text: "Closed",
 							cls: "github-issues-closed-badge",
 						});
@@ -3062,7 +3065,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 						const trackedContainer = actionContainer.createDiv(
 							"github-issues-tracked-container",
 						);
-						const trackedText = trackedContainer.createEl("span");
+						const trackedText = trackedContainer.createSpan();
 						trackedText.setText("Tracked");
 						trackedText.addClass("github-issues-info-text");
 					} else {
@@ -3099,15 +3102,15 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 			);
 			stickyFooter.addClass("github-issues-hidden");
 			const stickyAddButton = stickyFooter.createEl("button");
-			stickyAddButton.createEl("span", {
+			stickyAddButton.createSpan({
 				cls: "github-issues-button-icon",
 				text: "+",
 			});
-			const stickyButtonText = stickyAddButton.createEl("span", {
+			const stickyButtonText = stickyAddButton.createSpan({
 				cls: "github-issues-button-text",
 			});
 			stickyButtonText.setText("Add Selected (");
-			stickyButtonText.createEl("span", {
+			stickyButtonText.createSpan({
 				cls: "selected-count",
 				text: "0",
 			});
@@ -3128,11 +3131,14 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 								(p) => p.id === projectId,
 							);
 							if (project) {
-								let statusOptions: any[] = [];
+								let statusOptions: ProjectStatusOption[] = [];
 								try {
-									statusOptions = await this.plugin
-										.gitHubClient!
-										.fetchProjectStatusOptions!(project.id);
+									statusOptions =
+										await this.plugin.providerRegistry.get(
+											"github",
+										)!.fetchProjectStatusOptions!(
+											project.id,
+										);
 								} catch {
 									// Ignore errors
 								}
@@ -3163,9 +3169,10 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 
 			// Select all button
 			selectAllButton.onclick = () => {
-				const checkboxes = projectListContainer.querySelectorAll(
-					".github-issues-checkbox",
-				) as NodeListOf<HTMLInputElement>;
+				const checkboxes =
+					projectListContainer.querySelectorAll<HTMLInputElement>(
+						".github-issues-checkbox",
+					);
 				checkboxes.forEach((checkbox) => {
 					const projectItem = checkbox.closest(".github-issues-item");
 					if (
@@ -3185,9 +3192,10 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 
 			// Select none button
 			selectNoneButton.onclick = () => {
-				const checkboxes = projectListContainer.querySelectorAll(
-					".github-issues-checkbox",
-				) as NodeListOf<HTMLInputElement>;
+				const checkboxes =
+					projectListContainer.querySelectorAll<HTMLInputElement>(
+						".github-issues-checkbox",
+					);
 				checkboxes.forEach((checkbox) => {
 					checkbox.checked = false;
 				});
@@ -3212,11 +3220,14 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 							);
 							if (project) {
 								// Fetch status options
-								let statusOptions: any[] = [];
+								let statusOptions: ProjectStatusOption[] = [];
 								try {
-									statusOptions = await this.plugin
-										.gitHubClient!
-										.fetchProjectStatusOptions!(project.id);
+									statusOptions =
+										await this.plugin.providerRegistry.get(
+											"github",
+										)!.fetchProjectStatusOptions!(
+											project.id,
+										);
 								} catch {
 									// Ignore errors
 								}

@@ -5,6 +5,7 @@ import {
 	ProjectData,
 	ProviderConfig,
 } from "./types";
+import { Issue, IssueComment, PullRequest } from "./providers/domain";
 import { escapeBody, escapeYamlString } from "./util/escapeUtils";
 import {
 	createIssueTemplateData,
@@ -20,13 +21,13 @@ export class ContentGenerator {
 	 * Create issue content using template or default format
 	 */
 	public async createIssueContent(
-		issue: any,
+		issue: Issue,
 		repo: RepositoryTracking,
-		comments: any[],
+		comments: IssueComment[],
 		settings: IssueTrackerSettings,
 		projectData?: ProjectData[],
-		subIssues?: any[],
-		parentIssue?: any,
+		subIssues?: Issue[],
+		parentIssue?: Issue | null,
 	): Promise<string> {
 		// Determine whether to escape hash tags (repo setting takes precedence if using a custom profile)
 		const shouldEscapeHashTags =
@@ -61,30 +62,32 @@ export class ContentGenerator {
 
 		// Fallback to default template
 		let frontmatter = `---
-title: "${escapeYamlString(issue.title)}"
+title: "${escapeYamlString(issue.title ?? "")}"
 number: ${issue.number}
-state: "${issue.state}"
+state: "${issue.state ?? ""}"
 type: "issue"
 created: "${
 			settings.dateFormat !== ""
-				? format(new Date(issue.created_at), settings.dateFormat)
-				: new Date(issue.created_at).toLocaleString()
+				? format(new Date(issue.created_at ?? ""), settings.dateFormat)
+				: new Date(issue.created_at ?? "").toLocaleString()
 		}"
 updated: "${
 			settings.dateFormat !== ""
-				? format(new Date(issue.updated_at), settings.dateFormat)
-				: new Date(issue.updated_at).toLocaleString()
+				? format(new Date(issue.updated_at ?? ""), settings.dateFormat)
+				: new Date(issue.updated_at ?? "").toLocaleString()
 		}"
-url: "${issue.html_url}"
-opened_by: "${issue.user?.login}"
+url: "${issue.html_url ?? ""}"
+opened_by: "${issue.user?.login ?? ""}"
 assignees: [${(
 			issue.assignees?.map(
-				(assignee: { login: string }) => '"' + escapeYamlString(assignee.login) + '"',
+				(assignee) =>
+					'"' + escapeYamlString(assignee.login ?? "") + '"',
 			) || []
 		).join(", ")}]
 labels: [${(
 			issue.labels?.map(
-				(label: { name: string }) => '"' + escapeYamlString(label.name) + '"',
+				(label) =>
+					'"' + escapeYamlString(label.name) + '"',
 			) || []
 		).join(", ")}]
 updateMode: "${repo.issueUpdateMode}"
@@ -100,11 +103,11 @@ parent_issue_url: "${parentIssue.url}"`;
 		// Add sub-issues metadata if available
 		if (subIssues && subIssues.length > 0) {
 			const closedCount = subIssues.filter(
-				(si: any) => si.state === "closed",
+				(si) => si.state === "closed",
 			).length;
 			const openCount = subIssues.length - closedCount;
 			frontmatter += `
-sub_issues: [${subIssues.map((si: any) => si.number).join(", ")}]
+sub_issues: [${subIssues.map((si) => si.number).join(", ")}]
 sub_issues_count: ${subIssues.length}
 sub_issues_open: ${openCount}
 sub_issues_closed: ${closedCount}`;
@@ -123,7 +126,7 @@ projectData:`;
 		frontmatter += `
 ---
 
-# ${escapeBody(issue.title, settings.escapeMode, false)}
+# ${escapeBody(issue.title ?? "", settings.escapeMode, false)}
 ${
 	issue.body
 		? escapeBody(issue.body, settings.escapeMode, shouldEscapeHashTags)
@@ -138,7 +141,7 @@ ${this.fileHelpers.formatComments(comments, settings.escapeMode, settings.dateFo
 
 ## Sub-Issues
 ${subIssues
-	.map((si: any) => {
+	.map((si) => {
 		const statusIcon =
 			si.state === "closed"
 				? '<span class="github-issues-sub-issue-closed">●</span>'
@@ -163,9 +166,9 @@ ${subIssues
 	 * Create pull request content using template or default format
 	 */
 	public async createPullRequestContent(
-		pr: any,
+		pr: PullRequest,
 		repo: RepositoryTracking,
-		comments: any[],
+		comments: IssueComment[],
 		settings: IssueTrackerSettings,
 		projectData?: ProjectData[],
 	): Promise<string> {
@@ -207,35 +210,38 @@ ${subIssues
 		);
 		const prType = providerConfig?.type === "gitlab" ? "mr" : "pr";
 		let frontmatter = `---
-title: "${escapeYamlString(pr.title)}"
+title: "${escapeYamlString(pr.title ?? "")}"
 number: ${pr.number}
-state: "${pr.state}"
+state: "${pr.state ?? ""}"
 type: "${prType}"
 created: "${
 			settings.dateFormat !== ""
-				? format(new Date(pr.created_at), settings.dateFormat)
-				: new Date(pr.created_at).toLocaleString()
+				? format(new Date(pr.created_at ?? ""), settings.dateFormat)
+				: new Date(pr.created_at ?? "").toLocaleString()
 		}"
 updated: "${
 			settings.dateFormat !== ""
-				? format(new Date(pr.updated_at), settings.dateFormat)
-				: new Date(pr.updated_at).toLocaleString()
+				? format(new Date(pr.updated_at ?? ""), settings.dateFormat)
+				: new Date(pr.updated_at ?? "").toLocaleString()
 		}"
-url: "${pr.html_url}"
-opened_by: "${pr.user?.login}"
+url: "${pr.html_url ?? ""}"
+opened_by: "${pr.user?.login ?? ""}"
 assignees: [${(
 			pr.assignees?.map(
-				(assignee: { login: string }) => '"' + escapeYamlString(assignee.login) + '"',
+				(assignee) =>
+					'"' + escapeYamlString(assignee.login ?? "") + '"',
 			) || []
 		).join(", ")}]
 requested_reviewers: [${(
-			pr.requested_reviewers?.map(
-				(reviewer: { login: string }) => '"' + escapeYamlString(reviewer.login) + '"',
+			(pr.requested_reviewers as Array<{ login?: string }> | undefined)?.map(
+				(reviewer) =>
+					'"' + escapeYamlString(reviewer.login ?? "") + '"',
 			) || []
 		).join(", ")}]
 labels: [${(
 			pr.labels?.map(
-				(label: { name: string }) => '"' + escapeYamlString(label.name) + '"',
+				(label) =>
+					'"' + escapeYamlString(label.name) + '"',
 			) || []
 		).join(", ")}]`;
 
@@ -267,7 +273,7 @@ projectData:`;
 		frontmatter += `
 ---
 
-# ${escapeBody(pr.title, settings.escapeMode, false)}
+# ${escapeBody(pr.title ?? "", settings.escapeMode, false)}
 ${
 	pr.body
 		? escapeBody(pr.body, settings.escapeMode, shouldEscapeHashTags)

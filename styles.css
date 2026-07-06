@@ -58,9 +58,9 @@
 	gap: 6px;
 }
 
-.github-issues-header-link:hover {
-	color: var(--text-muted) !important;
-	text-decoration: none !important;
+.github-issues-settings-header .github-issues-header-link:hover {
+	color: var(--text-muted);
+	text-decoration: none;
 	transform: translateY(-1px);
 }
 
@@ -79,6 +79,9 @@
 .github-issues-repo-settings {
 	margin-bottom: 10px;
 	margin-top: 10px;
+	transition:
+		background-color 0.2s ease,
+		border-left 0.2s ease;
 }
 .github-issues-tracked-item {
 	margin-bottom: 10px;
@@ -238,7 +241,7 @@
 	margin: var(--standard-divider-margin);
 }
 
-github-issues-confirmation-modal .warning-text {
+.github-issues-confirmation-modal .warning-text {
 	color: var(--warning-color);
 	font-weight: bold;
 	margin-bottom: 15px;
@@ -480,8 +483,8 @@ github-issues-confirmation-modal .warning-text {
 	animation: spin 1.5s linear infinite;
 }
 
-.github-issues-success-button {
-	background-color: var(--color-green) !important;
+.github-issues-success-button.github-issues-success-button {
+	background-color: var(--color-green);
 	transition: all 0.3s ease;
 }
 
@@ -844,14 +847,8 @@ github-issues-confirmation-modal .warning-text {
 }
 
 .github-issues-button-icon svg {
-	width: 16px;
-	height: 16px;
-}
-
-.github-issues-repo-settings {
-	transition:
-		background-color 0.2s ease,
-		border-left 0.2s ease;
+	width: 14px;
+	height: 14px;
 }
 
 .github-issues-repo-action button {
@@ -1228,20 +1225,14 @@ button:disabled {
 	padding-left: 4px;
 }
 
-.github-issues-item:has(.github-issues-checkbox:checked) {
+.github-issues-item.github-issues-item-selected {
 	background: var(--background-modifier-hover);
 	border-color: var(--interactive-accent);
 }
 
-.github-issues-item:has(.github-issues-checkbox:checked)
-	.github-issues-repo-name {
+.github-issues-item.github-issues-item-selected .github-issues-repo-name {
 	color: var(--interactive-accent);
 	font-weight: 500;
-}
-
-.github-issues-button-icon svg {
-	width: 14px;
-	height: 14px;
 }
 
 .selected-count {
@@ -1643,9 +1634,9 @@ button:disabled {
 }
 
 .github-issues-provider-card-header-right .setting-item {
-	border-top: none !important;
-	padding: 0 !important;
-	background-color: transparent !important;
+	border-top: none;
+	padding: 0;
+	background-color: transparent;
 }
 
 .github-issues-provider-card-body {
@@ -1804,6 +1795,16 @@ button:disabled {
 	gap: 16px;
 }
 
+.github-issues-bulk-actions-toolbar.github-issues-hidden {
+	display: none;
+}
+
+.github-issues-status-empty {
+	color: var(--text-muted);
+	font-style: italic;
+	padding: 8px;
+}
+
 .github-issues-bulk-action-info {
 	display: flex;
 	align-items: center;
@@ -1934,8 +1935,8 @@ button:disabled {
 
 .github-kanban-tab.active,
 .github-kanban-tab[style*="interactive-accent"] {
-	background-color: var(--interactive-accent) !important;
-	color: var(--text-on-accent) !important;
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
@@ -1969,7 +1970,7 @@ button:disabled {
 }
 
 .github-kanban-project h3 {
-	margin: 0 0 16px 0;
+	margin: 0 0 16px;
 	font-size: 1.1em;
 	font-weight: 600;
 	color: var(--text-muted);
@@ -1982,7 +1983,7 @@ button:disabled {
 	display: flex;
 	gap: 16px;
 	overflow-x: auto;
-	padding: 8px 4px 16px 4px;
+	padding: 8px 4px 16px;
 	scroll-behavior: smooth;
 }
 

@@ -1,10 +1,18 @@
-import { NoticeManager } from "../notice-manager";
 import {
 	ProjectData,
 	ProjectInfo,
 	ProjectStatusOption,
 	ProviderType,
 } from "../types";
+import {
+	GitUser,
+	Issue,
+	IssueComment,
+	Label,
+	ProjectItem,
+	PullRequest,
+	RepositoryRef,
+} from "./domain";
 
 export type ProviderId = string;
 
@@ -63,14 +71,14 @@ export interface IssueProvider {
 		includeClosed: boolean,
 		daysToKeepClosed: number,
 		extra?: ProviderExtraParams,
-	): Promise<any[]>;
+	): Promise<Issue[]>;
 
 	fetchIssueComments(
 		owner: string,
 		repo: string,
 		issueNumber: number,
 		extra?: ProviderExtraParams,
-	): Promise<any[]>;
+	): Promise<IssueComment[]>;
 
 	// --- Pull Requests / Merge Requests ---
 
@@ -80,14 +88,14 @@ export interface IssueProvider {
 		includeClosed: boolean,
 		daysToKeepClosed: number,
 		extra?: ProviderExtraParams,
-	): Promise<any[]>;
+	): Promise<PullRequest[]>;
 
 	fetchPullRequestComments(
 		owner: string,
 		repo: string,
 		prNumber: number,
 		extra?: ProviderExtraParams,
-	): Promise<any[]>;
+	): Promise<IssueComment[]>;
 
 	// --- Metadata ---
 
@@ -95,17 +103,15 @@ export interface IssueProvider {
 		owner: string,
 		repo: string,
 		extra?: ProviderExtraParams,
-	): Promise<any[]>;
+	): Promise<Label[]>;
 
 	fetchRepositoryCollaborators(
 		owner: string,
 		repo: string,
 		extra?: ProviderExtraParams,
-	): Promise<any[]>;
+	): Promise<GitUser[]>;
 
-	fetchAvailableRepositories(): Promise<
-		{ owner: { login: string }; name: string; id?: number }[]
-	>;
+	fetchAvailableRepositories(): Promise<RepositoryRef[]>;
 
 	// --- Optional capabilities ---
 
@@ -121,17 +127,17 @@ export interface IssueProvider {
 		repo: string,
 		issueNumber: number,
 		extra?: ProviderExtraParams,
-	): Promise<any[]>;
+	): Promise<Issue[]>;
 
 	fetchParentIssue?(
 		owner: string,
 		repo: string,
 		issueNumber: number,
 		extra?: ProviderExtraParams,
-	): Promise<any | null>;
+	): Promise<Issue | null>;
 
 	// GitHub Projects v2 (optional)
-	fetchProjectItems?(projectId: string): Promise<any[]>;
+	fetchProjectItems?(projectId: string): Promise<ProjectItem[]>;
 	fetchAllAvailableProjects?(): Promise<ProjectInfo[]>;
 	fetchProjectsForRepository?(
 		owner: string,

@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting, setIcon } from "obsidian";
+import { App, Modal, Notice, setIcon } from "obsidian";
 import { RepositoryTracking } from "../types";
 import IssueTrackerPlugin from "../main";
 import { UIHelpers } from "./ui-helpers";
@@ -36,7 +36,7 @@ export class ModalManager {
 		});
 		warningText.addClass("github-issues-delete-warning-text");
 
-		const repoNameSpan = warningText.createEl("span");
+		const repoNameSpan = warningText.createSpan();
 		repoNameSpan.setText(repo.repository);
 		repoNameSpan.addClass("github-issues-delete-repo-name");
 
@@ -54,11 +54,11 @@ export class ModalManager {
 		cancelButton.setText("Cancel");
 		cancelButton.onclick = () => modal.close();
 		const confirmDeleteButton = buttonContainer.createEl("button");
-		const deleteIcon = confirmDeleteButton.createEl("span", {
+		const deleteIcon = confirmDeleteButton.createSpan({
 			cls: "github-issues-button-icon",
 		});
 		setIcon(deleteIcon, "trash-2");
-		confirmDeleteButton.createEl("span", {
+		confirmDeleteButton.createSpan({
 			cls: "github-issues-button-text",
 			text: "Delete repository",
 		});
@@ -127,11 +127,11 @@ export class ModalManager {
 		cancelButton.onclick = () => modal.close();
 
 		const confirmDeleteButton = buttonContainer.createEl("button");
-		const deleteIcon = confirmDeleteButton.createEl("span", {
+		const deleteIcon = confirmDeleteButton.createSpan({
 			cls: "github-issues-button-icon",
 		});
 		setIcon(deleteIcon, "trash-2");
-		confirmDeleteButton.createEl("span", {
+		confirmDeleteButton.createSpan({
 			cls: "github-issues-button-text",
 			text: `Delete ${repositories.length} ${repositories.length === 1 ? "repository" : "repositories"}`,
 		});
@@ -159,7 +159,8 @@ export class ModalManager {
 		filterType: "labelFilters" | "prLabelFilters",
 		textAreaElement: HTMLTextAreaElement,
 	): Promise<void> {
-		if (!this.plugin.gitHubClient?.isReady()) {
+		const github = this.plugin.providerRegistry.get("github");
+		if (!github?.isReady()) {
 			new Notice(
 				"GitHub client not ready. Please set your GitHub token first.",
 			);
@@ -174,10 +175,7 @@ export class ModalManager {
 
 		try {
 			new Notice("Fetching labels from repository...");
-			const labels = await this.plugin.gitHubClient.fetchRepositoryLabels(
-				owner,
-				repoName,
-			);
+			const labels = await github.fetchRepositoryLabels(owner, repoName);
 
 			if (labels.length === 0) {
 				new Notice("No labels found in this repository.");
@@ -202,7 +200,7 @@ export class ModalManager {
 				"github-issues-labels-container",
 			);
 
-			labels.forEach((label: any) => {
+			labels.forEach((label) => {
 				const labelElement = labelsContainer.createDiv(
 					"github-issues-label-item",
 				);
@@ -219,7 +217,7 @@ export class ModalManager {
 				);
 				labelBadge.style.setProperty(
 					"--label-text-color",
-					UIHelpers.getContrastColor(label.color),
+					UIHelpers.getContrastColor(label.color ?? ""),
 				);
 
 				if (label.description) {
@@ -236,7 +234,7 @@ export class ModalManager {
 					isSelected,
 				);
 
-				labelElement.addEventListener("click", async () => {
+				labelElement.addEventListener("click", () => {
 					const currentFilters = repo[filterType] ?? [];
 					if (currentFilters.includes(label.name)) {
 						// Remove label
@@ -256,7 +254,7 @@ export class ModalManager {
 
 					// Update the textarea and save settings
 					textAreaElement.value = repo[filterType].join(", ");
-					await this.plugin.saveSettings();
+					void this.plugin.saveSettings();
 				});
 			});
 
@@ -284,7 +282,8 @@ export class ModalManager {
 			| "prReviewerFilters",
 		textAreaElement: HTMLTextAreaElement,
 	): Promise<void> {
-		if (!this.plugin.gitHubClient?.isReady()) {
+		const github = this.plugin.providerRegistry.get("github");
+		if (!github?.isReady()) {
 			new Notice(
 				"GitHub client not ready. Please set your GitHub token first.",
 			);
@@ -299,11 +298,10 @@ export class ModalManager {
 
 		try {
 			new Notice("Fetching collaborators from repository...");
-			const collaborators =
-				await this.plugin.gitHubClient.fetchRepositoryCollaborators(
-					owner,
-					repoName,
-				);
+			const collaborators = await github.fetchRepositoryCollaborators(
+				owner,
+				repoName,
+			);
 
 			if (collaborators.length === 0) {
 				new Notice("No collaborators found in this repository.");
@@ -332,7 +330,7 @@ export class ModalManager {
 
 			const currentFilters = repo[filterType] ?? [];
 
-			collaborators.forEach((collaborator: any) => {
+			collaborators.forEach((collaborator) => {
 				const collaboratorElement = collaboratorsContainer.createDiv(
 					"github-issues-collaborator-item",
 				);
@@ -342,7 +340,7 @@ export class ModalManager {
 				);
 				if (collaborator.avatar_url) {
 					const avatar = avatarContainer.createEl("img");
-					avatar.src = collaborator.avatar_url;
+					avatar.src = collaborator.avatar_url as string;
 					avatar.alt = collaborator.login;
 					avatar.addClass("github-issues-avatar");
 				}
@@ -360,7 +358,7 @@ export class ModalManager {
 					const type = infoContainer.createDiv(
 						"github-issues-collaborator-type",
 					);
-					type.setText(collaborator.type);
+					type.setText(collaborator.type as string);
 				}
 
 				const isSelected = currentFilters.includes(collaborator.login);
@@ -369,7 +367,7 @@ export class ModalManager {
 					isSelected,
 				);
 
-				collaboratorElement.addEventListener("click", async () => {
+				collaboratorElement.addEventListener("click", () => {
 					if (currentFilters.includes(collaborator.login)) {
 						// Remove collaborator
 						repo[filterType] = currentFilters.filter(
@@ -392,7 +390,7 @@ export class ModalManager {
 
 					// Update the textarea and save settings
 					textAreaElement.value = repo[filterType].join(", ");
-					await this.plugin.saveSettings();
+					void this.plugin.saveSettings();
 				});
 			});
 

@@ -1,10 +1,11 @@
 import { RepositoryTracking } from "./types";
 import { IssueProvider } from "./providers/provider";
+import { Issue, PullRequest } from "./providers/domain";
 
 export class FilterManager {
 	constructor(private provider: IssueProvider) {}
 
-	public filterIssues(repo: RepositoryTracking, issues: any[]): any[] {
+	public filterIssues(repo: RepositoryTracking, issues: Issue[]): Issue[] {
 		let filteredIssues = issues;
 
 		// Apply label filtering
@@ -36,8 +37,8 @@ export class FilterManager {
 
 	public filterPullRequests(
 		repo: RepositoryTracking,
-		pullRequests: any[],
-	): any[] {
+		pullRequests: PullRequest[],
+	): PullRequest[] {
 		let filteredPullRequests = pullRequests;
 
 		// Apply label filtering
@@ -79,19 +80,19 @@ export class FilterManager {
 		return filteredPullRequests;
 	}
 
-	private applyLabelFilter(
-		items: any[],
+	private applyLabelFilter<T extends Issue>(
+		items: T[],
 		filterMode: "include" | "exclude",
 		labelFilters: string[],
-	): any[] {
+	): T[] {
 		return items.filter((item) => {
 			if (!item.labels || !Array.isArray(item.labels)) {
 				// If no labels, only include in "exclude" mode (since we're excluding specific labels)
 				return filterMode === "exclude";
 			}
 
-			const itemLabels = item.labels.map((label: any) =>
-				typeof label === "string" ? label : label.name,
+			const itemLabels = (item.labels as Array<string | { name?: string }>).map(
+				(label) => (typeof label === "string" ? label : (label.name ?? "")),
 			);
 
 			const hasMatchingLabel = labelFilters.some((filterLabel) =>
@@ -106,8 +107,8 @@ export class FilterManager {
 		});
 	}
 
-	private applyAssigneeFilter(
-		items: any[],
+	private applyAssigneeFilter<T extends Issue>(
+		items: T[],
 		filterModes: Array<
 			| "assigned-to-me"
 			| "assigned-to-specific"
@@ -115,11 +116,11 @@ export class FilterManager {
 			| "any-assigned"
 		>,
 		assigneeFilters: string[],
-	): any[] {
+	): T[] {
 		return items.filter((item) => {
-			const assignees = item.assignees || [];
+			const assignees = (item.assignees as Array<{ login?: string } | string> | null | undefined) || [];
 			const assigneeUsernames = assignees.map(
-				(assignee: any) => assignee.login || assignee,
+				(assignee) => (typeof assignee === "string" ? assignee : (assignee.login ?? "")),
 			);
 			const currentUser = this.getCurrentUser();
 
@@ -143,8 +144,8 @@ export class FilterManager {
 		});
 	}
 
-	private applyReviewerFilter(
-		items: any[],
+	private applyReviewerFilter<T extends Issue>(
+		items: T[],
 		filterModes: Array<
 			| "review-requested-from-me"
 			| "review-requested-from-specific"
@@ -152,11 +153,11 @@ export class FilterManager {
 			| "any-review-requested"
 		>,
 		reviewerFilters: string[],
-	): any[] {
+	): T[] {
 		return items.filter((item) => {
-			const reviewers = item.requested_reviewers || [];
+			const reviewers = (item.requested_reviewers as Array<{ login?: string } | string> | null | undefined) || [];
 			const reviewerUsernames = reviewers.map(
-				(reviewer: any) => reviewer.login || reviewer,
+				(reviewer) => (typeof reviewer === "string" ? reviewer : (reviewer.login ?? "")),
 			);
 			const currentUser = this.getCurrentUser();
 

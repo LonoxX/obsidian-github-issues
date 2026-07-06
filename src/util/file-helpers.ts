@@ -6,6 +6,7 @@ import {
 	createIssueTemplateData,
 	processFilenameTemplate,
 } from "./templateUtils";
+import { IssueComment, Issue } from "../providers/domain";
 
 export class FileHelpers {
 	constructor(
@@ -30,7 +31,7 @@ export class FileHelpers {
 			if (templateFile instanceof TFile) {
 				return await this.app.vault.read(templateFile);
 			}
-		} catch (error) {
+		} catch {
 			this.noticeManager.warning(
 				`Could not load template file: ${templatePath}`,
 			);
@@ -53,24 +54,21 @@ export class FileHelpers {
 		// Normalize path separators to forward slashes for consistency
 		const normalizedPath = path.replace(/\\/g, "/");
 		let existing = this.app.vault.getAbstractFileByPath(normalizedPath);
-		
+
 		// Check if folder already exists
 		if (existing instanceof TFolder) {
 			return;
 		}
 
-
-
 		try {
 			await this.app.vault.createFolder(normalizedPath);
 			this.noticeManager.debug(`Created folder: ${normalizedPath}`);
 		} catch (error: unknown) {
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			
 			// Handle "Folder already exists" or other folder creation errors
 			// Retry vault check with slight delay to allow cache to update
-			const existsNow = this.app.vault.getAbstractFileByPath(normalizedPath);
-			
+			const existsNow =
+				this.app.vault.getAbstractFileByPath(normalizedPath);
+
 			if (existsNow instanceof TFolder) {
 				// Folder exists now, which is fine (concurrent creation or cache stale)
 				return;
@@ -83,8 +81,9 @@ export class FileHelpers {
 				// Expected case - folder was created successfully but Obsidian threw error anyway
 				// This commonly happens when the vault cache is out of sync
 				// Try one more time with a tiny delay to let cache update
-				await new Promise(resolve => setTimeout(resolve, 10));
-				const retryCheck = this.app.vault.getAbstractFileByPath(normalizedPath);
+				await new Promise((resolve) => window.setTimeout(resolve, 10));
+				const retryCheck =
+					this.app.vault.getAbstractFileByPath(normalizedPath);
 				if (retryCheck instanceof TFolder) {
 					this.noticeManager.debug(
 						`Folder created successfully: ${normalizedPath}`,
@@ -105,7 +104,7 @@ export class FileHelpers {
 	 * Format comments section for issues and pull requests
 	 */
 	public formatComments(
-		comments: any[],
+		comments: IssueComment[],
 		escapeMode: "disabled" | "normal" | "strict" | "veryStrict",
 		dateFormat: string,
 		escapeHashTags: boolean = false,
@@ -153,13 +152,13 @@ export class FileHelpers {
 	 * This allows templates to use internal Obsidian links instead of GitHub URLs
 	 */
 	public async enrichSubIssuesWithVaultPaths(
-		subIssues: any[],
+		subIssues: Issue[],
 		issueFolder: string,
 		noteTemplate: string,
 		repository: string,
 		dateFormat: string,
 		escapeMode: "disabled" | "normal" | "strict" | "veryStrict",
-	): Promise<any[]> {
+	): Promise<Issue[]> {
 		if (!subIssues || subIssues.length === 0) {
 			return subIssues;
 		}

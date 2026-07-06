@@ -3,10 +3,7 @@ import { App, TFolder, AbstractInputSuggest, TAbstractFile } from "obsidian";
 export class FolderSuggest extends AbstractInputSuggest<TFolder> {
 	private inputElement: HTMLInputElement;
 
-	constructor(
-		app: App,
-		inputEl: HTMLInputElement,
-	) {
+	constructor(app: App, inputEl: HTMLInputElement) {
 		super(app, inputEl);
 		this.inputElement = inputEl;
 	}
@@ -37,14 +34,14 @@ export class FolderSuggest extends AbstractInputSuggest<TFolder> {
 			if (this.inputElement) {
 				this.inputElement.value = folder.path;
 				// Trigger input event to notify onChange handlers
-				const event = new Event('input', { bubbles: true });
+				const event = new Event("input", { bubbles: true });
 				this.inputElement.dispatchEvent(event);
 				this.close();
 			} else {
-				console.error('FolderSuggest: Input element is not available');
+				console.error("FolderSuggest: Input element is not available");
 			}
 		} catch (error) {
-			console.error('FolderSuggest: Error setting folder value:', error);
+			console.error("FolderSuggest: Error setting folder value:", error);
 		}
 	}
 }

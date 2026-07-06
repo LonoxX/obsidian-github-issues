@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+import { builtinModules } from "node:module";
 import fs from "fs";
 import path from "path";
 
@@ -31,6 +31,15 @@ function copyToDist(files) {
 	});
 }
 
+const devCopyPlugin = {
+	name: "dev-copy",
+	setup(build) {
+		build.onEnd(() => {
+			copyToDevVault();
+		});
+	},
+};
+
 const context = await esbuild.context({
 	banner: {
 		js: banner,
@@ -51,7 +60,8 @@ const context = await esbuild.context({
 		"@lezer/common",
 		"@lezer/highlight",
 		"@lezer/lr",
-		...builtins,
+		...builtinModules,
+		...builtinModules.map((m) => `node:${m}`),
 	],
 	format: "cjs",
 	target: "es2018",
@@ -60,7 +70,23 @@ const context = await esbuild.context({
 	treeShaking: true,
 	outfile: "dist/main.js",
 	minify: prod,
+	plugins: prod ? [] : [devCopyPlugin],
 });
+
+const devVaultPluginDir = "/mnt/games/Nextcloud/Obsidian/plugins/github-issues";
+
+function copyToDevVault() {
+	if (!fs.existsSync(devVaultPluginDir)) {
+		fs.mkdirSync(devVaultPluginDir, { recursive: true });
+	}
+	["dist/main.js", "manifest.json", "styles.css"].forEach((file) => {
+		if (fs.existsSync(file)) {
+			const dest = path.join(devVaultPluginDir, path.basename(file));
+			fs.copyFileSync(file, dest);
+			console.log(`Copied ${file} to ${dest}`);
+		}
+	});
+}
 
 if (prod) {
 	await context.rebuild();

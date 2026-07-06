@@ -95,12 +95,12 @@ export class ProjectListManager {
 		const bulkActionsToolbar = projectsContainer.createDiv(
 			"github-issues-bulk-actions-toolbar",
 		);
-		bulkActionsToolbar.style.display = "none"; // Hidden by default
+		bulkActionsToolbar.addClass("github-issues-hidden"); // Hidden by default
 
 		const bulkActionInfo = bulkActionsToolbar.createDiv(
 			"github-issues-bulk-action-info",
 		);
-		const selectedCountSpan = bulkActionInfo.createEl("span", {
+		const selectedCountSpan = bulkActionInfo.createSpan({
 			cls: "github-issues-selected-count",
 			text: "0 selected",
 		});
@@ -122,11 +122,11 @@ export class ProjectListManager {
 		const removeSelectedButton = bulkActionButtons.createEl("button", {
 			cls: "github-issues-remove-selected-button mod-warning",
 		});
-		const removeIcon = removeSelectedButton.createEl("span", {
+		const removeIcon = removeSelectedButton.createSpan({
 			cls: "github-issues-button-icon",
 		});
 		setIcon(removeIcon, "trash-2");
-		removeSelectedButton.createEl("span", {
+		removeSelectedButton.createSpan({
 			cls: "github-issues-button-text",
 			text: "Remove selected",
 		});
@@ -135,7 +135,7 @@ export class ProjectListManager {
 		const updateBulkActionsUI = () => {
 			const count = this.selectedProjects.size;
 			selectedCountSpan.setText(`${count} selected`);
-			bulkActionsToolbar.style.display = count > 0 ? "flex" : "none";
+			bulkActionsToolbar.toggleClass("github-issues-hidden", count === 0);
 			removeSelectedButton.disabled = count === 0;
 		};
 
@@ -243,20 +243,20 @@ export class ProjectListManager {
 				: "Organization";
 
 			// Chevron icon for collapse/expand
-			const chevronIcon = ownerHeader.createEl("span", {
+			const chevronIcon = ownerHeader.createSpan({
 				cls: "github-issues-repo-owner-chevron",
 			});
 			setIcon(chevronIcon, "chevron-right");
 
-			const ownerIcon = ownerHeader.createEl("span", {
+			const ownerIcon = ownerHeader.createSpan({
 				cls: "github-issues-repo-owner-icon",
 			});
 			setIcon(ownerIcon, ownerType === "User" ? "user" : "building");
-			ownerHeader.createEl("span", {
+			ownerHeader.createSpan({
 				cls: "github-issues-repo-owner-name",
 				text: owner,
 			});
-			ownerHeader.createEl("span", {
+			ownerHeader.createSpan({
 				cls: "github-issues-repo-count",
 				text: projectsByOwner[owner].projects.length.toString(),
 			});
@@ -337,11 +337,11 @@ export class ProjectListManager {
 				);
 				setIcon(projectIcon, "layout-grid");
 
-				const projectText = projectInfoContainer.createEl("span");
+				const projectText = projectInfoContainer.createSpan();
 				projectText.setText(project.title);
 				projectText.addClass("github-issues-repo-name");
 
-				const projectNumber = projectInfoContainer.createEl("span", {
+				projectInfoContainer.createSpan({
 					text: ` #${project.number}`,
 					cls: "github-issues-project-number",
 				});
@@ -377,11 +377,11 @@ export class ProjectListManager {
 				configButton.addClass("github-issues-config-button");
 
 				const deleteButton = actionContainer.createEl("button");
-				deleteButton.createEl("span", {
+				deleteButton.createSpan({
 					cls: "github-issues-button-icon",
 					text: "×",
 				});
-				deleteButton.createEl("span", {
+				deleteButton.createSpan({
 					cls: "github-issues-button-text",
 					text: "Remove",
 				});
@@ -404,7 +404,7 @@ export class ProjectListManager {
 						.setDesc(
 							"Select which profile provides default settings for this project",
 						)
-						.addDropdown((dropdown: any) => {
+						.addDropdown((dropdown) => {
 							dropdown.addOption(
 								"",
 								"None (use project-specific settings)",

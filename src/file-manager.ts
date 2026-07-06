@@ -4,9 +4,16 @@ import {
 	RepositoryTracking,
 	TrackedProject,
 	ProjectData,
+	ProjectFieldValue,
 } from "./types";
 import { NoticeManager } from "./notice-manager";
 import { IssueProvider } from "./providers/provider";
+import {
+	Issue,
+	PullRequest,
+	ProjectItem,
+	ProjectFieldValueNode,
+} from "./providers/domain";
 import { IssueFileManager } from "./issue-file-manager";
 import { PullRequestFileManager } from "./pr-file-manager";
 import { FilterManager } from "./filter-manager";
@@ -19,10 +26,34 @@ import {
 	createPullRequestTemplateData,
 	processContentTemplate,
 	processFilenameTemplate,
-	formatComments,
 } from "./util/templateUtils";
 import { extractPersistBlocks, mergePersistBlocks } from "./util/persistUtils";
 import { getEffectiveProjectSettings } from "./util/settingsUtils";
+
+/** Full shape of a GraphQL project-item content node (Issue or PullRequest). */
+interface ProjectItemContentGQL {
+	number?: number;
+	title?: string;
+	body?: string | null;
+	url?: string;
+	state?: string;
+	author?: { login?: string } | null;
+	createdAt?: string;
+	updatedAt?: string;
+	closedAt?: string | null;
+	mergedAt?: string | null;
+	merged?: boolean;
+	mergeable?: boolean | null;
+	assignees?: { nodes?: Array<{ login?: string }> } | null;
+	labels?: { nodes?: Array<{ name?: string; color?: string }> } | null;
+	milestone?: { title?: string } | null;
+	baseRefName?: string;
+	headRefName?: string;
+	reviewRequests?: {
+		nodes?: Array<{ requestedReviewer?: { login?: string } | null }>;
+	} | null;
+	[key: string]: unknown;
+}
 
 export class FileManager {
 	private issueFileManager: IssueFileManager;
@@ -59,8 +90,8 @@ export class FileManager {
 	 */
 	public async createIssueFiles(
 		repo: RepositoryTracking,
-		openIssues: any[],
-		allIssuesIncludingRecentlyClosed: any[],
+		openIssues: Issue[],
+		allIssuesIncludingRecentlyClosed: Issue[],
 		currentIssueNumbers: Set<string>,
 	): Promise<void> {
 		return this.issueFileManager.createIssueFiles(
@@ -76,8 +107,8 @@ export class FileManager {
 	 */
 	public async createPullRequestFiles(
 		repo: RepositoryTracking,
-		openPullRequests: any[],
-		allPullRequestsIncludingRecentlyClosed: any[],
+		openPullRequests: PullRequest[],
+		allPullRequestsIncludingRecentlyClosed: PullRequest[],
 		currentPRNumbers: Set<string>,
 	): Promise<void> {
 		return this.prFileManager.createPullRequestFiles(
@@ -88,14 +119,14 @@ export class FileManager {
 		);
 	}
 
-	public filterIssues(repo: RepositoryTracking, issues: any[]): any[] {
+	public filterIssues(repo: RepositoryTracking, issues: Issue[]): Issue[] {
 		return this.filterManager.filterIssues(repo, issues);
 	}
 
 	public filterPullRequests(
 		repo: RepositoryTracking,
-		pullRequests: any[],
-	): any[] {
+		pullRequests: PullRequest[],
+	): PullRequest[] {
 		return this.filterManager.filterPullRequests(repo, pullRequests);
 	}
 
@@ -140,7 +171,7 @@ export class FileManager {
 	 */
 	public async createProjectItemFiles(
 		project: TrackedProject,
-		items: any[],
+		items: ProjectItem[],
 	): Promise<void> {
 		// Apply profile settings to get effective project configuration
 		const effectiveProject = getEffectiveProjectSettings(
@@ -175,14 +206,14 @@ export class FileManager {
 		const hiddenItemUrls = new Set<string>();
 
 		for (const item of items) {
-			const content = item.content;
+			const content = item.content as ProjectItemContentGQL | null | undefined;
 			if (!content) {
 				skippedNoContent++;
 				continue;
 			}
 
-			const isIssue = content.url?.includes("/issues/");
-			const isPullRequest = content.url?.includes("/pull/");
+			const isIssue = content.url?.includes("/issues/") ?? false;
+			const isPullRequest = content.url?.includes("/pull/") ?? false;
 			if (!isIssue && !isPullRequest) {
 				skippedNotIssueOrPr++;
 				continue;
@@ -226,8 +257,8 @@ export class FileManager {
 			);
 
 			// Fetch sub-issues and parent issue for template support (only if enabled for project)
-			let subIssues: any[] = [];
-			let parentIssue: any = null;
+			let subIssues: Issue[] = [];
+			let parentIssue: Issue | null = null;
 
 			if (isIssue && effectiveProject.includeSubIssues) {
 				const [owner, repoName] = repository.split("/");
@@ -236,13 +267,13 @@ export class FileManager {
 						(await this.provider.fetchSubIssues?.(
 							owner,
 							repoName,
-							content.number,
+							content.number ?? 0,
 						)) ?? [];
 					parentIssue =
 						(await this.provider.fetchParentIssue?.(
 							owner,
 							repoName,
-							content.number,
+							content.number ?? 0,
 						)) ?? null;
 
 					// Enrich sub-issues with vault paths if they exist
@@ -328,17 +359,16 @@ export class FileManager {
 				try {
 					await this.app.vault.create(filePath, fileContent);
 				} catch (fileCreateError: unknown) {
-					const errorMsg = fileCreateError instanceof Error ? fileCreateError.message : String(fileCreateError);
-					
 					// Check if file exists due to stale cache
-					const fileCheck = this.app.vault.getAbstractFileByPath(filePath);
-					
-					if (fileCheck instanceof TFile) {
+					const fileCheck =
+						this.app.vault.getAbstractFileByPath(filePath);
 
+					if (fileCheck instanceof TFile) {
 						// File exists but wasn't detected before - update it
-						const existingContent = await this.app.vault.read(fileCheck);
 						await this.app.vault.modify(fileCheck, fileContent);
-						this.noticeManager.debug(`Updated existing project item file for #${content.number} (file existed but cache was stale)`);
+						this.noticeManager.debug(
+							`Updated existing project item file for #${content.number} (file existed but cache was stale)`,
+						);
 					} else {
 						// File creation genuinely failed - rethrow
 						throw fileCreateError;
@@ -377,7 +407,7 @@ export class FileManager {
 							`Deleted file for hidden-status item: ${file.path}`,
 						);
 					}
-				} catch (error) {
+				} catch {
 					// File may have been deleted already, ignore
 				}
 			}
@@ -394,13 +424,13 @@ export class FileManager {
 	 * Generate content for a project item file
 	 */
 	private async generateProjectItemContent(
-		content: any,
+		content: ProjectItemContentGQL,
 		project: TrackedProject,
 		status: string,
 		isIssue: boolean,
-		fieldValues: any[],
-		subIssues?: any[],
-		parentIssue?: any,
+		fieldValues: ProjectFieldValueNode[],
+		subIssues?: Issue[],
+		parentIssue?: Issue | null,
 	): Promise<string> {
 		const shouldEscapeHashTags = this.settings.escapeHashTags;
 
@@ -475,13 +505,13 @@ export class FileManager {
 	 * Generate default content for project items (same format as repo issues/PRs)
 	 */
 	private generateDefaultProjectItemContent(
-		content: any,
+		content: ProjectItemContentGQL,
 		project: TrackedProject,
 		status: string,
 		isIssue: boolean,
-		fieldValues: any[],
-		subIssues?: any[],
-		parentIssue?: any,
+		fieldValues: ProjectFieldValueNode[],
+		subIssues?: Issue[],
+		parentIssue?: Issue | null,
 	): string {
 		const shouldEscapeHashTags = this.settings.escapeHashTags;
 		const dateFormat = this.settings.dateFormat;
@@ -502,9 +532,9 @@ export class FileManager {
 		const updatedAt = formatDate(content.updatedAt);
 		const author = content.author?.login || "";
 		const assignees =
-			content.assignees?.nodes?.map((a: any) => `"${a.login}"`) || [];
+			content.assignees?.nodes?.map((a) => `"${a.login}"`) || [];
 		const labels =
-			content.labels?.nodes?.map((l: any) => `"${l.name}"`) || [];
+			content.labels?.nodes?.map((l) => `"${l.name}"`) || [];
 
 		let frontmatter = `---
 title: "${title}"
@@ -524,7 +554,7 @@ project_status: "${status}"`;
 		if (!isIssue) {
 			const reviewers =
 				content.reviewRequests?.nodes?.map(
-					(r: any) => `"${r.requestedReviewer?.login || ""}"`,
+					(r) => `"${r.requestedReviewer?.login || ""}"`,
 				) || [];
 			frontmatter += `
 requested_reviewers: [${reviewers.join(", ")}]`;
@@ -540,11 +570,11 @@ parent_issue_url: "${parentIssue.url}"`;
 		// Add sub-issues metadata if available
 		if (subIssues && subIssues.length > 0) {
 			const closedCount = subIssues.filter(
-				(si: any) => si.state === "closed",
+				(si) => si.state === "closed",
 			).length;
 			const openCount = subIssues.length - closedCount;
 			frontmatter += `
-sub_issues: [${subIssues.map((si: any) => si.number).join(", ")}]
+sub_issues: [${subIssues.map((si) => si.number).join(", ")}]
 sub_issues_count: ${subIssues.length}
 sub_issues_open: ${openCount}
 sub_issues_closed: ${closedCount}`;
@@ -570,7 +600,7 @@ ${
 
 ## Sub-Issues
 ${subIssues
-	.map((si: any) => {
+	.map((si) => {
 		const statusIcon =
 			si.state === "closed"
 				? '<span class="github-issues-sub-issue-closed">●</span>'
@@ -597,9 +627,9 @@ ${subIssues
 	private convertFieldValuesToProjectData(
 		project: TrackedProject,
 		status: string,
-		fieldValues: any[],
+		fieldValues: ProjectFieldValueNode[],
 	): ProjectData {
-		const customFields: Record<string, any> = {};
+		const customFields: Record<string, ProjectFieldValue> = {};
 		let priority: string | undefined;
 		let iteration:
 			| { title: string; startDate: string; duration: number }
@@ -660,7 +690,7 @@ ${subIssues
 	 * Infer field type from field value structure
 	 */
 	private inferFieldType(
-		fieldValue: any,
+		fieldValue: ProjectFieldValueNode,
 	):
 		| "text"
 		| "number"
@@ -675,10 +705,10 @@ ${subIssues
 		) {
 			return "iteration";
 		}
-		if (fieldValue.users?.nodes?.length > 0) {
+		if ((fieldValue.users?.nodes?.length ?? 0) > 0) {
 			return "user";
 		}
-		if (fieldValue.labels?.nodes?.length > 0) {
+		if ((fieldValue.labels?.nodes?.length ?? 0) > 0) {
 			return "labels";
 		}
 		if (fieldValue.name !== undefined) {
@@ -696,9 +726,9 @@ ${subIssues
 	/**
 	 * Extract repository (owner/repo) from GitHub URL
 	 */
-	private extractRepositoryFromUrl(url: string): string | null {
+	private extractRepositoryFromUrl(url: string | undefined): string | null {
 		if (!url) return null;
-		const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)\//);
+		const match = url.match(/github\.com\/([^/]+)\/([^/]+)\//);
 		if (match) {
 			return `${match[1]}/${match[2]}`;
 		}
@@ -708,22 +738,20 @@ ${subIssues
 	/**
 	 * Convert GraphQL project item content to issue format for template processing
 	 */
-	private convertToIssueFormat(content: any): any {
+	private convertToIssueFormat(content: ProjectItemContentGQL): Issue {
 		return {
+			number: content.number ?? 0,
 			title: content.title,
-			number: content.number,
 			state: content.state || "open",
 			created_at: content.createdAt,
 			updated_at: content.updatedAt,
 			closed_at: content.closedAt,
 			html_url: content.url,
 			body: content.body || "",
-			user: content.author,
-			assignee: content.assignees?.nodes?.[0] || null,
-			assignees: content.assignees?.nodes || [],
-			labels:
-				content.labels?.nodes?.map((l: any) => ({ name: l.name })) ||
-				[],
+			user: content.author as Issue["user"],
+			assignee: (content.assignees?.nodes?.[0] ?? null) as Issue["assignee"],
+			assignees: (content.assignees?.nodes ?? []) as Issue["assignees"],
+			labels: content.labels?.nodes?.map((l) => ({ name: l.name ?? "" })) ?? [],
 			milestone: content.milestone,
 			comments: 0,
 			locked: false,
@@ -733,10 +761,10 @@ ${subIssues
 	/**
 	 * Convert GraphQL project item content to pull request format for template processing
 	 */
-	private convertToPullRequestFormat(content: any): any {
+	private convertToPullRequestFormat(content: ProjectItemContentGQL): PullRequest {
 		return {
+			number: content.number ?? 0,
 			title: content.title,
-			number: content.number,
 			state: content.state || "open",
 			created_at: content.createdAt,
 			updated_at: content.updatedAt,
@@ -744,27 +772,20 @@ ${subIssues
 			merged_at: content.mergedAt,
 			html_url: content.url,
 			body: content.body || "",
-			user: content.author,
-			assignee: content.assignees?.nodes?.[0] || null,
-			assignees: content.assignees?.nodes || [],
-			requested_reviewers:
-				content.reviewRequests?.nodes?.map(
-					(r: any) => r.requestedReviewer,
-				) || [],
-			labels:
-				content.labels?.nodes?.map((l: any) => ({ name: l.name })) ||
-				[],
+			user: content.author as PullRequest["user"],
+			assignee: (content.assignees?.nodes?.[0] ?? null) as PullRequest["assignee"],
+			assignees: (content.assignees?.nodes ?? []) as PullRequest["assignees"],
+			requested_reviewers: content.reviewRequests?.nodes?.map(
+				(r) => r.requestedReviewer,
+			) ?? [],
+			labels: content.labels?.nodes?.map((l) => ({ name: l.name ?? "" })) ?? [],
 			milestone: content.milestone,
 			comments: 0,
 			locked: false,
 			merged: content.merged || false,
-			mergeable: content.mergeable,
-			base: content.baseRefName
-				? { ref: content.baseRefName }
-				: undefined,
-			head: content.headRefName
-				? { ref: content.headRefName }
-				: undefined,
+			mergeable: content.mergeable ?? undefined,
+			base: content.baseRefName ? { ref: content.baseRefName } : undefined,
+			head: content.headRefName ? { ref: content.headRefName } : undefined,
 		};
 	}
 }

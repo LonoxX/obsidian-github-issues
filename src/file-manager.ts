@@ -29,6 +29,11 @@ import {
 } from "./util/templateUtils";
 import { extractPersistBlocks, mergePersistBlocks } from "./util/persistUtils";
 import { getEffectiveProjectSettings } from "./util/settingsUtils";
+import {
+	parseRepository,
+	sanitizeFolderSegment,
+	sanitizeOwnerPath,
+} from "./util/repo-path";
 
 /** Full shape of a GraphQL project-item content node (Issue or PullRequest). */
 interface ProjectItemContentGQL {
@@ -133,11 +138,13 @@ export class FileManager {
 	public async cleanupEmptyFolders(): Promise<void> {
 		try {
 			for (const repo of this.settings.repositories) {
-				const [owner, repoName] = repo.repository.split("/");
+				const { owner, repo: repoName } = parseRepository(
+					repo.repository,
+				);
 				if (!owner || !repoName) continue;
 
-				const repoCleaned = repoName.replace(/\//g, "-");
-				const ownerCleaned = owner.replace(/\//g, "-");
+				const repoCleaned = sanitizeFolderSegment(repoName);
+				const ownerCleaned = sanitizeOwnerPath(owner);
 				const issueFolder = this.folderPathManager.getIssueFolderPath(
 					repo,
 					ownerCleaned,
@@ -206,7 +213,8 @@ export class FileManager {
 		const hiddenItemUrls = new Set<string>();
 
 		for (const item of items) {
-			const content = item.content as ProjectItemContentGQL | null | undefined;
+			const content = item.content as
+				ProjectItemContentGQL | null | undefined;
 			if (!content) {
 				skippedNoContent++;
 				continue;
@@ -261,7 +269,7 @@ export class FileManager {
 			let parentIssue: Issue | null = null;
 
 			if (isIssue && effectiveProject.includeSubIssues) {
-				const [owner, repoName] = repository.split("/");
+				const { owner, repo: repoName } = parseRepository(repository);
 				if (owner && repoName) {
 					subIssues =
 						(await this.provider.fetchSubIssues?.(
@@ -533,8 +541,7 @@ export class FileManager {
 		const author = content.author?.login || "";
 		const assignees =
 			content.assignees?.nodes?.map((a) => `"${a.login}"`) || [];
-		const labels =
-			content.labels?.nodes?.map((l) => `"${l.name}"`) || [];
+		const labels = content.labels?.nodes?.map((l) => `"${l.name}"`) || [];
 
 		let frontmatter = `---
 title: "${title}"
@@ -547,7 +554,8 @@ url: "${content.url || ""}"
 opened_by: "${author}"
 assignees: [${assignees.join(", ")}]
 labels: [${labels.join(", ")}]
-project: "${project.title}"
+project: "${escapeYamlString(project.title)}"
+project_id: "${project.id}"
 project_status: "${status}"`;
 
 		// Add PR-specific fields
@@ -632,8 +640,7 @@ ${subIssues
 		const customFields: Record<string, ProjectFieldValue> = {};
 		let priority: string | undefined;
 		let iteration:
-			| { title: string; startDate: string; duration: number }
-			| undefined;
+			{ title: string; startDate: string; duration: number } | undefined;
 
 		for (const fieldValue of fieldValues) {
 			if (!fieldValue.field?.name) continue;
@@ -749,9 +756,12 @@ ${subIssues
 			html_url: content.url,
 			body: content.body || "",
 			user: content.author as Issue["user"],
-			assignee: (content.assignees?.nodes?.[0] ?? null) as Issue["assignee"],
+			assignee: (content.assignees?.nodes?.[0] ??
+				null) as Issue["assignee"],
 			assignees: (content.assignees?.nodes ?? []) as Issue["assignees"],
-			labels: content.labels?.nodes?.map((l) => ({ name: l.name ?? "" })) ?? [],
+			labels:
+				content.labels?.nodes?.map((l) => ({ name: l.name ?? "" })) ??
+				[],
 			milestone: content.milestone,
 			comments: 0,
 			locked: false,
@@ -761,7 +771,9 @@ ${subIssues
 	/**
 	 * Convert GraphQL project item content to pull request format for template processing
 	 */
-	private convertToPullRequestFormat(content: ProjectItemContentGQL): PullRequest {
+	private convertToPullRequestFormat(
+		content: ProjectItemContentGQL,
+	): PullRequest {
 		return {
 			number: content.number ?? 0,
 			title: content.title,
@@ -773,19 +785,28 @@ ${subIssues
 			html_url: content.url,
 			body: content.body || "",
 			user: content.author as PullRequest["user"],
-			assignee: (content.assignees?.nodes?.[0] ?? null) as PullRequest["assignee"],
-			assignees: (content.assignees?.nodes ?? []) as PullRequest["assignees"],
-			requested_reviewers: content.reviewRequests?.nodes?.map(
-				(r) => r.requestedReviewer,
-			) ?? [],
-			labels: content.labels?.nodes?.map((l) => ({ name: l.name ?? "" })) ?? [],
+			assignee: (content.assignees?.nodes?.[0] ??
+				null) as PullRequest["assignee"],
+			assignees: (content.assignees?.nodes ??
+				[]) as PullRequest["assignees"],
+			requested_reviewers:
+				content.reviewRequests?.nodes?.map(
+					(r) => r.requestedReviewer,
+				) ?? [],
+			labels:
+				content.labels?.nodes?.map((l) => ({ name: l.name ?? "" })) ??
+				[],
 			milestone: content.milestone,
 			comments: 0,
 			locked: false,
 			merged: content.merged || false,
 			mergeable: content.mergeable ?? undefined,
-			base: content.baseRefName ? { ref: content.baseRefName } : undefined,
-			head: content.headRefName ? { ref: content.headRefName } : undefined,
+			base: content.baseRefName
+				? { ref: content.baseRefName }
+				: undefined,
+			head: content.headRefName
+				? { ref: content.headRefName }
+				: undefined,
 		};
 	}
 }

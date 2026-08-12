@@ -1,5 +1,9 @@
-import { ItemView, WorkspaceLeaf, Notice, setIcon } from "obsidian";
-import { IssueTrackerSettings, TrackedProject, ProjectFieldValue } from "./types";
+import { ItemView, WorkspaceLeaf, Notice, setIcon, TFile } from "obsidian";
+import {
+	IssueTrackerSettings,
+	TrackedProject,
+	ProjectFieldValue,
+} from "./types";
 import { IssueProvider } from "./providers/provider";
 import { getEffectiveProjectSettings } from "./util/settingsUtils";
 import { FolderPathManager } from "./folder-path-manager";
@@ -32,6 +36,7 @@ interface KanbanItem {
 	projectStatus: string;
 	customFields?: Record<string, ProjectFieldValue>;
 	labels?: Array<{ name: string; color?: string }>;
+	file?: TFile;
 	[key: string]: unknown;
 }
 
@@ -72,6 +77,61 @@ export class GitHubKanbanView extends ItemView {
 		const n = Number(s);
 		return isNaN(n) ? null : n;
 	}
+
+	/**
+	 * Collect every project a note explicitly declares it belongs to: the flat
+	 * "project_id" written by the project sync, plus any ids from a nested
+	 * "projectData:" list. These are stable node IDs, unlike the project title.
+	 */
+	private getDeclaredProjectIds(
+		frontmatter: Record<string, unknown>,
+	): string[] {
+		const ids: string[] = [];
+
+		const flatId = frontmatter.project_id;
+		if (typeof flatId === "string" && flatId.trim()) {
+			ids.push(flatId.trim());
+		}
+
+		const projectData = frontmatter.projectData;
+		if (Array.isArray(projectData)) {
+			for (const entry of projectData) {
+				if (!entry || typeof entry !== "object") continue;
+				const id = (entry as Record<string, unknown>).projectId;
+				if (typeof id !== "string" || !id.trim()) continue;
+				if (!ids.includes(id.trim())) ids.push(id.trim());
+			}
+		}
+
+		return ids;
+	}
+
+	/**
+	 * Frontmatter labels are plain strings, project data labels are objects.
+	 * The card renderer only understands the object form.
+	 */
+	private normalizeLabels(value: unknown): KanbanItem["labels"] {
+		if (!Array.isArray(value)) return [];
+		return value
+			.map((label) => {
+				if (typeof label === "string") return { name: label };
+				if (label && typeof label === "object") {
+					const rec = label as Record<string, unknown>;
+					if (typeof rec.name === "string") {
+						return {
+							name: rec.name,
+							color:
+								typeof rec.color === "string"
+									? rec.color
+									: undefined,
+						};
+					}
+				}
+				return null;
+			})
+			.filter((l): l is { name: string; color?: string } => l !== null);
+	}
+
 	private gitHubClient: IssueProvider | null = null;
 
 	constructor(
@@ -322,7 +382,7 @@ export class GitHubKanbanView extends ItemView {
 			}
 
 			this.projectDataCache.set(projectId, itemsArray);
-			} catch (error) {
+		} catch (error) {
 			console.error(
 				`Error loading project data for ${projectId}:`,
 				error,
@@ -444,7 +504,9 @@ export class GitHubKanbanView extends ItemView {
 			.concat(statuses.includes("No Status") ? ["No Status"] : []);
 	}
 
-	private async getProjectItems(project: TrackedProject): Promise<KanbanItem[]> {
+	private async getProjectItems(
+		project: TrackedProject,
+	): Promise<KanbanItem[]> {
 		const items: KanbanItem[] = [];
 
 		const trackedProject = this.settings.trackedProjects?.find(
@@ -468,10 +530,14 @@ export class GitHubKanbanView extends ItemView {
 			: undefined;
 
 		const files = this.app.vault.getMarkdownFiles();
-		const matchedNumbers = new Set<number>();
-		const matchedUrls = new Set<string>();
 		const cachedItemsForProject =
 			this.projectDataCache.get(project.id) || [];
+		// Every project the user still tracks. A note pointing at an id we no
+		// longer know about (project recreated, notes copied between vaults)
+		// must not silently disappear from every board.
+		const trackedProjectIds = new Set(
+			(this.settings.trackedProjects || []).map((p) => p.id),
+		);
 		const isFileInProjectFolder = (filePath: string): boolean => {
 			if (issueFolder && filePath.startsWith(issueFolder + "/"))
 				return true;
@@ -479,16 +545,13 @@ export class GitHubKanbanView extends ItemView {
 			return false;
 		};
 
-		// Build a set of normalized URLs from the cache for fast lookup
+		// Build a set of normalized URLs from the cache for fast lookup.
+		// Deliberately no set of issue numbers: numbers are only unique within
+		// a repository, so matching on them mixes separate projects together.
 		const cachedUrls = new Set(
 			cachedItemsForProject
 				.map((ci) => ci.normalizedUrl)
 				.filter((u): u is string => !!u),
-		);
-		const cachedNumbers = new Set(
-			cachedItemsForProject
-				.map((ci) => ci.number)
-				.filter((n): n is number => n !== undefined),
 		);
 
 		for (const file of files) {
@@ -501,64 +564,80 @@ export class GitHubKanbanView extends ItemView {
 				const fileMatchesProject =
 					frontmatter.project === project.title;
 
-				// Only apply the issue-frontmatter filter for files outside the project folder
-				if (!isInProjectFolder && !fileMatchesProject) {
-					const isIssue =
-						frontmatter.number &&
-						frontmatter.title &&
-						frontmatter.state;
-					if (!isIssue) continue;
-				}
+				const declaredProjectIds =
+					this.getDeclaredProjectIds(frontmatter);
+				const declaresThisProject = declaredProjectIds.includes(
+					project.id,
+				);
+				// Only trust a declaration that still points at a tracked project
+				const hasUsableDeclaration = declaredProjectIds.some((id) =>
+					trackedProjectIds.has(id),
+				);
+
 				const itemUrl = frontmatter.url as string | undefined;
-
-				// Fast pre-check: skip if not in folder, no project match, and not in cache
-				if (!isInProjectFolder && !fileMatchesProject) {
-					const fmNum = this.parseNumber(frontmatter.number);
-					const normUrl = this.normalizeUrl(itemUrl);
-					const inCache =
-						(normUrl && cachedUrls.has(normUrl)) ||
-						(fmNum !== null && cachedNumbers.has(fmNum));
-					if (!inCache) continue;
-				}
 				const normalizedItemUrl = this.normalizeUrl(itemUrl);
+				const isOnProjectBoard =
+					!!normalizedItemUrl && cachedUrls.has(normalizedItemUrl);
 
-				let fullProjectData: CachedProjectData | null = null;
-
-				// Try URL matching first (most reliable for cross-repository projects)
-				if (normalizedItemUrl) {
-					fullProjectData =
-						cachedItemsForProject.find(
-							(ci) => ci.normalizedUrl === normalizedItemUrl,
-						) || null;
-					if (fullProjectData && fullProjectData.normalizedUrl) {
-						matchedUrls.add(fullProjectData.normalizedUrl);
-					}
+				// Membership, strongest signal first:
+				// 1. the API says this item is on this board - a URL is globally
+				//    unique, and an item may legitimately sit on two boards
+				// 2. the note names a project id -> that beats where it happens to live
+				// 3. legacy notes without an id fall back to folder / project title
+				let belongsToProject: boolean;
+				if (isOnProjectBoard) {
+					belongsToProject = true;
+				} else if (hasUsableDeclaration) {
+					belongsToProject = declaresThisProject;
+				} else {
+					belongsToProject = isInProjectFolder || fileMatchesProject;
 				}
 
-				// Fall back to number matching only if URL didn't match
-				if (!fullProjectData) {
-					const fmNum = this.parseNumber(frontmatter.number);
-					if (fmNum !== null) {
+				if (belongsToProject) {
+					// A file pulled in purely by a URL match still has to look
+					// like an issue/PR note before it lands on the board
+					if (
+						!isInProjectFolder &&
+						!declaresThisProject &&
+						!fileMatchesProject
+					) {
+						const isIssue =
+							frontmatter.number &&
+							frontmatter.title &&
+							frontmatter.state;
+						if (!isIssue) continue;
+					}
+
+					let fullProjectData: CachedProjectData | null = null;
+
+					if (normalizedItemUrl) {
+						// URL matching only - reliable across repositories
 						fullProjectData =
 							cachedItemsForProject.find(
-								(ci) => Number(ci.number) === fmNum,
+								(ci) => ci.normalizedUrl === normalizedItemUrl,
 							) || null;
-						if (fullProjectData) {
-							matchedNumbers.add(fmNum);
+					} else {
+						// No URL to go by: fall back to the issue number, but
+						// only within this project's own items and only when
+						// the match is unambiguous, since numbers repeat
+						// across repositories
+						const fmNum = this.parseNumber(frontmatter.number);
+						if (fmNum !== null) {
+							const numberMatches = cachedItemsForProject.filter(
+								(ci) => Number(ci.number) === fmNum,
+							);
+							if (numberMatches.length === 1) {
+								fullProjectData = numberMatches[0];
+							}
 						}
 					}
-				}
 
-				if (
-					isInProjectFolder ||
-					fullProjectData ||
-					fileMatchesProject
-				) {
-					const projectStatus: string =
-						String(frontmatter.project_status ||
-						fullProjectData?.status ||
-						fullProjectData?.customFields?.Status?.value ||
-						"No Status");
+					const projectStatus: string = String(
+						frontmatter.project_status ||
+							fullProjectData?.status ||
+							fullProjectData?.customFields?.Status?.value ||
+							"No Status",
+					);
 
 					const item: KanbanItem = {
 						...frontmatter,
@@ -568,15 +647,15 @@ export class GitHubKanbanView extends ItemView {
 						title: frontmatter.title as string | undefined,
 						state: frontmatter.state as string | undefined,
 						url: frontmatter.url as string | undefined,
-						labels: (fullProjectData?.labels ||
-							frontmatter.labels ||
-							[]) as KanbanItem["labels"],
+						labels: this.normalizeLabels(
+							fullProjectData?.labels || frontmatter.labels,
+						),
 						body: fullProjectData?.body || "",
 						author: String(
 							fullProjectData?.author ||
-							frontmatter.opened_by ||
-							frontmatter.author ||
-							"unknown"
+								frontmatter.opened_by ||
+								frontmatter.author ||
+								"unknown",
 						),
 						pull_request: frontmatter.type === "pr",
 						projectTitle: project.title,
@@ -603,12 +682,44 @@ export class GitHubKanbanView extends ItemView {
 			const frontmatter = match[1];
 			const lines = frontmatter.split("\n");
 			const result: Record<string, unknown> = {};
+			// Tracks an open "projectData:" block so its indented "- projectId:"
+			// entries are collected into a real array instead of ending up as a
+			// bogus "- projectId" key. Scoped to that one key on purpose: a
+			// generic rule would turn empty scalars like "milestone:" into arrays.
+			let listEntries: Array<Record<string, string>> | null = null;
 
 			for (const line of lines) {
+				const trimmed = line.trim();
+
+				if (
+					listEntries &&
+					/^\s/.test(line) &&
+					trimmed.startsWith("- ")
+				) {
+					const entry = trimmed.substring(2);
+					const entryColon = entry.indexOf(":");
+					if (entryColon > 0) {
+						listEntries.push({
+							[entry.substring(0, entryColon).trim()]:
+								this.stripQuotes(
+									entry.substring(entryColon + 1).trim(),
+								),
+						});
+					}
+					continue;
+				}
+				listEntries = null;
+
 				const colonIndex = line.indexOf(":");
 				if (colonIndex > 0) {
 					const key = line.substring(0, colonIndex).trim();
-					let value = line.substring(colonIndex + 1).trim();
+					const value = line.substring(colonIndex + 1).trim();
+
+					if (key === "projectData" && value === "") {
+						listEntries = [];
+						result[key] = listEntries;
+						continue;
+					}
 
 					// Try to parse as JSON if it looks like an array/object
 					if (value.startsWith("[") || value.startsWith("{")) {
@@ -618,14 +729,7 @@ export class GitHubKanbanView extends ItemView {
 							result[key] = value;
 						}
 					} else {
-						// Strip surrounding quotes from string values
-						if (
-							(value.startsWith('"') && value.endsWith('"')) ||
-							(value.startsWith("'") && value.endsWith("'"))
-						) {
-							value = value.slice(1, -1);
-						}
-						result[key] = value;
+						result[key] = this.stripQuotes(value);
 					}
 				}
 			}
@@ -635,6 +739,17 @@ export class GitHubKanbanView extends ItemView {
 			console.error("Error parsing frontmatter:", error);
 			return null;
 		}
+	}
+
+	/** Strip surrounding quotes from a frontmatter string value. */
+	private stripQuotes(value: string): string {
+		if (
+			(value.startsWith('"') && value.endsWith('"')) ||
+			(value.startsWith("'") && value.endsWith("'"))
+		) {
+			return value.slice(1, -1);
+		}
+		return value;
 	}
 
 	private groupItemsByStatus(items: KanbanItem[]): Map<string, KanbanItem[]> {
@@ -759,23 +874,11 @@ export class GitHubKanbanView extends ItemView {
 	}
 
 	private async openItemFile(item: KanbanItem): Promise<void> {
-		const files = this.app.vault.getMarkdownFiles();
-
-		// First try: match by URL (most accurate)
-		if (item.url) {
-			for (const file of files) {
-				try {
-					const content = await this.app.vault.read(file);
-					const fm = this.parseFrontmatter(content);
-					if (!fm) continue;
-					if (fm.url && fm.url === item.url) {
-						await this.app.workspace.getLeaf().openFile(file);
-						return;
-					}
-				} catch {
-					// ignore
-				}
-			}
+		// The card knows which note it was built from, so two boards holding
+		// the same issue each open their own note
+		if (item.file instanceof TFile) {
+			await this.app.workspace.getLeaf().openFile(item.file);
+			return;
 		}
 
 		// Fallback: open GitHub URL if available

@@ -2,6 +2,7 @@ import { App, Modal, Notice, setIcon } from "obsidian";
 import { RepositoryTracking } from "../types";
 import IssueTrackerPlugin from "../main";
 import { UIHelpers } from "./ui-helpers";
+import { parseRepository } from "../util/repo-path";
 
 export class ModalManager {
 	constructor(
@@ -167,7 +168,7 @@ export class ModalManager {
 			return;
 		}
 
-		const [owner, repoName] = repositoryName.split("/");
+		const { owner, repo: repoName } = parseRepository(repositoryName);
 		if (!owner || !repoName) {
 			new Notice("Invalid repository format. Expected 'owner/repo'.");
 			return;
@@ -277,9 +278,7 @@ export class ModalManager {
 		repositoryName: string,
 		repo: RepositoryTracking,
 		filterType:
-			| "assigneeFilters"
-			| "prAssigneeFilters"
-			| "prReviewerFilters",
+			"assigneeFilters" | "prAssigneeFilters" | "prReviewerFilters",
 		textAreaElement: HTMLTextAreaElement,
 	): Promise<void> {
 		const github = this.plugin.providerRegistry.get("github");
@@ -290,7 +289,7 @@ export class ModalManager {
 			return;
 		}
 
-		const [owner, repoName] = repositoryName.split("/");
+		const { owner, repo: repoName } = parseRepository(repositoryName);
 		if (!owner || !repoName) {
 			new Notice("Invalid repository format. Expected 'owner/repo'.");
 			return;

@@ -7,6 +7,7 @@ import {
 } from "../types";
 import IssueTrackerPlugin from "../main";
 import { getRepositoryProfiles } from "../util/settingsUtils";
+import { parseRepository } from "../util/repo-path";
 
 export class RepositoryListManager {
 	private selectedRepositories: Set<string> = new Set();
@@ -235,7 +236,7 @@ export class RepositoryListManager {
 		> = {};
 
 		for (const repo of this.plugin.settings.repositories) {
-			const [owner, repoName] = repo.repository.split("/");
+			const { owner, repo: repoName } = parseRepository(repo.repository);
 			if (!owner || !repoName) continue;
 
 			if (!reposByOwner[owner]) {
@@ -331,13 +332,13 @@ export class RepositoryListManager {
 			});
 
 			const sortedRepos = reposByOwner[owner].repos.sort((a, b) => {
-				const aName = a.repository.split("/")[1] || "";
-				const bName = b.repository.split("/")[1] || "";
+				const aName = parseRepository(a.repository).repo;
+				const bName = parseRepository(b.repository).repo;
 				return aName.localeCompare(bName);
 			});
 
 			for (const repo of sortedRepos) {
-				const repoName = repo.repository.split("/")[1] || "";
+				const repoName = parseRepository(repo.repository).repo;
 
 				const repoItem = reposContainer.createDiv(
 					"github-issues-item github-issues-repo-settings",

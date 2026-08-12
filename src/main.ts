@@ -22,6 +22,7 @@ import {
 	getEffectiveRepoSettings,
 	stripProfileFieldsFromRepo,
 } from "./util/settingsUtils";
+import { parseRepository } from "./util/repo-path";
 
 export default class IssueTrackerPlugin extends Plugin {
 	settings: IssueTrackerSettings = DEFAULT_SETTINGS;
@@ -156,7 +157,9 @@ export default class IssueTrackerPlugin extends Plugin {
 	/**
 	 * Build ProviderExtraParams for the given repository.
 	 */
-	private getExtraParams(repo: RepositoryTracking): ProviderExtraParams | undefined {
+	private getExtraParams(
+		repo: RepositoryTracking,
+	): ProviderExtraParams | undefined {
 		const provider = this.getProviderForRepo(repo);
 		if (provider?.type === "gitlab" && repo.gitlabProjectId) {
 			return { gitlabProjectId: repo.gitlabProjectId };
@@ -180,7 +183,9 @@ export default class IssueTrackerPlugin extends Plugin {
 				if (repo.provider !== glProvider.id || repo.gitlabProjectId)
 					continue;
 
-				const [owner, repoName] = repo.repository.split("/");
+				const { owner, repo: repoName } = parseRepository(
+					repo.repository,
+				);
 				if (!owner || !repoName) continue;
 
 				const id = await (
@@ -322,7 +327,7 @@ export default class IssueTrackerPlugin extends Plugin {
 		try {
 			const effectiveRepo = getEffectiveRepoSettings(repo, this.settings);
 			this.noticeManager.info(`Syncing repository: ${repositoryName}`);
-			const [owner, repoName] = repo.repository.split("/");
+			const { owner, repo: repoName } = parseRepository(repo.repository);
 			if (!owner || !repoName) {
 				this.noticeManager.error(
 					`Invalid repository format: ${repositoryName}`,
@@ -684,7 +689,10 @@ export default class IssueTrackerPlugin extends Plugin {
 				},
 			];
 			// Clear legacy fields
-			const legacySettings = this.settings as unknown as Record<string, unknown>;
+			const legacySettings = this.settings as unknown as Record<
+				string,
+				unknown
+			>;
 			delete legacySettings.githubToken;
 			delete legacySettings.useSecretStorage;
 			delete legacySettings.secretTokenName;
@@ -784,7 +792,10 @@ export default class IssueTrackerPlugin extends Plugin {
 						repo,
 					);
 
-					const legacyRepo = repo as unknown as Record<string, unknown>;
+					const legacyRepo = repo as unknown as Record<
+						string,
+						unknown
+					>;
 					if (legacyRepo.ignoreGlobalSettings) {
 						// Repo had custom settings - create a dedicated profile
 						const customProfileId = `migrated-${repo.repository.replace(/\//g, "-")}-${Date.now()}`;
@@ -823,7 +834,8 @@ export default class IssueTrackerPlugin extends Plugin {
 					}
 
 					// Clean up deprecated field
-					delete (merged as unknown as Record<string, unknown>).ignoreGlobalSettings;
+					delete (merged as unknown as Record<string, unknown>)
+						.ignoreGlobalSettings;
 
 					return merged;
 				},
@@ -1049,13 +1061,15 @@ export default class IssueTrackerPlugin extends Plugin {
 							profile.trackIssues === undefined &&
 							lrTrack.trackIssues !== undefined
 						) {
-							profile.trackIssues = lrTrack.trackIssues as boolean;
+							profile.trackIssues =
+								lrTrack.trackIssues as boolean;
 						}
 						if (
 							profile.trackPullRequest === undefined &&
 							lrTrack.trackPullRequest !== undefined
 						) {
-							profile.trackPullRequest = lrTrack.trackPullRequest as boolean;
+							profile.trackPullRequest =
+								lrTrack.trackPullRequest as boolean;
 						}
 					}
 				}
@@ -1186,7 +1200,9 @@ export default class IssueTrackerPlugin extends Plugin {
 	private async fetchIssues() {
 		try {
 			for (const repo of this.settings.repositories) {
-				const [owner, repoName] = repo.repository.split("/");
+				const { owner, repo: repoName } = parseRepository(
+					repo.repository,
+				);
 				if (!owner || !repoName) continue;
 
 				const provider = this.getProviderForRepo(repo);
@@ -1264,7 +1280,9 @@ export default class IssueTrackerPlugin extends Plugin {
 	private async fetchPullRequests() {
 		try {
 			for (const repo of this.settings.repositories) {
-				const [owner, repoName] = repo.repository.split("/");
+				const { owner, repo: repoName } = parseRepository(
+					repo.repository,
+				);
 				if (!owner || !repoName) continue;
 
 				const provider = this.getProviderForRepo(repo);

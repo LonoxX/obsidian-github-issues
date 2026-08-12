@@ -14,6 +14,7 @@ import {
 	PullRequest,
 	RepositoryRef,
 } from "../domain";
+import { parseRepository } from "../../util/repo-path";
 
 // --- Raw GitLab REST shapes (only the fields this provider reads) ---
 
@@ -561,9 +562,11 @@ export class GitLabProvider implements IssueProvider {
 			);
 
 			return projects.map((p) => {
-				const parts = p.path_with_namespace.split("/");
-				const name = parts[parts.length - 1];
-				const ownerPath = parts.slice(0, -1).join("/");
+				// Groups can be nested, so the namespace is everything before
+				// the last slash (e.g. "GroupA/subGroupB" for "GroupA/subGroupB/repo").
+				const { owner: ownerPath, repo: name } = parseRepository(
+					p.path_with_namespace,
+				);
 				return {
 					owner: { login: ownerPath },
 					name,
@@ -721,8 +724,7 @@ export class GitLabProvider implements IssueProvider {
 			return null;
 
 		const widgets = childResponse.json?.data?.workItem?.widgets as
-			| GitLabWorkItemWidget[]
-			| undefined;
+			GitLabWorkItemWidget[] | undefined;
 		if (!widgets) return null;
 
 		const hierarchyWidget = widgets.find((w) => w.children !== undefined);
@@ -882,13 +884,11 @@ export class GitLabProvider implements IssueProvider {
 		if (parentResponse.status < 200 || parentResponse.status >= 300)
 			return undefined;
 
-		const widgets = parentResponse.json?.data?.workItem
-			?.widgets as GitLabWorkItemWidget[] | undefined;
+		const widgets = parentResponse.json?.data?.workItem?.widgets as
+			GitLabWorkItemWidget[] | undefined;
 		if (!widgets) return undefined;
 
-		const hierarchyWidget = widgets.find(
-			(w) => w.parent !== undefined,
-		);
+		const hierarchyWidget = widgets.find((w) => w.parent !== undefined);
 		if (!hierarchyWidget?.parent) return null;
 
 		const p = hierarchyWidget.parent;

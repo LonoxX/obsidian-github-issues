@@ -7,7 +7,12 @@ import {
 	setIcon,
 	SecretComponent,
 } from "obsidian";
-import { ProviderConfig, ProviderId, ProviderType, ProjectStatusOption } from "./types";
+import {
+	ProviderConfig,
+	ProviderId,
+	ProviderType,
+	ProjectStatusOption,
+} from "./types";
 import { RepositoryRef } from "./providers/domain";
 import IssueTrackerPlugin from "./main";
 import { RepositoryRenderer } from "./settings/repository-renderer";
@@ -21,6 +26,7 @@ import {
 	getRepositoryProfiles,
 	getProjectProfiles,
 } from "./util/settingsUtils";
+import { parseRepository } from "./util/repo-path";
 
 export class IssueTrackerSettingTab extends PluginSettingTab {
 	private selectedRepositories: Set<string> = new Set();
@@ -337,10 +343,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.syncNoticeMode)
 					.onChange(async (value) => {
 						this.plugin.settings.syncNoticeMode = value as
-							| "minimal"
-							| "normal"
-							| "extensive"
-							| "debug";
+							"minimal" | "normal" | "extensive" | "debug";
 						await this.plugin.saveSettings();
 					});
 			});
@@ -422,10 +425,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 							return;
 						}
 						this.plugin.settings.escapeMode = value as
-							| "disabled"
-							| "normal"
-							| "strict"
-							| "veryStrict";
+							"disabled" | "normal" | "strict" | "veryStrict";
 						await this.plugin.saveSettings();
 					}),
 			);
@@ -2608,7 +2608,7 @@ export class IssueTrackerSettingTab extends PluginSettingTab {
 		let reposFailed = 0;
 
 		for (const repo of this.plugin.settings.repositories) {
-			const [owner, repoName] = repo.repository.split("/");
+			const { owner, repo: repoName } = parseRepository(repo.repository);
 			if (!owner || !repoName) continue;
 			reposAttempted++;
 

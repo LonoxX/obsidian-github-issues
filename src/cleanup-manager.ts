@@ -74,8 +74,7 @@ export class CleanupManager {
 
 				const correspondingIssue =
 					allIssuesIncludingRecentlyClosed.find(
-						(issue) =>
-							issue.number.toString() === fileNumberString,
+						(issue) => issue.number.toString() === fileNumberString,
 					);
 
 				let shouldDelete = false;
@@ -291,19 +290,10 @@ export class CleanupManager {
 					}
 				}
 
-				const issueOwnerFolder = this.app.vault.getAbstractFileByPath(
+				await this.pruneEmptyAncestors(
 					`${repo.issueFolder}/${ownerCleaned}`,
+					repo.issueFolder ?? "",
 				);
-
-				if (issueOwnerFolder instanceof TFolder) {
-					const files = issueOwnerFolder.children;
-					if (files.length === 0) {
-						this.noticeManager.info(
-							`Deleting empty folder: ${issueOwnerFolder.path}`,
-						);
-						await this.app.fileManager.trashFile(issueOwnerFolder);
-					}
-				}
 			}
 		}
 	}
@@ -364,23 +354,41 @@ export class CleanupManager {
 					}
 				}
 
-				const pullRequestOwnerFolder =
-					this.app.vault.getAbstractFileByPath(
-						`${repo.pullRequestFolder}/${ownerCleaned}`,
-					);
-
-				if (pullRequestOwnerFolder instanceof TFolder) {
-					const files = pullRequestOwnerFolder.children;
-					if (files.length === 0) {
-						this.noticeManager.info(
-							`Deleting empty folder: ${pullRequestOwnerFolder.path}`,
-						);
-						await this.app.fileManager.trashFile(
-							pullRequestOwnerFolder,
-						);
-					}
-				}
+				await this.pruneEmptyAncestors(
+					`${repo.pullRequestFolder}/${ownerCleaned}`,
+					repo.pullRequestFolder ?? "",
+				);
 			}
+		}
+	}
+
+	/**
+	 * Trash empty folders walking upwards from `startPath`, stopping before
+	 * `rootPath` (the configured issue/pull request root, which is never
+	 * touched). Nested GitLab groups mean the owner part of a path can be
+	 * several levels deep, so a single parent check is not enough.
+	 */
+	private async pruneEmptyAncestors(
+		startPath: string,
+		rootPath: string,
+	): Promise<void> {
+		const root = rootPath.replace(/\/+$/, "");
+		if (!root) return;
+
+		let current = startPath.replace(/\/+$/, "");
+
+		while (current !== root && current.startsWith(`${root}/`)) {
+			const folder = this.app.vault.getAbstractFileByPath(current);
+			if (!(folder instanceof TFolder) || folder.children.length > 0) {
+				return;
+			}
+
+			this.noticeManager.info(`Deleting empty folder: ${folder.path}`);
+			await this.app.fileManager.trashFile(folder);
+
+			const idx = current.lastIndexOf("/");
+			if (idx < 0) return;
+			current = current.slice(0, idx);
 		}
 	}
 }

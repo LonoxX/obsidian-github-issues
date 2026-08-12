@@ -1,11 +1,8 @@
 import { format } from "date-fns";
 import { escapeBody, escapeYamlString } from "./escapeUtils";
+import { parseRepository } from "./repo-path";
 import { ProjectData } from "../types";
-import {
-	Issue,
-	IssueComment,
-	PullRequest,
-} from "../providers/domain";
+import { Issue, IssueComment, PullRequest } from "../providers/domain";
 
 interface SubIssueData {
 	number: number;
@@ -251,6 +248,7 @@ function buildReplacements(
 	if (data.projectData && data.projectData.length > 0) {
 		const firstProject = data.projectData[0];
 		replacements["{project}"] = firstProject.projectTitle || "";
+		replacements["{project_id}"] = firstProject.projectId || "";
 		replacements["{project_url}"] = firstProject.projectUrl || "";
 		replacements["{project_number}"] =
 			firstProject.projectNumber?.toString() || "";
@@ -284,6 +282,7 @@ function buildReplacements(
 			: "";
 	} else {
 		replacements["{project}"] = "";
+		replacements["{project_id}"] = "";
 		replacements["{project_url}"] = "";
 		replacements["{project_number}"] = "";
 		replacements["{project_status}"] = "";
@@ -656,6 +655,10 @@ function getVariableValue(
 			return data.projectData && data.projectData.length > 0
 				? data.projectData[0].projectTitle
 				: undefined;
+		case "project_id":
+			return data.projectData && data.projectData.length > 0
+				? data.projectData[0].projectId
+				: undefined;
 		case "project_status":
 			return data.projectData && data.projectData.length > 0
 				? data.projectData[0].status
@@ -718,7 +721,7 @@ export function createIssueTemplateData(
 	subIssues?: Issue[],
 	parentIssue?: Issue | null,
 ): TemplateData {
-	const [owner, repoName] = repository.split("/");
+	const { owner, repo: repoName } = parseRepository(repository);
 
 	const milestoneTitle =
 		issue.milestone?.title || issue.milestone?.name || "";
@@ -795,7 +798,7 @@ export function createPullRequestTemplateData(
 	escapeHashTags: boolean = false,
 	projectData?: ProjectData[],
 ): TemplateData {
-	const [owner, repoName] = repository.split("/");
+	const { owner, repo: repoName } = parseRepository(repository);
 
 	const milestoneTitle = pr.milestone?.title || pr.milestone?.name || "";
 

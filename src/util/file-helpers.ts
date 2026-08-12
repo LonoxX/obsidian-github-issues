@@ -53,11 +53,22 @@ export class FileHelpers {
 
 		// Normalize path separators to forward slashes for consistency
 		const normalizedPath = path.replace(/\\/g, "/");
-		let existing = this.app.vault.getAbstractFileByPath(normalizedPath);
+		const existing = this.app.vault.getAbstractFileByPath(normalizedPath);
 
 		// Check if folder already exists
 		if (existing instanceof TFolder) {
 			return;
+		}
+
+		// Ensure parent folders exist first. Not every Obsidian version creates
+		// intermediate folders for createFolder, and repository owners may be
+		// nested group paths (e.g. GitLab `intern/brotherhoodrp/polas`).
+		const parentPath = normalizedPath.substring(
+			0,
+			normalizedPath.lastIndexOf("/"),
+		);
+		if (parentPath && parentPath !== normalizedPath) {
+			await this.ensureFolderExists(parentPath);
 		}
 
 		try {

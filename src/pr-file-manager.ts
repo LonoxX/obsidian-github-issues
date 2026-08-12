@@ -9,6 +9,11 @@ import {
 	processFilenameTemplate,
 } from "./util/templateUtils";
 import { getEffectiveRepoSettings } from "./util/settingsUtils";
+import {
+	parseRepository,
+	sanitizeFolderSegment,
+	sanitizeOwnerPath,
+} from "./util/repo-path";
 import { extractPersistBlocks, mergePersistBlocks } from "./util/persistUtils";
 import { shouldUpdateContent, hasStatusChanged } from "./util/contentUtils";
 import { FileHelpers } from "./util/file-helpers";
@@ -46,11 +51,13 @@ export class PullRequestFileManager {
 		// Apply global defaults to repository settings
 		const effectiveRepo = getEffectiveRepoSettings(repo, this.settings);
 
-		const [owner, repoName] = effectiveRepo.repository.split("/");
+		const { owner, repo: repoName } = parseRepository(
+			effectiveRepo.repository,
+		);
 		if (!owner || !repoName) return;
 
-		const repoCleaned = repoName.replace(/\//g, "-");
-		const ownerCleaned = owner.replace(/\//g, "-");
+		const repoCleaned = sanitizeFolderSegment(repoName);
+		const ownerCleaned = sanitizeOwnerPath(owner);
 
 		await this.cleanupManager.cleanupDeletedPullRequests(
 			effectiveRepo,
@@ -91,28 +98,10 @@ export class PullRequestFileManager {
 				repoCleaned,
 			);
 
-		// Ensure folder structure exists
-		if (
-			repo.useCustomPullRequestFolder &&
-			repo.customPullRequestFolder &&
-			repo.customPullRequestFolder.trim()
-		) {
-			// For custom folders, just ensure the custom path exists
-			await this.fileHelpers.ensureFolderExists(
-				repo.customPullRequestFolder.trim(),
-			);
-		} else {
-			// For default structure, ensure nested path exists
-			const pullRequestFolder =
-				repo.pullRequestFolder ?? "GitHub Pull Requests";
-			await this.fileHelpers.ensureFolderExists(pullRequestFolder);
-			await this.fileHelpers.ensureFolderExists(
-				`${pullRequestFolder}/${ownerCleaned}`,
-			);
-			await this.fileHelpers.ensureFolderExists(
-				`${pullRequestFolder}/${ownerCleaned}/${repoCleaned}`,
-			);
-		}
+		// Ensure folder structure exists. createFolder creates nested paths
+		// recursively, so a single call covers custom and default (owner may
+		// itself be a nested GitLab group path).
+		await this.fileHelpers.ensureFolderExists(pullRequestFolderPath);
 
 		// Normalize folder path to use forward slashes for consistent vault lookups
 		const normalizedPullRequestFolderPath = pullRequestFolderPath.replace(
@@ -123,7 +112,7 @@ export class PullRequestFileManager {
 			`${normalizedPullRequestFolderPath}/${fileName}`,
 		);
 
-		const [owner, repoName] = repo.repository.split("/");
+		const { owner, repo: repoName } = parseRepository(repo.repository);
 		const extra: ProviderExtraParams | undefined = repo.gitlabProjectId
 			? { gitlabProjectId: repo.gitlabProjectId }
 			: undefined;
@@ -170,7 +159,10 @@ export class PullRequestFileManager {
 					// Check if content needs updating based on updated_at field
 					if (
 						!statusHasChanged &&
-						!shouldUpdateContent(existingContent, pr.updated_at ?? "")
+						!shouldUpdateContent(
+							existingContent,
+							pr.updated_at ?? "",
+						)
 					) {
 						this.noticeManager.debug(
 							`Skipped update for PR ${pr.number}: no changes detected (updated_at match)`,

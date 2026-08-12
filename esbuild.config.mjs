@@ -73,7 +73,7 @@ const context = await esbuild.context({
 	plugins: prod ? [] : [devCopyPlugin],
 });
 
-const devVaultPluginDir = "/mnt/games/Nextcloud/Obsidian/plugins/github-issues";
+const devVaultPluginDir = "/home/lonoxx/Documents/Dev-Vault";
 
 function copyToDevVault() {
 	if (!fs.existsSync(devVaultPluginDir)) {
@@ -90,7 +90,6 @@ function copyToDevVault() {
 
 if (prod) {
 	await context.rebuild();
-	copyToDist(["versions.json", "manifest.json", "styles.css"]);
 	process.exit(0);
 } else {
 	await context.watch();

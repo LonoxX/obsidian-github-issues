@@ -90,6 +90,7 @@ function copyToDevVault() {
 
 if (prod) {
 	await context.rebuild();
+	copyToDist(["versions.json", "manifest.json", "styles.css"]);
 	process.exit(0);
 } else {
 	await context.watch();

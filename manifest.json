@@ -1,7 +1,7 @@
 {
 	"id": "github-issues",
 	"name": "Git Issues & Pull Requests",
-	"version": "1.9.4",
+	"version": "1.10.0",
 	"minAppVersion": "1.11.4",
 	"description": "Sync issues and pull requests from GitHub, GitLab, Gitea and more.",
 	"author": "LonoxX",

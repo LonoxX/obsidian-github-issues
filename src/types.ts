@@ -1,8 +1,11 @@
 import { Issue, PullRequest } from "./providers/domain";
 
 // Provider types
-export type ProviderType = "github" | "gitlab";
-/** Unique instance identifier – e.g. "github", "gitlab", "gitlab-2" */
+/** "GitHub/Roadmap" for GitHub projects, "Gitea/Roadmap" for Gitea ones. */
+export const DEFAULT_PROJECT_FOLDER_TEMPLATE = "{provider}/{project}";
+
+export type ProviderType = "github" | "gitlab" | "forgejo";
+/** Unique instance identifier – e.g. "github", "gitlab", "gitlab-2", "forgejo" */
 export type ProviderId = string;
 
 export interface ProviderConfig {
@@ -14,7 +17,7 @@ export interface ProviderConfig {
 	secretTokenName: string;
 	/** Display name shown in the UI (auto-generated if empty) */
 	label?: string;
-	/** GitLab base URL (e.g. https://gitlab.example.com). Leave empty for gitlab.com */
+	/** Base URL for GitLab or Forgejo/Gitea. Empty means gitlab.com or codeberg.org */
 	baseUrl?: string;
 }
 
@@ -188,6 +191,7 @@ export interface ProjectInfo {
 	url: string;
 	closed: boolean;
 	owner?: string; // Owner (user or org) of the project
+	provider?: string; // Provider instance id, "github" when missing
 }
 
 // Status option from GitHub Projects
@@ -205,6 +209,7 @@ export interface TrackedProject {
 	url: string;
 	owner: string;
 	enabled: boolean;
+	provider?: string; // Provider instance id, "github" when missing
 	profileId?: string; // ID of a "project" type SettingsProfile
 	issueFolder?: string;
 	useCustomIssueFolder?: boolean;
@@ -297,6 +302,8 @@ export interface IssueTrackerSettings {
 	/** @deprecated Use providers array instead. Kept for migration only. */
 	secretTokenName?: string;
 	providers: ProviderConfig[];
+	/** Set once the setup assistant was finished or skipped. */
+	onboardingCompleted?: boolean;
 	repositories: RepositoryTracking[];
 	dateFormat: string;
 	syncOnStartup: boolean;
@@ -364,8 +371,8 @@ export const DEFAULT_PROJECT_PROFILE: SettingsProfile = {
 	id: "default-project",
 	name: "Default Project Profile",
 	type: "project",
-	projectIssueFolder: "GitHub/{project}",
-	projectPullRequestFolder: "GitHub/{project}",
+	projectIssueFolder: DEFAULT_PROJECT_FOLDER_TEMPLATE,
+	projectPullRequestFolder: DEFAULT_PROJECT_FOLDER_TEMPLATE,
 	projectIssueNoteTemplate: "Issue - {number}",
 	projectPullRequestNoteTemplate: "PR - {number}",
 	projectUseCustomIssueContentTemplate: false,

@@ -1,3 +1,4 @@
+import { providerTemplateInfo } from "./util/provider-ui";
 import { App, TFile } from "obsidian";
 import { IssueTrackerSettings, RepositoryTracking } from "./types";
 import { Issue, IssueComment } from "./providers/domain";
@@ -34,7 +35,7 @@ export class IssueFileManager {
 		private provider: IssueProvider,
 	) {
 		this.fileHelpers = new FileHelpers(app, noticeManager);
-		this.folderPathManager = new FolderPathManager();
+		this.folderPathManager = new FolderPathManager(settings);
 		this.cleanupManager = new CleanupManager(app, settings, noticeManager);
 		this.contentGenerator = new ContentGenerator(this.fileHelpers);
 	}
@@ -83,7 +84,18 @@ export class IssueFileManager {
 		issue: Issue,
 	): Promise<void> {
 		// Generate filename using template
-		const templateData = createIssueTemplateData(issue, repo.repository);
+		const templateData = createIssueTemplateData(
+			issue,
+			repo.repository,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			providerTemplateInfo(this.settings.providers, repo.provider),
+		);
 		const baseFileName = processFilenameTemplate(
 			repo.issueNoteTemplate || "Issue - {number}",
 			templateData,
@@ -161,6 +173,7 @@ export class IssueFileManager {
 				repo.repository,
 				this.settings.dateFormat,
 				this.settings.escapeMode,
+				providerTemplateInfo(this.settings.providers, repo.provider),
 			);
 		}
 

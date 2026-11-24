@@ -13,15 +13,15 @@ export class ProjectRenderer {
 		project: TrackedProject,
 	): void {
 		const description = container.createEl("p", {
-			text: "Configure kanban view settings for this project. Folders, templates, and sync settings are managed via the assigned profile.",
+			text: "Folders and templates come from the profile",
 		});
-		description.addClass("github-issues-repo-description");
+		description.addClass("setting-item-description");
 
 		// Kanban View Settings Section
 		new Setting(container).setName("Kanban View Settings").setHeading();
 
 		const kanbanSettingsContainer = container.createDiv(
-			"github-issues-settings-group",
+			"github-issues-subgroup",
 		);
 
 		new Setting(kanbanSettingsContainer)
@@ -42,7 +42,7 @@ export class ProjectRenderer {
 
 		// Status order container (only visible when custom order is enabled)
 		const statusOrderContainer = kanbanSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		statusOrderContainer.classList.toggle(
 			"github-issues-hidden",
@@ -52,20 +52,18 @@ export class ProjectRenderer {
 		// Refresh from GitHub button
 		const refreshSetting = new Setting(statusOrderContainer)
 			.setName("Status columns")
-			.setDesc(
-				"Drag to reorder, toggle visibility, or refresh from GitHub",
-			);
+			.setDesc("Drag to reorder or toggle visibility");
 
 		refreshSetting.addButton((button) => {
 			button
-				.setButtonText("Refresh from GitHub")
-				.setTooltip("Reload status options from GitHub")
+				.setButtonText("Refresh columns")
+				.setTooltip("Reload the columns from the server")
 				.onClick(async () => {
 					button.setDisabled(true);
 					button.setButtonText("Loading...");
 					try {
-						const statusOptions = await this.plugin.providerRegistry
-							.get("github")
+						const statusOptions = await this.plugin
+							.getProviderForProject(project)
 							?.fetchProjectStatusOptions?.(project.id);
 						if (statusOptions) {
 							project.statusOptions = statusOptions;
@@ -81,7 +79,7 @@ export class ProjectRenderer {
 						}
 					} finally {
 						button.setDisabled(false);
-						button.setButtonText("Refresh from GitHub");
+						button.setButtonText("Refresh columns");
 					}
 				});
 		});
@@ -113,7 +111,7 @@ export class ProjectRenderer {
 
 		if (statusOrder.length === 0) {
 			const emptyMessage = container.createEl("p", {
-				text: "No status columns found. Click 'Refresh from GitHub' to load.",
+				text: "No columns yet. Click 'Refresh columns'.",
 			});
 			emptyMessage.addClass("github-issues-status-empty");
 			return;

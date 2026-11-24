@@ -132,16 +132,16 @@ export class GitHubKanbanView extends ItemView {
 			.filter((l): l is { name: string; color?: string } => l !== null);
 	}
 
-	private gitHubClient: IssueProvider | null = null;
+	private providerFor: (project: TrackedProject) => IssueProvider | null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
 		settings: IssueTrackerSettings,
-		gitHubClient: IssueProvider | null,
+		providerFor: (project: TrackedProject) => IssueProvider | null,
 	) {
 		super(leaf);
 		this.settings = settings;
-		this.gitHubClient = gitHubClient;
+		this.providerFor = providerFor;
 	}
 
 	getViewType(): string {
@@ -149,7 +149,7 @@ export class GitHubKanbanView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "GitHub Projects Kanban";
+		return "Projects Kanban";
 	}
 
 	getIcon(): string {
@@ -192,7 +192,7 @@ export class GitHubKanbanView extends ItemView {
 
 		if (trackedProjects.length === 0) {
 			container.createEl("p", {
-				text: "No projects tracked. Go to Settings → GitHub Projects to add projects.",
+				text: "No projects tracked. Add one in Settings - Git Issues & Pull Requests - Projects.",
 				cls: "github-kanban-empty",
 			});
 			return;
@@ -308,9 +308,16 @@ export class GitHubKanbanView extends ItemView {
 		project: TrackedProject,
 	): Promise<void> {
 		try {
-			if (!this.gitHubClient?.fetchProjectItems) return;
-			const projectItems =
-				await this.gitHubClient.fetchProjectItems(projectId);
+			const provider = this.providerFor(project);
+			if (!provider?.fetchProjectItems) return;
+			if (
+				!project.statusOptions?.length &&
+				provider.fetchProjectStatusOptions
+			) {
+				project.statusOptions =
+					await provider.fetchProjectStatusOptions(projectId);
+			}
+			const projectItems = await provider.fetchProjectItems(projectId);
 			const itemsArray: CachedProjectData[] = [];
 
 			for (const item of projectItems) {
@@ -519,7 +526,7 @@ export class GitHubKanbanView extends ItemView {
 			: null;
 
 		// Use FolderPathManager for consistent folder path resolution (same as file-manager)
-		const folderPathManager = new FolderPathManager();
+		const folderPathManager = new FolderPathManager(this.settings);
 		const issueFolder = effectiveProject
 			? folderPathManager.getProjectIssueFolderPath(effectiveProject)
 			: undefined;
@@ -554,6 +561,7 @@ export class GitHubKanbanView extends ItemView {
 				.filter((u): u is string => !!u),
 		);
 
+		const seen = new Map<string, { index: number; rank: number }>();
 		for (const file of files) {
 			try {
 				const content = await this.app.vault.read(file);
@@ -663,7 +671,27 @@ export class GitHubKanbanView extends ItemView {
 						projectUrl: project.url,
 						fullProjectData,
 					};
-					items.push(item);
+					// The same item can have a repository note and a project
+					// note; show it once and prefer the project's own note
+					const rank =
+						isInProjectFolder || declaresThisProject ? 2 : 1;
+					const existing = normalizedItemUrl
+						? seen.get(normalizedItemUrl)
+						: undefined;
+					if (existing) {
+						if (rank > existing.rank) {
+							items[existing.index] = item;
+							existing.rank = rank;
+						}
+					} else {
+						if (normalizedItemUrl) {
+							seen.set(normalizedItemUrl, {
+								index: items.length,
+								rank,
+							});
+						}
+						items.push(item);
+					}
 				}
 			} catch (error) {
 				console.error(`Error processing file ${file.path}:`, error);

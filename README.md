@@ -1,106 +1,116 @@
-# GitHub & GitLab Issues for Obsidian
+<div align="center">
 
-![GitHub Release](https://img.shields.io/github/v/release/LonoxX/obsidian-github-issues)
-![GitHub License](https://img.shields.io/github/license/LonoxX/obsidian-github-issues)
-![GitHub Last Commit](https://img.shields.io/github/last-commit/LonoxX/obsidian-github-issues)
-![Release Workflow](https://img.shields.io/github/actions/workflow/status/LonoxX/obsidian-github-issues/release.yml?label=release)
-![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22github-issues%22%5D.downloads&url=https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugin-stats.json)
-![GitHub Stars](https://img.shields.io/github/stars/LonoxX/obsidian-github-issues)
-![GitHub Issues](https://img.shields.io/github/issues/LonoxX/obsidian-github-issues)
+<h1>Git Issues & Pull Requests</h1>
 
-An Obsidian plugin that integrates with GitHub and GitLab to track issues and pull requests directly in your vault.
+<p>Sync your Git issues and pull requests in Obsidian</p>
 
-> The configurations are heavily inspired by https://github.com/schaier-io, including some specific settings. However, I had already started working on my prototype before I discovered the plugin, and had initially even given it a similar name.
+<p><a href="https://github.com/LonoxX/obsidian-github-issues/wiki"><img src="docs/images/icons/book-open.svg" width="14" height="14" alt=""> Wiki</a> · <a href="https://github.com/LonoxX/obsidian-github-issues/issues/new"><img src="docs/images/icons/bug.svg" width="14" height="14" alt=""> Report Bug</a> · <a href="https://github.com/sponsors/LonoxX"><img src="docs/images/icons/heart.svg" width="14" height="14" alt=""> Support me</a> · <a href="https://ko-fi.com/lonoxx"><img src="docs/images/icons/coffee.svg" width="14" height="14" alt=""> Ko-fi</a> · <a href="https://buymeacoffee.com/lonoxx"><img src="docs/images/icons/pizza.svg" width="14" height="14" alt=""> Buy me a Pizza</a></p>
 
-# Documentation
+<p>
+<img src="https://img.shields.io/github/v/release/LonoxX/obsidian-github-issues" alt="GitHub Release">
+<img src="https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22github-issues%22%5D.downloads&url=https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugin-stats.json" alt="Obsidian Downloads">
+<img src="https://img.shields.io/github/actions/workflow/status/LonoxX/obsidian-github-issues/check.yml?label=check" alt="Check Workflow">
+<img src="https://img.shields.io/github/actions/workflow/status/LonoxX/obsidian-github-issues/release.yml?label=release" alt="Release Workflow">
+<img src="https://img.shields.io/github/license/LonoxX/obsidian-github-issues" alt="GitHub License">
+<img src="https://img.shields.io/github/stars/LonoxX/obsidian-github-issues" alt="GitHub Stars">
+</p>
 
-Check out the [documentation](https://github.com/LonoxX/obsidian-github-issues/wiki) for detailed information on setup, configuration, and usage.
+</div>
 
-## Features
+![A synced issue note with its properties](docs/images/note-reading.png)
 
-### Issue & Pull Request Tracking
+## Providers
 
-- Track issues and pull requests from multiple GitHub and GitLab repositories
-- Automatically sync data on startup (configurable)
-- Background sync at configurable intervals
-- Filter by labels, assignees, and reviewers
-- Include or exclude closed issues/PRs
-- Automatic cleanup of old closed items
+![Provider list in the plugin settings](docs/images/providers.png)
 
-### GitLab Support
+| Provider                   | Issues | Pull / Merge Requests | Sub-issues | Projects |
+| -------------------------- | :----: | :-------------------: | :--------: | :------: |
+| GitHub                     |   ✓    |           ✓           |     ✓      |    ✓     |
+| GitLab (incl. self-hosted) |   ✓    |           ✓           |     ✓      |    ✓     |
+| Gitea                      |   ✓    |           ✓           |     –      |    ✓     |
+| Forgejo (incl. Codeberg)   |   ✓    |           ✓           |     –      |    –     |
 
-- Full support for GitLab Issues and Merge Requests
-- Works with self-hosted GitLab instances
-- Multiple GitLab instances can be configured simultaneously
-
-### GitHub Projects v2 Integration
-
-- Track GitHub Projects across repositories
-- Kanban board view for project visualization
-- Custom field support (status, priority, iteration)
-- Project-specific filtering and organization
-
-### Sub-Issues Support
-
-- Track sub-issues for both GitHub and GitLab (parent/child relationships)
-- Display sub-issues list with status indicators
-- Navigate between parent and child issues
-- Progress tracking with completion percentage
-
-### Settings Profiles
-
-- Central configuration for folders, templates, sync behaviour, and filters
-- Assign one profile to multiple repositories instead of configuring each one individually
-
-### Markdown Notes
-
-- Create markdown notes for each issue or PR
-- Customizable filename templates with variables
-- Custom content templates
-- YAML frontmatter with metadata
-- Preserve user content with persist blocks
-- Include comments in notes
+On GitLab, projects are issue boards. Forgejo has project boards on its website, but does not offer them through its API yet.
 
 ## Installation
 
-### Via Community Plugins (Recommended)
+### Community plugins (recommended)
 
-1. Open Obsidian Settings
-2. Navigate to **Community Plugins**
-3. Click **Browse** and search for "GitHub Issues"
-4. Click **Install** and then **Enable**
+1. Open Obsidian Settings - **Community plugins**
+2. Click **Browse** and search for "Git Issues & Pull Requests"
+3. Click **Install**, then **Enable**
 
-### Manual Installation
+### Manual
 
 1. Download the latest release from [GitHub Releases](https://github.com/LonoxX/obsidian-github-issues/releases)
-2. Extract to `<vault>/.obsidian/plugins/github-issues/`
-3. Enable the plugin in **Community Plugins**
-4. Reload Obsidian
+2. Extract it to `<vault>/.obsidian/plugins/github-issues/`
+3. Reload Obsidian and enable the plugin under **Community plugins**
 
-## Configuration
+## Getting started
 
-### GitHub
+1. **Setup assistant:** On the first start a short assistant connects your first server and adds a repository. You can open it again any time with the command **Open setup assistant**.
+2. **Connect more servers:** In the **Providers** tab pick a type under **Add server** and paste a read-only token, see [Tokens](#tokens).
+3. **Add repositories:** In the **Repositories** tab enter `owner/repo` under **Add repository**, or load a server under **Browse a server** and tick several repositories at once.
+4. **Sync:** Click the sync icon in the ribbon or run **Sync all issues & pull requests**.
 
-1. Create a GitHub token with `repo` and `read:org` permissions
-   → [GitHub Settings > Developer Settings > Personal access tokens](https://github.com/settings/tokens)
-2. Paste the token in **Settings - Providers - GitHub Token**
+![Repositories tab with one group per server](docs/images/settings-overview.png)
 
-### GitLab
+![Browse a server and pick several repositories](docs/images/browse-repositories.png)
 
-1. Create a GitLab Personal Access Token with `read_api` scope
-   → GitLab → Preferences → Access Tokens
-2. Enable the GitLab provider in **Settings - Providers - GitLab Token** and paste your token
+## Tokens
 
-## Adding Repositories
+The plugin only reads from your servers and never changes anything there, so a token with read access is all it needs.
 
-1. Open the plugin settings in Obsidian
-2. Add repositories by entering the full repository path (e.g., `lonoxx/obsidian-github-issues`),
-   or use the repository browser to select one or multiple repositories
-3. Click **Add Repository** or **Add Selected Repositories**
-4. The plugin will automatically fetch issues from the configured repositories
+| Provider        | Where                                                                        | Scopes                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| GitHub          | [Settings - Developer settings - Tokens](https://github.com/settings/tokens) | Classic: `repo`, `read:org`, `read:project` for projects. Fine-grained: read Issues, Pull requests, Metadata |
+| GitLab          | Preferences - Access tokens                                                  | `read_api` (personal, group or project token)                                                                |
+| Forgejo / Gitea | Settings - Applications                                                      | `read:issue`, `read:repository`, `read:user`, plus `read:organization` for organization repos                |
 
-## Support
+For self-hosted servers enter the address under **Server**. Leave it empty for github.com, gitlab.com or codeberg.org.
 
-If you find this plugin useful and would like to support its development, you can star the repository or support me on Ko-fi or [GitHub Sponsors](https://github.com/sponsors/LonoxX):
+## Features
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/LonoxX)
+### Notes
+
+- One Markdown note per issue and pull request, with metadata as properties
+- Filename and content templates with variables and conditions
+- Comments included on request
+- Persist blocks keep your own notes across syncs
+- Folder placeholders such as `{provider}`, `{owner}` and `{repo}` keep servers apart
+
+### Sync and filters
+
+- Sync on startup and in the background
+- Filter by labels, assignees and reviewers
+- Include or skip closed items, with automatic cleanup of old ones
+
+### Profiles
+
+- Folders, templates, sync behaviour and filters in one place
+- Assign one profile to many repositories instead of configuring each one
+
+### Projects and Kanban
+
+- GitHub Projects (v2), Gitea projects and GitLab issue boards
+- Kanban view with the columns of the project, read-only
+- Custom fields such as status, priority and iteration
+
+![Kanban board of a project](docs/images/kanban.png)
+
+### Sub-issues
+
+- Sub-issues for GitHub and GitLab with status dots
+- Links between parent and child issues
+
+![Sub-issue list in an issue note](docs/images/sub-issues.png)
+
+## Credits
+
+- The first version of the settings was inspired by [schaier-io](https://github.com/schaier-io)
+- Persist blocks were inspired by the [Zotero Integration](https://github.com/mgmeyers/obsidian-zotero-integration)
+- GitHub API client: [Octokit](https://github.com/octokit/octokit.js) (MIT)
+- Date formatting: [date-fns](https://date-fns.org) (MIT)
+- Server icons from [Simple Icons](https://simpleicons.org) (CC0)
+- Link icons from [Lucide](https://lucide.dev) (ISC)
+- Thanks to [everyone who contributed](https://github.com/LonoxX/obsidian-github-issues/graphs/contributors)

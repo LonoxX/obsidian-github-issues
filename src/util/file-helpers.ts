@@ -1,3 +1,4 @@
+import type { ProviderTemplateInfo } from "./provider-ui";
 import { App, TFile, TFolder } from "obsidian";
 import { format } from "date-fns";
 import { escapeBody } from "./escapeUtils";
@@ -169,6 +170,7 @@ export class FileHelpers {
 		repository: string,
 		dateFormat: string,
 		escapeMode: "disabled" | "normal" | "strict" | "veryStrict",
+		provider?: ProviderTemplateInfo,
 	): Promise<Issue[]> {
 		if (!subIssues || subIssues.length === 0) {
 			return subIssues;
@@ -196,6 +198,10 @@ export class FileHelpers {
 					dateFormat,
 					escapeMode,
 					false,
+					undefined,
+					undefined,
+					undefined,
+					provider,
 				);
 
 				const expectedFilename = processFilenameTemplate(

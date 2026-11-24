@@ -1,16 +1,24 @@
 import { requestUrl } from "obsidian";
 import {
 	IssueTrackerSettings,
+	ProjectInfo,
+	ProjectStatusOption,
 	ProviderConfig,
 	ProviderType,
 } from "../../types";
 import { NoticeManager } from "../../notice-manager";
-import { IssueProvider, ProviderId, ProviderExtraParams } from "../provider";
+import {
+	IssueProvider,
+	ProjectSourceRepository,
+	ProviderId,
+	ProviderExtraParams,
+} from "../provider";
 import {
 	GitUser,
 	Issue,
 	IssueComment,
 	Label,
+	ProjectItem,
 	PullRequest,
 	RepositoryRef,
 } from "../domain";
@@ -37,6 +45,35 @@ interface RawGitLabIssue {
 	title?: string;
 	[key: string]: unknown;
 }
+
+interface RawGitLabBoardList {
+	id: number;
+	position?: number;
+	label?: { name?: string; color?: string } | null;
+	assignee?: { username?: string } | null;
+	milestone?: { title?: string } | null;
+}
+
+interface RawGitLabBoard {
+	id: number;
+	name?: string;
+	hide_backlog_list?: boolean;
+	hide_closed_list?: boolean;
+	labels?: Array<{ name?: string }> | null;
+	milestone?: { title?: string } | null;
+	lists?: RawGitLabBoardList[];
+}
+
+/** Where a board lives: a project or a group, by numeric id. */
+interface BoardRef {
+	scope: "project" | "group";
+	scopeId: number;
+	boardId: number;
+	url: string;
+}
+
+const OPEN_LIST = "Open";
+const CLOSED_LIST = "Closed";
 
 interface RawGitLabMergeRequest extends RawGitLabIssue {
 	reviewers?: RawGitLabUser[];
@@ -110,8 +147,9 @@ export class GitLabProvider implements IssueProvider {
 		);
 	}
 
+	/** GitLab issue boards are offered as projects. */
 	supportsProjects(): boolean {
-		return false;
+		return true;
 	}
 	supportsSubIssues(): boolean {
 		return true;
@@ -928,6 +966,263 @@ export class GitLabProvider implements IssueProvider {
 			);
 		}
 		return undefined;
+	}
+
+	/**
+	 * Issue boards of the given repositories and of the groups they live in.
+	 * The id is the board URL plus the numeric project or group id.
+	 */
+	public async fetchAllAvailableProjects(
+		repositories: ProjectSourceRepository[] = [],
+	): Promise<ProjectInfo[]> {
+		const boards: ProjectInfo[] = [];
+		const seenGroups = new Set<string>();
+		for (const source of repositories) {
+			const { owner, repo } = parseRepository(source.repository);
+			if (!owner || !repo) continue;
+			const projectId =
+				source.gitlabProjectId ??
+				(await this.resolveProjectId(owner, repo));
+			if (projectId === undefined) continue;
+
+			const projectBoards = await this.fetchPaginated<RawGitLabBoard>(
+				`/projects/${projectId}/boards`,
+			);
+			for (const board of projectBoards) {
+				boards.push(
+					this.boardInfo(
+						board,
+						"project",
+						projectId,
+						`${owner}/${repo}`,
+						owner,
+					),
+				);
+			}
+
+			if (seenGroups.has(owner)) continue;
+			seenGroups.add(owner);
+			const group = await this.getJson<{ id: number; full_path: string }>(
+				`/groups/${encodeURIComponent(owner)}`,
+			);
+			if (!group) continue;
+			const groupBoards = await this.fetchPaginated<RawGitLabBoard>(
+				`/groups/${group.id}/boards`,
+			);
+			for (const board of groupBoards) {
+				boards.push(
+					this.boardInfo(
+						board,
+						"group",
+						group.id,
+						`groups/${group.full_path}`,
+						group.full_path,
+					),
+				);
+			}
+		}
+		return boards;
+	}
+
+	private boardInfo(
+		board: RawGitLabBoard,
+		scope: "project" | "group",
+		scopeId: number,
+		webPath: string,
+		owner: string,
+	): ProjectInfo {
+		const url = `${this.baseUrl}/${webPath}/-/boards/${board.id}`;
+		return {
+			id: `${url}#${scope}=${scopeId}`,
+			title: board.name || `Board ${board.id}`,
+			number: board.id,
+			url,
+			closed: false,
+			owner,
+			provider: this.id,
+		};
+	}
+
+	private static parseBoardId(id: string): BoardRef | null {
+		const match = id.match(
+			/^(.*\/-\/boards\/(\d+))#(project|group)=(\d+)$/,
+		);
+		if (!match) return null;
+		return {
+			url: match[1],
+			boardId: Number(match[2]),
+			scope: match[3] as "project" | "group",
+			scopeId: Number(match[4]),
+		};
+	}
+
+	private async getJson<T>(path: string): Promise<T | null> {
+		if (!this.tokenGetter()) return null;
+		try {
+			const response = await requestUrl({
+				url: this.apiUrl(path),
+				headers: this.authHeaders(),
+				throw: false,
+			});
+			if (response.status < 200 || response.status >= 300) return null;
+			return response.json as T;
+		} catch {
+			return null;
+		}
+	}
+
+	private async fetchBoard(ref: BoardRef): Promise<RawGitLabBoard | null> {
+		return this.getJson<RawGitLabBoard>(
+			`/${ref.scope}s/${ref.scopeId}/boards/${ref.boardId}`,
+		);
+	}
+
+	/** Label, assignee or milestone lists, in board order. */
+	private static boardLists(board: RawGitLabBoard) {
+		return (board.lists ?? [])
+			.slice()
+			.sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+			.map((list) => {
+				if (list.label?.name) {
+					const name = list.label.name;
+					return {
+						name,
+						color: list.label.color,
+						matches: (issue: RawGitLabIssue) =>
+							(issue.labels ?? []).includes(name),
+					};
+				}
+				if (list.assignee?.username) {
+					const user = list.assignee.username;
+					return {
+						name: user,
+						color: undefined,
+						matches: (issue: RawGitLabIssue) =>
+							(issue.assignees ?? []).some(
+								(a) => a.username === user,
+							),
+					};
+				}
+				if (list.milestone?.title) {
+					const title = list.milestone.title;
+					return {
+						name: title,
+						color: undefined,
+						matches: (issue: RawGitLabIssue) =>
+							(issue.milestone as { title?: string } | null)
+								?.title === title,
+					};
+				}
+				return null;
+			})
+			.filter((l) => l !== null);
+	}
+
+	public async fetchProjectStatusOptions(
+		projectId: string,
+	): Promise<ProjectStatusOption[]> {
+		const ref = GitLabProvider.parseBoardId(projectId);
+		if (!ref) return [];
+		const board = await this.fetchBoard(ref);
+		if (!board) return [];
+		const options: ProjectStatusOption[] = [];
+		if (!board.hide_backlog_list)
+			options.push({ id: "open", name: OPEN_LIST });
+		for (const list of GitLabProvider.boardLists(board)) {
+			options.push({ id: list.name, name: list.name, color: list.color });
+		}
+		if (!board.hide_closed_list)
+			options.push({ id: "closed", name: CLOSED_LIST });
+		return options;
+	}
+
+	/**
+	 * Board items the way GitLab places them: closed issues in "Closed",
+	 * open ones in the first list they match, the rest in "Open".
+	 */
+	public async fetchProjectItems(projectId: string): Promise<ProjectItem[]> {
+		const ref = GitLabProvider.parseBoardId(projectId);
+		if (!ref) return [];
+		const board = await this.fetchBoard(ref);
+		if (!board) return [];
+		const lists = GitLabProvider.boardLists(board);
+
+		const scopeParams: Record<string, string> = {};
+		const scopeLabels = (board.labels ?? [])
+			.map((l) => l.name)
+			.filter((n): n is string => !!n);
+		if (scopeLabels.length > 0) scopeParams.labels = scopeLabels.join(",");
+		if (board.milestone?.title)
+			scopeParams.milestone = board.milestone.title;
+
+		const endpoint = `/${ref.scope}s/${ref.scopeId}/issues`;
+		const issues = await this.fetchPaginated<RawGitLabIssue>(endpoint, {
+			...scopeParams,
+			state: "opened",
+		});
+		if (!board.hide_closed_list) {
+			const cutoff = new Date();
+			cutoff.setDate(
+				cutoff.getDate() -
+					(this.settings.cleanupClosedIssuesDays ?? 30),
+			);
+			issues.push(
+				...(await this.fetchPaginated<RawGitLabIssue>(endpoint, {
+					...scopeParams,
+					state: "closed",
+					updated_after: cutoff.toISOString(),
+				})),
+			);
+		}
+
+		const items: ProjectItem[] = [];
+		for (const issue of issues) {
+			let status: string | undefined;
+			if (issue.state === "closed") {
+				if (!board.hide_closed_list) status = CLOSED_LIST;
+			} else {
+				status = lists.find((l) => l.matches(issue))?.name;
+				if (!status && !board.hide_backlog_list) status = OPEN_LIST;
+			}
+			if (!status) continue;
+
+			const normalized = this.normalizeIssue(issue);
+			const reference = (
+				issue.references as { full?: string } | undefined
+			)?.full;
+			const repository = reference
+				? reference.replace(/[#!]\d+$/, "")
+				: undefined;
+			items.push({
+				id: `${ref.boardId}-${issue.id ?? issue.iid}`,
+				content: {
+					number: issue.iid,
+					title: issue.title ?? "",
+					body: issue.description ?? "",
+					url: issue.web_url,
+					state: normalized.state,
+					author: { login: issue.author?.username ?? "" },
+					createdAt: issue.created_at,
+					updatedAt: issue.updated_at as string | undefined,
+					closedAt: issue.closed_at ?? null,
+					assignees: {
+						nodes: (issue.assignees ?? []).map((a) => ({
+							login: a.username ?? "",
+						})),
+					},
+					labels: {
+						nodes: (issue.labels ?? []).map((name) => ({ name })),
+					},
+					milestone:
+						(issue.milestone as { title?: string } | null) ?? null,
+					repository,
+				},
+				fieldValues: {
+					nodes: [{ field: { name: "Status" }, name: status }],
+				},
+			});
+		}
+		return items;
 	}
 
 	/**

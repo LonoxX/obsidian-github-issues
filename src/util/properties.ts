@@ -1,6 +1,9 @@
 import { App, TFile } from "obsidian";
 
-export function extractProperties(app: App, file: TFile): Record<string, unknown> {
+export function extractProperties(
+	app: App,
+	file: TFile,
+): Record<string, unknown> {
 	const cache = app.metadataCache.getFileCache(file);
 	return cache?.frontmatter || {};
 }

@@ -1,3 +1,4 @@
+import { providerTemplateInfo } from "./util/provider-ui";
 import { App, TFile } from "obsidian";
 import { IssueTrackerSettings, RepositoryTracking } from "./types";
 import { IssueComment, PullRequest } from "./providers/domain";
@@ -34,7 +35,7 @@ export class PullRequestFileManager {
 		private provider: IssueProvider,
 	) {
 		this.fileHelpers = new FileHelpers(app, noticeManager);
-		this.folderPathManager = new FolderPathManager();
+		this.folderPathManager = new FolderPathManager(settings);
 		this.cleanupManager = new CleanupManager(app, settings, noticeManager);
 		this.contentGenerator = new ContentGenerator(this.fileHelpers);
 	}
@@ -84,7 +85,16 @@ export class PullRequestFileManager {
 		pr: PullRequest,
 	): Promise<void> {
 		// Generate filename using template
-		const templateData = createPullRequestTemplateData(pr, repo.repository);
+		const templateData = createPullRequestTemplateData(
+			pr,
+			repo.repository,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			providerTemplateInfo(this.settings.providers, repo.provider),
+		);
 		const baseFileName = processFilenameTemplate(
 			repo.pullRequestNoteTemplate || "PR - {number}",
 			templateData,

@@ -1,17 +1,15 @@
-import { App, Modal, Notice, Setting, setIcon } from "obsidian";
+import { App, Modal, Notice, Setting, SettingGroup } from "obsidian";
 import {
+	DEFAULT_PROJECT_FOLDER_TEMPLATE,
 	SettingsProfile,
 	ProfileType,
 	DEFAULT_REPOSITORY_PROFILE,
 	DEFAULT_PROJECT_PROFILE,
 } from "../types";
 import IssueTrackerPlugin from "../main";
+import { ConfirmModal } from "./confirm-modal";
 import { FolderSuggest } from "./folder-suggest";
 import { FileSuggest } from "./file-suggest";
-import {
-	getRepositoryProfiles,
-	getProjectProfiles,
-} from "../util/settingsUtils";
 
 export class ProfileRenderer {
 	private selectedProfileId: string = "default";
@@ -22,238 +20,32 @@ export class ProfileRenderer {
 	) {}
 
 	/**
-	 * Render the full profile management section
+	 * Render settings fields for a repository-type profile
 	 */
-	renderProfileSection(
+	/** Render the editor of one profile (repository or project type). */
+	renderProfileEditor(
 		container: HTMLElement,
-		onRefreshNeeded: () => void,
+		profile: SettingsProfile,
 	): void {
-		const profiles = this.plugin.settings.profiles;
-
-		// Ensure selected profile exists
-		if (!profiles.find((p) => p.id === this.selectedProfileId)) {
-			this.selectedProfileId = "default";
-		}
-
-		// Profile toolbar: Dropdown + Icon buttons in one row
-		const toolbarContainer = container.createDiv(
-			"github-issues-profile-toolbar",
-		);
-
-		// Custom dropdown with right-aligned type badge
-		const dropdownWrapper = toolbarContainer.createDiv(
-			"github-issues-profile-dropdown-wrapper",
-		);
-		const dropdownButton = dropdownWrapper.createDiv(
-			"github-issues-profile-dropdown-button",
-		);
-		const dropdownList = dropdownWrapper.createDiv(
-			"github-issues-profile-dropdown-list",
-		);
-		dropdownList.addClass("github-issues-hidden");
-
-		const selectedProfile = profiles.find(
-			(p) => p.id === this.selectedProfileId,
-		);
-
-		const updateButtonLabel = (profile: SettingsProfile) => {
-			dropdownButton.empty();
-			dropdownButton.createSpan({
-				text: profile.name,
-				cls: "github-issues-profile-dropdown-name",
-			});
-			const badgeCls =
-				profile.type === "repository"
-					? "github-issues-profile-type-tag github-issues-profile-tag-repository"
-					: "github-issues-profile-type-tag github-issues-profile-tag-project";
-			dropdownButton.createSpan({
-				text: profile.type === "repository" ? "Repo" : "Project",
-				cls: badgeCls,
-			});
-			const chevron = dropdownButton.createSpan({
-				cls: "github-issues-profile-dropdown-chevron",
-			});
-			setIcon(chevron, "chevron-down");
-		};
-
-		if (selectedProfile) {
-			updateButtonLabel(selectedProfile);
-		}
-
-		// Build dropdown items
-		for (const profile of profiles) {
-			const item = dropdownList.createDiv(
-				"github-issues-profile-dropdown-item",
-			);
-			if (profile.id === this.selectedProfileId) {
-				item.addClass("is-selected");
-			}
-			item.createSpan({
-				text: profile.name,
-				cls: "github-issues-profile-dropdown-name",
-			});
-			const badgeCls =
-				profile.type === "repository"
-					? "github-issues-profile-type-tag github-issues-profile-tag-repository"
-					: "github-issues-profile-type-tag github-issues-profile-tag-project";
-			item.createSpan({
-				text: profile.type === "repository" ? "Repo" : "Project",
-				cls: badgeCls,
-			});
-			item.onclick = (e) => {
-				e.stopPropagation();
-				this.selectedProfileId = profile.id;
-				dropdownList.addClass("github-issues-hidden");
-				onRefreshNeeded();
-			};
-		}
-
-		// Toggle dropdown
-		dropdownButton.onclick = (e) => {
-			e.stopPropagation();
-			dropdownList.toggleClass(
-				"github-issues-hidden",
-				!dropdownList.hasClass("github-issues-hidden"),
-			);
-		};
-
-		// Close on outside click
-		const closeDropdown = (e: MouseEvent) => {
-			if (!dropdownWrapper.contains(e.target as Node)) {
-				dropdownList.addClass("github-issues-hidden");
-			}
-		};
-		activeDocument.addEventListener("click", closeDropdown);
-		// Cleanup when container is removed
-		const observer = new MutationObserver(() => {
-			if (!container.isConnected) {
-				activeDocument.removeEventListener("click", closeDropdown);
-				observer.disconnect();
-			}
-		});
-		observer.observe(container.parentElement ?? activeDocument.body, {
-			childList: true,
-			subtree: true,
-		});
-
-		const isCustomProfile =
-			selectedProfile &&
-			selectedProfile.id !== "default" &&
-			selectedProfile.id !== "default-project";
-
-		// Helper to create the new/copy/delete buttons
-		const addNewButton = (parent: HTMLElement) => {
-			const btn = parent.createEl("button", {
-				cls: "github-issues-profile-toolbar-btn",
-				attr: { "aria-label": "New Profile" },
-			});
-			setIcon(btn, "plus");
-			btn.onclick = () => {
-				this.showCreateProfileModal(onRefreshNeeded);
-			};
-		};
-
-		const addCopyButton = (parent: HTMLElement) => {
-			if (!selectedProfile) return;
-			const btn = parent.createEl("button", {
-				cls: "github-issues-profile-toolbar-btn",
-				attr: { "aria-label": "Duplicate Profile" },
-			});
-			setIcon(btn, "copy");
-			btn.onclick = async () => {
-				const newProfile: SettingsProfile = {
-					...selectedProfile,
-					id: `profile-${Date.now()}`,
-					name: `${selectedProfile.name} (Copy)`,
-				};
-				this.plugin.settings.profiles.push(newProfile);
-				await this.plugin.saveSettings();
-				this.selectedProfileId = newProfile.id;
-				new Notice(`Profile "${newProfile.name}" created`);
-				onRefreshNeeded();
-			};
-		};
-
-		const addDeleteButton = (parent: HTMLElement) => {
-			if (!isCustomProfile) return;
-			const btn = parent.createEl("button", {
-				cls: "github-issues-profile-toolbar-btn github-issues-profile-delete-btn",
-				attr: { "aria-label": "Delete Profile" },
-			});
-			setIcon(btn, "trash-2");
-			btn.onclick = () => {
-				this.showDeleteProfileModal(selectedProfile, onRefreshNeeded);
-			};
-		};
-
-		if (isCustomProfile) {
-			// Custom profile: actions row below with rename + buttons
-			const actionsRow = container.createDiv(
-				"github-issues-profile-actions-row",
-			);
-
-			const renameInput = actionsRow.createEl("input", {
-				cls: "github-issues-profile-rename-input",
-				type: "text",
-				value: selectedProfile.name,
-				attr: {
-					placeholder: "Profile name",
-					"aria-label": "Rename profile",
-				},
-			});
-			renameInput.addEventListener("change", () => {
-				if (renameInput.value.trim()) {
-					selectedProfile.name = renameInput.value.trim();
-					void this.plugin.saveSettings();
-					updateButtonLabel(selectedProfile);
-				}
-			});
-
-			addNewButton(actionsRow);
-			addCopyButton(actionsRow);
-			addDeleteButton(actionsRow);
+		if (profile.type === "repository") {
+			this.renderRepositoryProfileSettings(container, profile);
 		} else {
-			// Default profile: buttons inline next to dropdown
-			addNewButton(toolbarContainer);
-			addCopyButton(toolbarContainer);
-		}
-
-		// Profile settings form
-		if (selectedProfile) {
-			const profileSettingsContainer = container.createDiv(
-				"github-issues-profile-settings",
-			);
-
-			if (selectedProfile.type === "repository") {
-				this.renderRepositoryProfileSettings(
-					profileSettingsContainer,
-					selectedProfile,
-				);
-			} else {
-				this.renderProjectProfileSettings(
-					profileSettingsContainer,
-					selectedProfile,
-				);
-			}
+			this.renderProjectProfileSettings(container, profile);
 		}
 	}
 
-	/**
-	 * Render settings fields for a repository-type profile
-	 */
 	private renderRepositoryProfileSettings(
 		container: HTMLElement,
 		profile: SettingsProfile,
 	): void {
 		// Issues subsection
-		const issuesContainer = container.createDiv("github-issues-nested");
-		new Setting(issuesContainer).setName("Issues").setHeading();
+		const issuesContainer = new SettingGroup(container).setHeading(
+			"Issues",
+		).listEl;
 
 		new Setting(issuesContainer)
 			.setName("Track issues")
-			.setDesc(
-				"Enable or disable issue tracking for repositories using this profile",
-			)
+			.setDesc("Sync issues of these repositories")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(profile.trackIssues ?? true)
@@ -268,7 +60,7 @@ export class ProfileRenderer {
 			);
 
 		const issuesSettingsContainer = issuesContainer.createDiv(
-			"github-issues-settings-group",
+			"github-issues-subgroup",
 		);
 		issuesSettingsContainer.classList.toggle(
 			"github-issues-hidden",
@@ -286,18 +78,14 @@ export class ProfileRenderer {
 					.setValue(profile.issueUpdateMode ?? "none")
 					.onChange(async (value) => {
 						profile.issueUpdateMode = value as
-							| "none"
-							| "update"
-							| "append";
+							"none" | "update" | "append";
 						await this.plugin.saveSettings();
 					}),
 			);
 
 		new Setting(issuesSettingsContainer)
 			.setName("Allow deletion")
-			.setDesc(
-				"Allow deletion of local issue files when closed on GitHub",
-			)
+			.setDesc("Delete notes when closed on the server")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(profile.allowDeleteIssue ?? true)
@@ -309,7 +97,7 @@ export class ProfileRenderer {
 
 		new Setting(issuesSettingsContainer)
 			.setName("Folder")
-			.setDesc("Default folder where issue files will be stored")
+			.setDesc("Placeholders: {provider}, {owner}, {repo}")
 			.addText((text) => {
 				text.setPlaceholder("GitHub")
 					.setValue(profile.issueFolder ?? "GitHub")
@@ -390,9 +178,7 @@ export class ProfileRenderer {
 
 		new Setting(issuesSettingsContainer)
 			.setName("Filter issues by labels")
-			.setDesc(
-				"Set a default label filter for repositories using this profile (undefined = repos keep their own filter)",
-			)
+			.setDesc("Default label filter")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(profile.enableLabelFilter !== undefined)
@@ -400,7 +186,9 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enableLabelFilter = true;
 						} else {
-							delete (profile as unknown as Record<string, unknown>).enableLabelFilter;
+							delete (
+								profile as unknown as Record<string, unknown>
+							).enableLabelFilter;
 						}
 						issueLabelFilterControls.classList.toggle(
 							"github-issues-hidden",
@@ -412,7 +200,7 @@ export class ProfileRenderer {
 
 		const issueLabelFilterEnabled = profile.enableLabelFilter !== undefined;
 		const issueLabelFilterControls = issuesSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		issueLabelFilterControls.classList.toggle(
 			"github-issues-hidden",
@@ -434,8 +222,7 @@ export class ProfileRenderer {
 					.setValue(profile.labelFilterMode ?? "include")
 					.onChange(async (value) => {
 						profile.labelFilterMode = value as
-							| "include"
-							| "exclude";
+							"include" | "exclude";
 						await this.plugin.saveSettings();
 					}),
 			);
@@ -458,9 +245,7 @@ export class ProfileRenderer {
 
 		new Setting(issuesSettingsContainer)
 			.setName("Filter issues by assignees")
-			.setDesc(
-				"Set a default assignee filter for repositories using this profile (undefined = repos keep their own filter)",
-			)
+			.setDesc("Default assignee filter")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(profile.enableAssigneeFilter !== undefined)
@@ -468,7 +253,9 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enableAssigneeFilter = true;
 						} else {
-							delete (profile as unknown as Record<string, unknown>).enableAssigneeFilter;
+							delete (
+								profile as unknown as Record<string, unknown>
+							).enableAssigneeFilter;
 						}
 						issueAssigneeFilterControls.classList.toggle(
 							"github-issues-hidden",
@@ -481,7 +268,7 @@ export class ProfileRenderer {
 		const issueAssigneeFilterEnabled =
 			profile.enableAssigneeFilter !== undefined;
 		const issueAssigneeFilterControls = issuesSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		issueAssigneeFilterControls.classList.toggle(
 			"github-issues-hidden",
@@ -506,9 +293,7 @@ export class ProfileRenderer {
 		];
 
 		const issueAssigneeSpecificContainer =
-			issueAssigneeFilterControls.createDiv(
-				"github-issues-settings-group github-issues-nested",
-			);
+			issueAssigneeFilterControls.createDiv("github-issues-subgroup");
 		issueAssigneeSpecificContainer.classList.toggle(
 			"github-issues-hidden",
 			!(profile.assigneeFilterModes ?? []).includes(
@@ -564,14 +349,13 @@ export class ProfileRenderer {
 			});
 
 		// Pull Requests subsection
-		const prContainer = container.createDiv("github-issues-nested");
-		new Setting(prContainer).setName("Pull Requests").setHeading();
+		const prContainer = new SettingGroup(container).setHeading(
+			"Pull requests",
+		).listEl;
 
 		new Setting(prContainer)
 			.setName("Track pull requests")
-			.setDesc(
-				"Enable or disable pull request tracking for repositories using this profile",
-			)
+			.setDesc("Sync pull requests of these repositories")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(profile.trackPullRequest ?? false)
@@ -586,7 +370,7 @@ export class ProfileRenderer {
 			);
 
 		const prSettingsContainer = prContainer.createDiv(
-			"github-issues-settings-group",
+			"github-issues-subgroup",
 		);
 		prSettingsContainer.classList.toggle(
 			"github-issues-hidden",
@@ -604,16 +388,16 @@ export class ProfileRenderer {
 					.setValue(profile.pullRequestUpdateMode ?? "none")
 					.onChange(async (value) => {
 						profile.pullRequestUpdateMode = value as
-							| "none"
-							| "update"
-							| "append";
+							"none" | "update" | "append";
 						await this.plugin.saveSettings();
 					}),
 			);
 
 		new Setting(prSettingsContainer)
 			.setName("Allow deletion")
-			.setDesc("Allow deletion of local PR files when closed on GitHub")
+			.setDesc(
+				"Allow deletion of local PR files when closed on the server",
+			)
 			.addToggle((toggle) =>
 				toggle
 					.setValue(profile.allowDeletePullRequest ?? true)
@@ -625,7 +409,7 @@ export class ProfileRenderer {
 
 		new Setting(prSettingsContainer)
 			.setName("Folder")
-			.setDesc("Default folder where pull request files will be stored")
+			.setDesc("Placeholders: {provider}, {owner}, {repo}")
 			.addText((text) => {
 				text.setPlaceholder("GitHub Pull Requests")
 					.setValue(
@@ -698,9 +482,7 @@ export class ProfileRenderer {
 
 		new Setting(prSettingsContainer)
 			.setName("Filter pull requests by labels")
-			.setDesc(
-				"Set a default PR label filter for repositories using this profile (undefined = repos keep their own filter)",
-			)
+			.setDesc("Default label filter")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(profile.enablePrLabelFilter !== undefined)
@@ -708,7 +490,9 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enablePrLabelFilter = true;
 						} else {
-							delete (profile as unknown as Record<string, unknown>).enablePrLabelFilter;
+							delete (
+								profile as unknown as Record<string, unknown>
+							).enablePrLabelFilter;
 						}
 						prLabelFilterControls.classList.toggle(
 							"github-issues-hidden",
@@ -720,7 +504,7 @@ export class ProfileRenderer {
 
 		const prLabelFilterEnabled = profile.enablePrLabelFilter !== undefined;
 		const prLabelFilterControls = prSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		prLabelFilterControls.classList.toggle(
 			"github-issues-hidden",
@@ -742,8 +526,7 @@ export class ProfileRenderer {
 					.setValue(profile.prLabelFilterMode ?? "include")
 					.onChange(async (value) => {
 						profile.prLabelFilterMode = value as
-							| "include"
-							| "exclude";
+							"include" | "exclude";
 						await this.plugin.saveSettings();
 					}),
 			);
@@ -766,9 +549,7 @@ export class ProfileRenderer {
 
 		new Setting(prSettingsContainer)
 			.setName("Filter pull requests by assignees")
-			.setDesc(
-				"Set a default PR assignee filter for repositories using this profile (undefined = repos keep their own filter)",
-			)
+			.setDesc("Default assignee filter")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(profile.enablePrAssigneeFilter !== undefined)
@@ -776,7 +557,9 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enablePrAssigneeFilter = true;
 						} else {
-							delete (profile as unknown as Record<string, unknown>).enablePrAssigneeFilter;
+							delete (
+								profile as unknown as Record<string, unknown>
+							).enablePrAssigneeFilter;
 						}
 						prAssigneeFilterControls.classList.toggle(
 							"github-issues-hidden",
@@ -789,7 +572,7 @@ export class ProfileRenderer {
 		const prAssigneeFilterEnabled =
 			profile.enablePrAssigneeFilter !== undefined;
 		const prAssigneeFilterControls = prSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		prAssigneeFilterControls.classList.toggle(
 			"github-issues-hidden",
@@ -814,7 +597,7 @@ export class ProfileRenderer {
 		];
 
 		const prAssigneeSpecificContainer = prAssigneeFilterControls.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		prAssigneeSpecificContainer.classList.toggle(
 			"github-issues-hidden",
@@ -872,9 +655,7 @@ export class ProfileRenderer {
 
 		new Setting(prSettingsContainer)
 			.setName("Filter pull requests by reviewers")
-			.setDesc(
-				"Set a default PR reviewer filter for repositories using this profile (undefined = repos keep their own filter)",
-			)
+			.setDesc("Default reviewer filter")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(profile.enablePrReviewerFilter !== undefined)
@@ -882,7 +663,9 @@ export class ProfileRenderer {
 						if (value) {
 							profile.enablePrReviewerFilter = true;
 						} else {
-							delete (profile as unknown as Record<string, unknown>).enablePrReviewerFilter;
+							delete (
+								profile as unknown as Record<string, unknown>
+							).enablePrReviewerFilter;
 						}
 						prReviewerFilterControls.classList.toggle(
 							"github-issues-hidden",
@@ -895,7 +678,7 @@ export class ProfileRenderer {
 		const prReviewerFilterEnabled =
 			profile.enablePrReviewerFilter !== undefined;
 		const prReviewerFilterControls = prSettingsContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		prReviewerFilterControls.classList.toggle(
 			"github-issues-hidden",
@@ -923,7 +706,7 @@ export class ProfileRenderer {
 		];
 
 		const prReviewerSpecificContainer = prReviewerFilterControls.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		prReviewerSpecificContainer.classList.toggle(
 			"github-issues-hidden",
@@ -989,17 +772,19 @@ export class ProfileRenderer {
 		container: HTMLElement,
 		profile: SettingsProfile,
 	): void {
-		const settingsContainer = container.createDiv("github-issues-nested");
-		new Setting(settingsContainer).setName("Project Settings").setHeading();
+		const settingsContainer = new SettingGroup(container).setHeading(
+			"Project settings",
+		).listEl;
 
 		new Setting(settingsContainer)
 			.setName("Issue folder")
-			.setDesc(
-				"Default folder for project issue files (supports {project} variable)",
-			)
+			.setDesc("Placeholders: {provider}, {project}")
 			.addText((text) => {
-				text.setPlaceholder("GitHub/{project}")
-					.setValue(profile.projectIssueFolder ?? "GitHub/{project}")
+				text.setPlaceholder(DEFAULT_PROJECT_FOLDER_TEMPLATE)
+					.setValue(
+						profile.projectIssueFolder ??
+							DEFAULT_PROJECT_FOLDER_TEMPLATE,
+					)
 					.onChange(async (value) => {
 						profile.projectIssueFolder = value;
 						await this.plugin.saveSettings();
@@ -1009,13 +794,12 @@ export class ProfileRenderer {
 
 		new Setting(settingsContainer)
 			.setName("Pull request folder")
-			.setDesc(
-				"Default folder for project PR files (supports {project} variable)",
-			)
+			.setDesc("Placeholders: {provider}, {project}")
 			.addText((text) => {
-				text.setPlaceholder("GitHub/{project}")
+				text.setPlaceholder(DEFAULT_PROJECT_FOLDER_TEMPLATE)
 					.setValue(
-						profile.projectPullRequestFolder ?? "GitHub/{project}",
+						profile.projectPullRequestFolder ??
+							DEFAULT_PROJECT_FOLDER_TEMPLATE,
 					)
 					.onChange(async (value) => {
 						profile.projectPullRequestFolder = value;
@@ -1124,56 +908,30 @@ export class ProfileRenderer {
 	}
 
 	/**
-	 * Render a profile selection dropdown for a repository or project
-	 */
-	renderProfileSelector(
-		container: HTMLElement,
-		currentProfileId: string,
-		profileType: ProfileType,
-		onSelect: (profileId: string) => Promise<void>,
-	): void {
-		const profiles =
-			profileType === "repository"
-				? getRepositoryProfiles(this.plugin.settings)
-				: getProjectProfiles(this.plugin.settings);
-
-		new Setting(container)
-			.setName("Settings profile")
-			.setDesc(`Select which profile provides default settings`)
-			.addDropdown((dropdown) => {
-				for (const profile of profiles) {
-					dropdown.addOption(profile.id, profile.name);
-				}
-				dropdown.setValue(
-					currentProfileId ||
-						(profileType === "repository"
-							? "default"
-							: "default-project"),
-				);
-				dropdown.onChange(async (value) => {
-					await onSelect(value);
-				});
-			});
-	}
-
-	/**
 	 * Show modal to create a new profile
 	 */
-	private showCreateProfileModal(onRefreshNeeded: () => void): void {
+	showCreateProfileModal(onRefreshNeeded: () => void): void {
 		const modal = new Modal(this.app);
-		modal.titleEl.setText("Create New Profile");
+		modal.modalEl.addClass("github-issues-modal");
+		modal.setTitle("Create profile");
 
 		let profileName = "";
 		let profileType: ProfileType = "repository";
+		let nameInput: HTMLInputElement | null = null;
 
-		new Setting(modal.contentEl).setName("Profile name").addText((text) =>
-			text.setPlaceholder("My Custom Profile").onChange((value) => {
-				profileName = value;
-			}),
-		);
+		new Setting(modal.contentEl)
+			.setName("Profile name")
+			.setDesc("Shown in the profile picker of repositories and projects")
+			.addText((text) => {
+				nameInput = text.inputEl;
+				text.setPlaceholder("My custom profile").onChange((value) => {
+					profileName = value;
+				});
+			});
 
 		new Setting(modal.contentEl)
 			.setName("Profile type")
+			.setDesc("Repository or project")
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption("repository", "Repository")
@@ -1184,20 +942,10 @@ export class ProfileRenderer {
 					}),
 			);
 
-		const buttonContainer = modal.contentEl.createDiv(
-			"github-issues-button-container",
-		);
-
-		const cancelButton = buttonContainer.createEl("button");
-		cancelButton.setText("Cancel");
-		cancelButton.onclick = () => modal.close();
-
-		const createButton = buttonContainer.createEl("button");
-		createButton.setText("Create");
-		createButton.addClass("mod-cta");
-		createButton.onclick = async () => {
+		const create = async () => {
 			if (!profileName.trim()) {
 				new Notice("Please enter a profile name");
+				nameInput?.focus();
 				return;
 			}
 
@@ -1222,80 +970,68 @@ export class ProfileRenderer {
 			onRefreshNeeded();
 		};
 
+		const buttons = modal.contentEl.createDiv("modal-button-container");
+		buttons.createEl("button", { text: "Cancel" }).onclick = () =>
+			modal.close();
+		buttons.createEl("button", { text: "Create", cls: "mod-cta" }).onclick =
+			() => void create();
+		modal.scope.register([], "Enter", () => {
+			void create();
+			return false;
+		});
+
 		modal.open();
+		window.setTimeout(() => nameInput?.focus(), 0);
 	}
 
 	/**
 	 * Show modal to confirm profile deletion
 	 */
-	private showDeleteProfileModal(
+	showDeleteProfileModal(
 		profile: SettingsProfile,
 		onRefreshNeeded: () => void,
 	): void {
-		const modal = new Modal(this.app);
-		modal.titleEl.setText("Delete Profile");
-
-		// Check for repos/projects using this profile
 		const affectedRepos = this.plugin.settings.repositories.filter(
 			(r) => r.profileId === profile.id,
 		);
 		const affectedProjects = this.plugin.settings.trackedProjects.filter(
 			(p) => p.profileId === profile.id,
 		);
+		const affected = [
+			...affectedRepos.map((r) => r.repository),
+			...affectedProjects.map((p) => p.title || p.id),
+		];
 
-		let message = `Are you sure you want to delete the profile "${profile.name}"?`;
-		if (affectedRepos.length > 0 || affectedProjects.length > 0) {
-			const parts: string[] = [];
-			if (affectedRepos.length > 0) {
-				parts.push(
-					`${affectedRepos.length} repositor${affectedRepos.length === 1 ? "y" : "ies"}`,
-				);
-			}
-			if (affectedProjects.length > 0) {
-				parts.push(
-					`${affectedProjects.length} project${affectedProjects.length === 1 ? "" : "s"}`,
-				);
-			}
-			message += `\n\nThis profile is currently used by ${parts.join(" and ")}. They will be reassigned to the default profile.`;
-		}
+		new ConfirmModal(this.app, {
+			title: "Delete profile",
+			message: "Delete the profile",
+			highlight: profile.name,
+			details:
+				affected.length > 0
+					? `Used by ${affected.length} ${affected.length === 1 ? "entry" : "entries"}, which will switch to the default profile:`
+					: "No repositories or projects use this profile.",
+			items: affected,
+			confirmText: "Delete profile",
+			confirmIcon: "trash-2",
+			onConfirm: async () => {
+				const defaultId =
+					profile.type === "repository"
+						? "default"
+						: "default-project";
+				for (const repo of affectedRepos) repo.profileId = defaultId;
+				for (const project of affectedProjects)
+					project.profileId = defaultId;
 
-		modal.contentEl.createEl("p", { text: message });
+				this.plugin.settings.profiles =
+					this.plugin.settings.profiles.filter(
+						(p) => p.id !== profile.id,
+					);
 
-		const buttonContainer = modal.contentEl.createDiv(
-			"github-issues-button-container",
-		);
-
-		const cancelButton = buttonContainer.createEl("button");
-		cancelButton.setText("Cancel");
-		cancelButton.onclick = () => modal.close();
-
-		const deleteButton = buttonContainer.createEl("button");
-		deleteButton.setText("Delete");
-		deleteButton.addClass("mod-warning");
-		deleteButton.onclick = async () => {
-			// Reassign affected repos/projects to default profile
-			const defaultId =
-				profile.type === "repository" ? "default" : "default-project";
-			for (const repo of affectedRepos) {
-				repo.profileId = defaultId;
-			}
-			for (const project of affectedProjects) {
-				project.profileId = defaultId;
-			}
-
-			// Remove the profile
-			this.plugin.settings.profiles =
-				this.plugin.settings.profiles.filter(
-					(p) => p.id !== profile.id,
-				);
-
-			await this.plugin.saveSettings();
-			this.selectedProfileId = defaultId;
-			new Notice(`Profile "${profile.name}" deleted`);
-			modal.close();
-			onRefreshNeeded();
-		};
-
-		modal.open();
+				await this.plugin.saveSettings();
+				this.selectedProfileId = defaultId;
+				new Notice(`Profile "${profile.name}" deleted`);
+				onRefreshNeeded();
+			},
+		}).open();
 	}
 }

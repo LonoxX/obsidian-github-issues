@@ -14,11 +14,15 @@ import { IssueProvider, ProviderExtraParams } from "./providers/provider";
 import { ProviderRegistry } from "./providers/provider-registry";
 import { GitHubProvider } from "./providers/github/github-provider";
 import { GitLabProvider } from "./providers/gitlab/gitlab-provider";
+import { ForgejoProvider } from "./providers/forgejo/forgejo-provider";
+import { registerProviderIcons } from "./util/provider-icons";
+import { OnboardingModal } from "./onboarding/onboarding-modal";
 import { FileManager } from "./file-manager";
 import { IssueTrackerSettingTab } from "./settings-tab";
 import { NoticeManager } from "./notice-manager";
 import { GitHubKanbanView, KANBAN_VIEW_TYPE } from "./kanban-view";
 import {
+	getEffectiveProjectSettings,
 	getEffectiveRepoSettings,
 	stripProfileFieldsFromRepo,
 } from "./util/settingsUtils";
@@ -131,7 +135,7 @@ export default class IssueTrackerPlugin extends Plugin {
 	/**
 	 * Get the provider for a specific repository
 	 */
-	private getProviderForRepo(repo: {
+	public getProviderForRepo(repo: {
 		provider?: ProviderId;
 	}): IssueProvider | undefined {
 		return this.providerRegistry.get(repo.provider ?? "github");
@@ -157,7 +161,7 @@ export default class IssueTrackerPlugin extends Plugin {
 	/**
 	 * Build ProviderExtraParams for the given repository.
 	 */
-	private getExtraParams(
+	public getExtraParams(
 		repo: RepositoryTracking,
 	): ProviderExtraParams | undefined {
 		const provider = this.getProviderForRepo(repo);
@@ -234,29 +238,33 @@ export default class IssueTrackerPlugin extends Plugin {
 		}
 	}
 
+	/** Provider a tracked project belongs to; GitHub when none is stored. */
+	getProviderForProject(project: TrackedProject): IssueProvider | null {
+		const provider = project.provider
+			? this.providerRegistry.get(project.provider)
+			: (this.providerRegistry.get("github") ??
+				this.providerRegistry.getByType("github")[0]);
+		if (!provider?.isReady() || !provider.supportsProjects()) return null;
+		return provider;
+	}
+
 	/**
-	 * Sync items from tracked GitHub Projects (GitHub-only feature)
+	 * Sync items from tracked projects (GitHub Projects and Gitea projects)
 	 */
 	private async syncProjects() {
 		if (!this.settings.enableProjectTracking) {
 			return;
 		}
 
-		const ghProvider =
-			this.providerRegistry.get("github") ??
-			this.providerRegistry.getByType("github")[0];
-		if (!ghProvider?.isReady() || !ghProvider.supportsProjects()) {
-			return;
-		}
-		this.noticeManager.setProviderPrefix(ghProvider.displayName);
-
-		const ghFileManager = this.getFileManagerForProvider(ghProvider);
-
-		const hasAnyFolderConfigured = (p: TrackedProject) =>
-			p.issueFolder ||
-			p.pullRequestFolder ||
-			p.customIssueFolder ||
-			p.customPullRequestFolder;
+		const hasAnyFolderConfigured = (project: TrackedProject) => {
+			const p = getEffectiveProjectSettings(project, this.settings);
+			return (
+				p.issueFolder ||
+				p.pullRequestFolder ||
+				p.customIssueFolder ||
+				p.customPullRequestFolder
+			);
+		};
 
 		const enabledProjects = this.settings.trackedProjects.filter(
 			(p) => p.enabled && hasAnyFolderConfigured(p),
@@ -268,10 +276,13 @@ export default class IssueTrackerPlugin extends Plugin {
 		}
 
 		for (const project of enabledProjects) {
+			const provider = this.getProviderForProject(project);
+			if (!provider?.fetchProjectItems) continue;
+			this.noticeManager.setProviderPrefix(provider.displayName);
 			try {
 				this.noticeManager.debug(`Syncing project: ${project.title}`);
 
-				const items = await ghProvider.fetchProjectItems!(project.id);
+				const items = await provider.fetchProjectItems(project.id);
 
 				if (items.length === 0) {
 					this.noticeManager.debug(
@@ -280,7 +291,9 @@ export default class IssueTrackerPlugin extends Plugin {
 					continue;
 				}
 
-				await ghFileManager.createProjectItemFiles(project, items);
+				await this.getFileManagerForProvider(
+					provider,
+				).createProjectItemFiles(project, items);
 
 				this.noticeManager.debug(
 					`Processed ${items.length} items for project ${project.title}`,
@@ -294,14 +307,19 @@ export default class IssueTrackerPlugin extends Plugin {
 		}
 	}
 
-	async syncSingleRepository(repositoryName: string) {
+	async syncSingleRepository(
+		repositoryName: string,
+		providerId?: ProviderId,
+	) {
 		if (this.isSyncing) {
 			this.noticeManager.warning("Already syncing...");
 			return;
 		}
 
 		const repo = this.settings.repositories.find(
-			(r) => r.repository === repositoryName,
+			(r) =>
+				r.repository === repositoryName &&
+				(!providerId || (r.provider ?? "github") === providerId),
 		);
 
 		if (!repo) {
@@ -437,21 +455,11 @@ export default class IssueTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * Sync a single project by ID (GitHub-only)
+	 * Sync a single project by ID
 	 */
 	async syncSingleProject(projectId: string) {
 		if (this.isSyncing) {
 			this.noticeManager.warning("Already syncing...");
-			return;
-		}
-
-		const ghProvider =
-			this.providerRegistry.get("github") ??
-			this.providerRegistry.getByType("github")[0];
-		if (!ghProvider?.isReady() || !ghProvider.supportsProjects()) {
-			this.noticeManager.error(
-				"GitHub provider not initialized or doesn't support projects",
-			);
 			return;
 		}
 
@@ -466,11 +474,21 @@ export default class IssueTrackerPlugin extends Plugin {
 			return;
 		}
 
+		const provider = this.getProviderForProject(project);
+		if (!provider?.fetchProjectItems) {
+			this.noticeManager.error(
+				`The server of ${project.title} is not connected`,
+			);
+			return;
+		}
+		this.noticeManager.setProviderPrefix(provider.displayName);
+
+		const effective = getEffectiveProjectSettings(project, this.settings);
 		const hasAnyFolder =
-			project.issueFolder ||
-			project.pullRequestFolder ||
-			project.customIssueFolder ||
-			project.customPullRequestFolder;
+			effective.issueFolder ||
+			effective.pullRequestFolder ||
+			effective.customIssueFolder ||
+			effective.customPullRequestFolder;
 
 		if (!hasAnyFolder) {
 			this.noticeManager.warning(
@@ -483,16 +501,16 @@ export default class IssueTrackerPlugin extends Plugin {
 		try {
 			this.noticeManager.info(`Syncing project: ${project.title}`);
 
-			const items = await ghProvider.fetchProjectItems!(project.id);
+			const items = await provider.fetchProjectItems(project.id);
 
 			if (items.length === 0) {
 				this.noticeManager.info(
 					`No items found in project ${project.title}`,
 				);
 			} else {
-				const ghFileManager =
-					this.getFileManagerForProvider(ghProvider);
-				await ghFileManager.createProjectItemFiles(project, items);
+				await this.getFileManagerForProvider(
+					provider,
+				).createProjectItemFiles(project, items);
 				this.noticeManager.success(
 					`Successfully synced ${items.length} items from ${project.title}`,
 				);
@@ -508,6 +526,7 @@ export default class IssueTrackerPlugin extends Plugin {
 	}
 
 	async onload() {
+		registerProviderIcons();
 		await this.loadSettings();
 
 		this.noticeManager = new NoticeManager(this.settings);
@@ -533,7 +552,7 @@ export default class IssueTrackerPlugin extends Plugin {
 		}
 		const ribbonIconEl = this.addRibbonIcon(
 			"refresh-cw",
-			"Issue Tracker",
+			"Sync Git issues & pull requests",
 			async (_evt: MouseEvent) => {
 				if (this.providerRegistry.getEnabled().length === 0) {
 					new Notice(
@@ -547,34 +566,48 @@ export default class IssueTrackerPlugin extends Plugin {
 		ribbonIconEl.addClass("issue-tracker-ribbon-class");
 
 		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText("Issue Tracker");
+		statusBarItemEl.setText("Git Issues");
 		this.addCommand({
 			id: "sync-issues-and-pull-requests",
 			name: "Sync all issues & pull requests",
 			callback: () => this.sync(),
 		});
 
-		// Register Kanban View (GitHub-only)
 		this.registerView(
 			KANBAN_VIEW_TYPE,
 			(leaf) =>
-				new GitHubKanbanView(
-					leaf,
-					this.settings,
-					this.providerRegistry.get("github") ??
-						this.providerRegistry.getByType("github")[0] ??
-						null,
+				new GitHubKanbanView(leaf, this.settings, (project) =>
+					this.getProviderForProject(project),
 				),
 		);
 
 		this.addCommand({
 			id: "open-kanban-view",
-			name: "Open GitHub Projects Kanban",
+			name: "Open projects kanban",
 			callback: () => this.openKanbanView(),
+		});
+
+		this.addCommand({
+			id: "open-setup-assistant",
+			name: "Open setup assistant",
+			callback: () => this.openOnboarding(),
 		});
 
 		this.addSettingTab(new IssueTrackerSettingTab(this.app, this));
 		this.startBackgroundSync();
+
+		this.app.workspace.onLayoutReady(() => {
+			const hasToken = this.settings.providers.some(
+				(p) => p.enabled && !!this.getProviderToken(p.id),
+			);
+			if (!this.settings.onboardingCompleted && !hasToken) {
+				this.openOnboarding();
+			}
+		});
+	}
+
+	openOnboarding(): void {
+		new OnboardingModal(this.app, this).open();
 	}
 
 	/**
@@ -597,6 +630,13 @@ export default class IssueTrackerPlugin extends Plugin {
 				);
 			} else if (config.type === "gitlab") {
 				provider = new GitLabProvider(
+					this.settings,
+					this.noticeManager,
+					() => this.getProviderToken(config.id),
+					config,
+				);
+			} else if (config.type === "forgejo") {
+				provider = new ForgejoProvider(
 					this.settings,
 					this.noticeManager,
 					() => this.getProviderToken(config.id),
@@ -708,6 +748,8 @@ export default class IssueTrackerPlugin extends Plugin {
 					pc.type = "github";
 				} else if (pc.id === "gitlab" || pc.id.startsWith("gitlab")) {
 					pc.type = "gitlab";
+				} else if (pc.id.startsWith("forgejo")) {
+					pc.type = "forgejo";
 				} else {
 					pc.type = "github"; // safe fallback
 				}

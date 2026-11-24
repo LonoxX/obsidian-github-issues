@@ -14,7 +14,7 @@ export class CleanupManager {
 		private settings: IssueTrackerSettings,
 		private noticeManager: NoticeManager,
 	) {
-		this.folderPathManager = new FolderPathManager();
+		this.folderPathManager = new FolderPathManager(settings);
 	}
 
 	/**

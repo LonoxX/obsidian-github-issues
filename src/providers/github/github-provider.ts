@@ -80,8 +80,20 @@ export class GitHubProvider implements IssueProvider {
 			return;
 		}
 
+		const baseUrl = this.settings.providers
+			?.find((p) => p.id === this.configId)
+			?.baseUrl?.trim()
+			.replace(/\/+$/, "");
+
 		this.octokit = new Octokit({
 			auth: authToken,
+			...(baseUrl
+				? {
+						baseUrl: /\/api\/v3$/.test(baseUrl)
+							? baseUrl
+							: `${baseUrl}/api/v3`,
+					}
+				: {}),
 		});
 	}
 
@@ -668,10 +680,10 @@ export class GitHubProvider implements IssueProvider {
 			const response =
 				await this.octokit.graphql<ItemProjectDataResponse>(
 					GET_ITEM_PROJECT_DATA,
-				{
-					nodeId,
-				},
-			);
+					{
+						nodeId,
+					},
+				);
 
 			if (!response?.node) {
 				return [];
@@ -706,9 +718,8 @@ export class GitHubProvider implements IssueProvider {
 			const batch = nodeIds.slice(i, i + batchSize);
 
 			try {
-				const response =
-					await this.octokit.graphql<ItemsBatchResponse>(
-						GET_ITEMS_PROJECT_DATA_BATCH,
+				const response = await this.octokit.graphql<ItemsBatchResponse>(
+					GET_ITEMS_PROJECT_DATA_BATCH,
 					{ nodeIds: batch },
 				);
 
@@ -821,12 +832,12 @@ export class GitHubProvider implements IssueProvider {
 					const userResponse: UserProjectsResponse =
 						await this.octokit.graphql<UserProjectsResponse>(
 							GET_USER_PROJECTS,
-						{
-							user: user,
-							first: 50,
-							after: cursor,
-						},
-					);
+							{
+								user: user,
+								first: 50,
+								after: cursor,
+							},
+						);
 
 					if (userResponse?.user?.projectsV2?.nodes) {
 						for (const node of userResponse.user.projectsV2.nodes) {
@@ -881,14 +892,15 @@ export class GitHubProvider implements IssueProvider {
 						let cursor: string | null = null;
 
 						while (hasNextPage) {
-							const orgResponse: OrgProjectsResponse = await this.octokit.graphql<OrgProjectsResponse>(
-								GET_ORGANIZATION_PROJECTS,
-								{
-									org: org.login,
-									first: 50,
-									after: cursor,
-								},
-							);
+							const orgResponse: OrgProjectsResponse =
+								await this.octokit.graphql<OrgProjectsResponse>(
+									GET_ORGANIZATION_PROJECTS,
+									{
+										org: org.login,
+										first: 50,
+										after: cursor,
+									},
+								);
 
 							if (orgResponse?.organization?.projectsV2?.nodes) {
 								for (const node of orgResponse.organization
@@ -956,13 +968,13 @@ export class GitHubProvider implements IssueProvider {
 				const response: RepoProjectsResponse =
 					await this.octokit.graphql<RepoProjectsResponse>(
 						GET_REPOSITORY_PROJECTS,
-					{
-						owner,
-						repo,
-						first: 50,
-						after: cursor,
-					},
-				);
+						{
+							owner,
+							repo,
+							first: 50,
+							after: cursor,
+						},
+					);
 
 				if (response?.repository?.projectsV2?.nodes) {
 					for (const node of response.repository.projectsV2.nodes) {
@@ -993,12 +1005,12 @@ export class GitHubProvider implements IssueProvider {
 					const orgResponse: OrgProjectsResponse =
 						await this.octokit.graphql<OrgProjectsResponse>(
 							GET_ORGANIZATION_PROJECTS,
-						{
-							org: owner,
-							first: 50,
-							after: cursor,
-						},
-					);
+							{
+								org: owner,
+								first: 50,
+								after: cursor,
+							},
+						);
 
 					if (orgResponse?.organization?.projectsV2?.nodes) {
 						for (const node of orgResponse.organization.projectsV2
@@ -1036,12 +1048,12 @@ export class GitHubProvider implements IssueProvider {
 					const userResponse: UserProjectsResponse =
 						await this.octokit.graphql<UserProjectsResponse>(
 							GET_USER_PROJECTS,
-						{
-							user: owner,
-							first: 50,
-							after: cursor,
-						},
-					);
+							{
+								user: owner,
+								first: 50,
+								after: cursor,
+							},
+						);
 
 					if (userResponse?.user?.projectsV2?.nodes) {
 						for (const node of userResponse.user.projectsV2.nodes) {
@@ -1110,12 +1122,12 @@ export class GitHubProvider implements IssueProvider {
 				const response: ProjectItemsResponse =
 					await this.octokit.graphql<ProjectItemsResponse>(
 						GET_PROJECT_ITEMS,
-					{
-						projectId,
-						first: 50,
-						after: cursor,
-					},
-				);
+						{
+							projectId,
+							first: 50,
+							after: cursor,
+						},
+					);
 
 				if (response?.node?.items?.nodes) {
 					allItems = [...allItems, ...response.node.items.nodes];
@@ -1150,9 +1162,8 @@ export class GitHubProvider implements IssueProvider {
 		}
 
 		try {
-			const response =
-				await this.octokit.graphql<ProjectFieldsResponse>(
-					GET_PROJECT_FIELDS,
+			const response = await this.octokit.graphql<ProjectFieldsResponse>(
+				GET_PROJECT_FIELDS,
 				{
 					projectId,
 				},

@@ -91,8 +91,10 @@ export class FilterManager {
 				return filterMode === "exclude";
 			}
 
-			const itemLabels = (item.labels as Array<string | { name?: string }>).map(
-				(label) => (typeof label === "string" ? label : (label.name ?? "")),
+			const itemLabels = (
+				item.labels as Array<string | { name?: string }>
+			).map((label) =>
+				typeof label === "string" ? label : (label.name ?? ""),
 			);
 
 			const hasMatchingLabel = labelFilters.some((filterLabel) =>
@@ -118,9 +120,14 @@ export class FilterManager {
 		assigneeFilters: string[],
 	): T[] {
 		return items.filter((item) => {
-			const assignees = (item.assignees as Array<{ login?: string } | string> | null | undefined) || [];
-			const assigneeUsernames = assignees.map(
-				(assignee) => (typeof assignee === "string" ? assignee : (assignee.login ?? "")),
+			const assignees =
+				(item.assignees as
+					Array<{ login?: string } | string> | null | undefined) ||
+				[];
+			const assigneeUsernames = assignees.map((assignee) =>
+				typeof assignee === "string"
+					? assignee
+					: (assignee.login ?? ""),
 			);
 			const currentUser = this.getCurrentUser();
 
@@ -155,9 +162,14 @@ export class FilterManager {
 		reviewerFilters: string[],
 	): T[] {
 		return items.filter((item) => {
-			const reviewers = (item.requested_reviewers as Array<{ login?: string } | string> | null | undefined) || [];
-			const reviewerUsernames = reviewers.map(
-				(reviewer) => (typeof reviewer === "string" ? reviewer : (reviewer.login ?? "")),
+			const reviewers =
+				(item.requested_reviewers as
+					Array<{ login?: string } | string> | null | undefined) ||
+				[];
+			const reviewerUsernames = reviewers.map((reviewer) =>
+				typeof reviewer === "string"
+					? reviewer
+					: (reviewer.login ?? ""),
 			);
 			const currentUser = this.getCurrentUser();
 

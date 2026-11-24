@@ -16,9 +16,7 @@ export class RepositoryRenderer {
 			repo: string,
 			repoObj: RepositoryTracking,
 			filterType:
-				| "assigneeFilters"
-				| "prAssigneeFilters"
-				| "prReviewerFilters",
+				"assigneeFilters" | "prAssigneeFilters" | "prReviewerFilters",
 			textArea: HTMLTextAreaElement,
 		) => Promise<void>,
 	) {}
@@ -29,9 +27,7 @@ export class RepositoryRenderer {
 	): void {
 		new Setting(container)
 			.setName("Use own issue filters")
-			.setDesc(
-				"When on, this repo uses its own issue filters instead of the profile's.",
-			)
+			.setDesc("Instead of the profile filters")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(repo.overrideIssueFilters ?? false)
@@ -45,9 +41,7 @@ export class RepositoryRenderer {
 					}),
 			);
 
-		const overrideContainer = container.createDiv(
-			"github-issues-settings-group github-issues-nested",
-		);
+		const overrideContainer = container.createDiv("github-issues-subgroup");
 		overrideContainer.classList.toggle(
 			"github-issues-hidden",
 			!(repo.overrideIssueFilters ?? false),
@@ -63,9 +57,7 @@ export class RepositoryRenderer {
 	): void {
 		new Setting(container)
 			.setName("Use own pull request filters")
-			.setDesc(
-				"When on, this repo uses its own PR filters instead of the profile's.",
-			)
+			.setDesc("Instead of the profile filters")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(repo.overridePrFilters ?? false)
@@ -79,9 +71,7 @@ export class RepositoryRenderer {
 					}),
 			);
 
-		const overrideContainer = container.createDiv(
-			"github-issues-settings-group github-issues-nested",
-		);
+		const overrideContainer = container.createDiv("github-issues-subgroup");
 		overrideContainer.classList.toggle(
 			"github-issues-hidden",
 			!(repo.overridePrFilters ?? false),
@@ -122,7 +112,7 @@ export class RepositoryRenderer {
 			);
 
 		const labelFilterContainer = container.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		labelFilterContainer.classList.toggle(
 			"github-issues-hidden",
@@ -214,7 +204,7 @@ export class RepositoryRenderer {
 			);
 
 		const reviewerFilterContainer = container.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		reviewerFilterContainer.classList.toggle(
 			"github-issues-hidden",
@@ -248,7 +238,7 @@ export class RepositoryRenderer {
 		];
 
 		const reviewerSpecificContainer = reviewerFilterContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 
 		const currentReviewerModes = (): Array<
@@ -309,9 +299,7 @@ export class RepositoryRenderer {
 			.addButton((button) =>
 				button
 					.setButtonText("Fetch collaborators")
-					.setTooltip(
-						"Load collaborators from this repository to help with configuration",
-					)
+					.setTooltip("Load collaborators of this repository")
 					.onClick(async () => {
 						const textArea = button.buttonEl
 							.closest(".setting-item")
@@ -362,7 +350,7 @@ export class RepositoryRenderer {
 			);
 
 		const assigneeFilterContainer = container.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 		assigneeFilterContainer.classList.toggle(
 			"github-issues-hidden",
@@ -393,7 +381,7 @@ export class RepositoryRenderer {
 		];
 
 		const assigneeSpecificContainer = assigneeFilterContainer.createDiv(
-			"github-issues-settings-group github-issues-nested",
+			"github-issues-subgroup",
 		);
 
 		const currentModes = (): Array<
@@ -423,7 +411,9 @@ export class RepositoryRenderer {
 								const idx = modes.indexOf(option.value);
 								if (idx >= 0) modes.splice(idx, 1);
 							}
-							(repo as unknown as Record<string, unknown>)[filterModesProp] = modes;
+							(repo as unknown as Record<string, unknown>)[
+								filterModesProp
+							] = modes;
 							assigneeSpecificContainer.classList.toggle(
 								"github-issues-hidden",
 								!modes.includes("assigned-to-specific"),
@@ -452,9 +442,7 @@ export class RepositoryRenderer {
 			.addButton((button) =>
 				button
 					.setButtonText("Fetch collaborators")
-					.setTooltip(
-						"Load collaborators from this repository to help with configuration",
-					)
+					.setTooltip("Load collaborators of this repository")
 					.onClick(async () => {
 						const textArea = button.buttonEl
 							.closest(".setting-item")

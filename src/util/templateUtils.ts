@@ -3,6 +3,7 @@ import { escapeBody, escapeYamlString } from "./escapeUtils";
 import { parseRepository } from "./repo-path";
 import { ProjectData } from "../types";
 import { Issue, IssueComment, PullRequest } from "../providers/domain";
+import type { ProviderTemplateInfo } from "./provider-ui";
 
 interface SubIssueData {
 	number: number;
@@ -34,6 +35,8 @@ interface TemplateData {
 	repository: string;
 	owner: string;
 	repoName: string;
+	provider?: string;
+	providerId?: string;
 	type: "issue" | "pr";
 	body: string;
 	url: string;
@@ -173,6 +176,8 @@ function buildReplacements(
 		"{repository}": data.repository,
 		"{owner}": data.owner,
 		"{repoName}": data.repoName,
+		"{provider}": data.provider ?? "",
+		"{providerId}": data.providerId ?? "",
 		"{type}": data.type,
 		"{body}": data.body || "",
 		"{url}": data.url || "",
@@ -720,6 +725,7 @@ export function createIssueTemplateData(
 	projectData?: ProjectData[],
 	subIssues?: Issue[],
 	parentIssue?: Issue | null,
+	provider?: ProviderTemplateInfo,
 ): TemplateData {
 	const { owner, repo: repoName } = parseRepository(repository);
 
@@ -759,6 +765,8 @@ export function createIssueTemplateData(
 		repository,
 		owner: owner || "unknown",
 		repoName: repoName || "unknown",
+		provider: provider?.name,
+		providerId: provider?.id,
 		type: "issue",
 		body: issue.body || "",
 		url: issue.html_url || "",
@@ -797,6 +805,7 @@ export function createPullRequestTemplateData(
 	escapeMode: "disabled" | "normal" | "strict" | "veryStrict" = "normal",
 	escapeHashTags: boolean = false,
 	projectData?: ProjectData[],
+	provider?: ProviderTemplateInfo,
 ): TemplateData {
 	const { owner, repo: repoName } = parseRepository(repository);
 
@@ -818,6 +827,8 @@ export function createPullRequestTemplateData(
 		repository,
 		owner: owner || "unknown",
 		repoName: repoName || "unknown",
+		provider: provider?.name,
+		providerId: provider?.id,
 		type: "pr",
 		body: pr.body || "",
 		url: pr.html_url || "",
@@ -886,6 +897,8 @@ export function extractNumberFromFilename(
 	pattern = pattern.replace(/\{repository\}/g, "<<<NOSPACE>>>");
 	pattern = pattern.replace(/\{owner\}/g, "<<<NOSPACE>>>");
 	pattern = pattern.replace(/\{repoName\}/g, "<<<NOSPACE>>>");
+	pattern = pattern.replace(/\{providerId\}/g, "<<<NOSPACE>>>");
+	pattern = pattern.replace(/\{provider\}/g, "<<<ANY>>>");
 	pattern = pattern.replace(/\{milestone\}/g, "<<<OPTIONAL_NOSPACE>>>");
 
 	// Date patterns

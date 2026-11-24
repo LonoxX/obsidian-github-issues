@@ -1,3 +1,4 @@
+import { providerTemplateInfo } from "./util/provider-ui";
 import { App, TFile } from "obsidian";
 import {
 	IssueTrackerSettings,
@@ -57,6 +58,8 @@ interface ProjectItemContentGQL {
 	reviewRequests?: {
 		nodes?: Array<{ requestedReviewer?: { login?: string } | null }>;
 	} | null;
+	/** "owner/repo", set by providers whose URLs are not on github.com */
+	repository?: string;
 	[key: string]: unknown;
 }
 
@@ -86,8 +89,13 @@ export class FileManager {
 			provider,
 		);
 		this.filterManager = new FilterManager(provider);
-		this.folderPathManager = new FolderPathManager();
+		this.folderPathManager = new FolderPathManager(settings);
 		this.fileHelpers = new FileHelpers(app, noticeManager);
+	}
+
+	/** {provider} values for GitHub Projects items synced by this manager. */
+	private projectProviderInfo() {
+		return providerTemplateInfo(this.settings.providers, this.provider.id);
 	}
 
 	/**
@@ -220,8 +228,8 @@ export class FileManager {
 				continue;
 			}
 
-			const isIssue = content.url?.includes("/issues/") ?? false;
-			const isPullRequest = content.url?.includes("/pull/") ?? false;
+			const isIssue = /\/(issues|work_items)\//.test(content.url ?? "");
+			const isPullRequest = /\/pulls?\//.test(content.url ?? "");
 			if (!isIssue && !isPullRequest) {
 				skippedNotIssueOrPr++;
 				continue;
@@ -256,6 +264,7 @@ export class FileManager {
 			await this.fileHelpers.ensureFolderExists(folderPath);
 
 			const repository =
+				content.repository ||
 				this.extractRepositoryFromUrl(content.url) ||
 				`${project.owner}/unknown`;
 			const projectData = this.convertFieldValuesToProjectData(
@@ -296,6 +305,7 @@ export class FileManager {
 							repository,
 							this.settings.dateFormat,
 							this.settings.escapeMode,
+							this.projectProviderInfo(),
 						);
 				}
 			}
@@ -311,6 +321,7 @@ export class FileManager {
 						[projectData],
 						subIssues,
 						parentIssue,
+						this.projectProviderInfo(),
 					)
 				: createPullRequestTemplateData(
 						this.convertToPullRequestFormat(content),
@@ -320,6 +331,7 @@ export class FileManager {
 						this.settings.escapeMode,
 						this.settings.escapeHashTags,
 						[projectData],
+						this.projectProviderInfo(),
 					);
 
 			const filenameTemplate = isIssue
@@ -463,6 +475,7 @@ export class FileManager {
 
 				// Create a pseudo-repository string for template compatibility
 				const repository =
+					content.repository ||
 					this.extractRepositoryFromUrl(content.url) ||
 					`${project.owner}/unknown`;
 
@@ -478,6 +491,7 @@ export class FileManager {
 							[projectData],
 							subIssues,
 							parentIssue,
+							this.projectProviderInfo(),
 						)
 					: createPullRequestTemplateData(
 							this.convertToPullRequestFormat(content),
@@ -487,6 +501,7 @@ export class FileManager {
 							this.settings.escapeMode,
 							shouldEscapeHashTags,
 							[projectData],
+							this.projectProviderInfo(),
 						);
 
 				return processContentTemplate(
@@ -613,7 +628,7 @@ ${subIssues
 			si.state === "closed"
 				? '<span class="github-issues-sub-issue-closed">●</span>'
 				: '<span class="github-issues-sub-issue-open">●</span>';
-		return `- ${statusIcon} [#${si.number} ${si.title}](${si.url})`;
+		return `- ${statusIcon} [#${si.number} ${si.title}](${si.html_url || si.url})`;
 	})
 	.join("\n")}`;
 		}
@@ -623,7 +638,7 @@ ${subIssues
 			frontmatter += `
 
 ## Parent Issue
-- [#${parentIssue.number} ${parentIssue.title}](${parentIssue.url})`;
+- [#${parentIssue.number} ${parentIssue.title}](${parentIssue.html_url || parentIssue.url})`;
 		}
 
 		return frontmatter;

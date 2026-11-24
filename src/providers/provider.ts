@@ -24,9 +24,9 @@ export type ProviderId = string;
  * can work provider-agnostically.
  */
 export interface IssueProvider {
-	/** Unique instance identifier (e.g. "github", "gitlab", "gitlab-2") */
+	/** Unique instance identifier (e.g. "github", "gitlab", "gitlab-2", "forgejo") */
 	readonly id: ProviderId;
-	/** Provider type – "github" or "gitlab" */
+	/** Provider type – "github", "gitlab" or "forgejo" */
 	readonly type: ProviderType;
 	readonly displayName: string;
 
@@ -138,7 +138,10 @@ export interface IssueProvider {
 
 	// GitHub Projects v2 (optional)
 	fetchProjectItems?(projectId: string): Promise<ProjectItem[]>;
-	fetchAllAvailableProjects?(): Promise<ProjectInfo[]>;
+	/** `repositories` limits providers without account-wide projects. */
+	fetchAllAvailableProjects?(
+		repositories?: ProjectSourceRepository[],
+	): Promise<ProjectInfo[]>;
 	fetchProjectsForRepository?(
 		owner: string,
 		repo: string,
@@ -159,5 +162,11 @@ export interface IssueProvider {
  */
 export interface ProviderExtraParams {
 	/** GitLab numeric project ID (avoids URL encoding issues). */
+	gitlabProjectId?: number;
+}
+
+/** A tracked repository whose projects or boards should be listed. */
+export interface ProjectSourceRepository {
+	repository: string;
 	gitlabProjectId?: number;
 }

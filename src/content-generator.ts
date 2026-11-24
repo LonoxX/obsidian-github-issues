@@ -1,3 +1,4 @@
+import { providerTemplateInfo } from "./util/provider-ui";
 import { format } from "date-fns";
 import {
 	IssueTrackerSettings,
@@ -51,6 +52,7 @@ export class ContentGenerator {
 					projectData,
 					subIssues,
 					parentIssue,
+					providerTemplateInfo(settings.providers, repo.provider),
 				);
 				return processContentTemplate(
 					templateContent,
@@ -86,8 +88,7 @@ assignees: [${(
 		).join(", ")}]
 labels: [${(
 			issue.labels?.map(
-				(label) =>
-					'"' + escapeYamlString(label.name) + '"',
+				(label) => '"' + escapeYamlString(label.name) + '"',
 			) || []
 		).join(", ")}]
 updateMode: "${repo.issueUpdateMode}"
@@ -146,7 +147,7 @@ ${subIssues
 			si.state === "closed"
 				? '<span class="github-issues-sub-issue-closed">●</span>'
 				: '<span class="github-issues-sub-issue-open">●</span>';
-		return `- ${statusIcon} [#${si.number} ${si.title}](${si.url})`;
+		return `- ${statusIcon} [#${si.number} ${si.title}](${si.html_url || si.url})`;
 	})
 	.join("\n")}`;
 		}
@@ -156,7 +157,7 @@ ${subIssues
 			frontmatter += `
 
 ## Parent Issue
-- [#${parentIssue.number} ${parentIssue.title}](${parentIssue.url})`;
+- [#${parentIssue.number} ${parentIssue.title}](${parentIssue.html_url || parentIssue.url})`;
 		}
 
 		return frontmatter;
@@ -195,6 +196,7 @@ ${subIssues
 					settings.escapeMode,
 					shouldEscapeHashTags,
 					projectData,
+					providerTemplateInfo(settings.providers, repo.provider),
 				);
 				return processContentTemplate(
 					templateContent,
@@ -233,15 +235,16 @@ assignees: [${(
 			) || []
 		).join(", ")}]
 requested_reviewers: [${(
-			(pr.requested_reviewers as Array<{ login?: string }> | undefined)?.map(
+			(
+				pr.requested_reviewers as Array<{ login?: string }> | undefined
+			)?.map(
 				(reviewer) =>
 					'"' + escapeYamlString(reviewer.login ?? "") + '"',
 			) || []
 		).join(", ")}]
 labels: [${(
 			pr.labels?.map(
-				(label) =>
-					'"' + escapeYamlString(label.name) + '"',
+				(label) => '"' + escapeYamlString(label.name) + '"',
 			) || []
 		).join(", ")}]`;
 

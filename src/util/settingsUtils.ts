@@ -4,6 +4,7 @@ import {
 	SettingsProfile,
 	TrackedProject,
 	DEFAULT_REPOSITORY_PROFILE,
+	DEFAULT_PROJECT_FOLDER_TEMPLATE,
 	DEFAULT_PROJECT_PROFILE,
 } from "../types";
 /**
@@ -201,9 +202,10 @@ function applyProfileToProject(
 ): TrackedProject {
 	return {
 		...project,
-		issueFolder: profile.projectIssueFolder ?? "GitHub/{project}",
+		issueFolder:
+			profile.projectIssueFolder ?? DEFAULT_PROJECT_FOLDER_TEMPLATE,
 		pullRequestFolder:
-			profile.projectPullRequestFolder ?? "GitHub/{project}",
+			profile.projectPullRequestFolder ?? DEFAULT_PROJECT_FOLDER_TEMPLATE,
 		issueNoteTemplate:
 			profile.projectIssueNoteTemplate ?? "Issue - {number}",
 		pullRequestNoteTemplate:
